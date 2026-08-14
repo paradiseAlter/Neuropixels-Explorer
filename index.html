@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A local visual workflow workspace for Neuropixels analysis.">
+  <title>Untitled workflow — Neuropixel Workflow</title>
+  <link rel="stylesheet" href="./styles/tokens.css">
+  <link rel="stylesheet" href="./styles/workbench.css">
+  <link rel="stylesheet" href="./styles/nodes.css">
+</head>
+<body data-theme="graphite">
+  <div class="app-shell">
+    <header class="topbar">
+      <nav class="menu-strip" aria-label="Application menu">
+        <div class="menu-wrap">
+          <button class="menu-trigger" type="button" data-menu="file-menu" aria-expanded="false">File</button>
+          <div class="menu" id="file-menu" role="menu">
+            <button class="menu-item" type="button" role="menuitem" id="new-workflow">
+              <span>New workflow</span><kbd>Ctrl N</kbd>
+            </button>
+            <button class="menu-item" type="button" role="menuitem" data-shell-action="Open workflow">
+              <span>Open workflow…</span><kbd>Ctrl O</kbd>
+            </button>
+            <button class="menu-item" type="button" role="menuitem" data-shell-action="Save workflow">
+              <span>Save workflow</span><kbd>Ctrl S</kbd>
+            </button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" type="button" role="menuitem" id="menu-add-experiment">
+              <span>Add Experiment Data</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-wrap">
+          <button class="menu-trigger" type="button" data-menu="edit-menu" aria-expanded="false">Edit</button>
+          <div class="menu" id="edit-menu" role="menu">
+            <button class="menu-item" type="button" role="menuitem" data-shell-action="Undo">
+              <span>Undo</span><kbd>Ctrl Z</kbd>
+            </button>
+            <button class="menu-item" type="button" role="menuitem" data-shell-action="Redo">
+              <span>Redo</span><kbd>Ctrl Shift Z</kbd>
+            </button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" type="button" role="menuitem" data-shell-action="Select all">
+              <span>Select all</span><kbd>Ctrl A</kbd>
+            </button>
+            <button class="menu-item" type="button" role="menuitem" id="delete-selection">
+              <span>Delete selection</span><kbd>Delete</kbd>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-wrap">
+          <button class="menu-trigger" type="button" data-menu="view-menu" aria-expanded="false">View</button>
+          <div class="menu" id="view-menu" role="menu">
+            <button class="menu-item" type="button" role="menuitem" id="menu-reset-view">
+              <span>Reset view</span><kbd>F</kbd>
+            </button>
+            <button class="menu-item" type="button" role="menuitem" id="menu-toggle-grid">
+              <span>Show dot grid</span><kbd>G</kbd>
+              <span class="menu-check" id="grid-check" aria-hidden="true">✓</span>
+            </button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" type="button" role="menuitem" id="menu-toggle-theme">
+              <span>Canvas theme</span>
+              <span class="menu-value" id="theme-name">Graphite</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <div class="document-title" aria-label="Current workflow">
+        <span class="document-name">Neural analysis prototype</span>
+        <span class="document-state" aria-label="Not saved"></span>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="icon-button muted" type="button" aria-label="Undo" data-tooltip="Undo · Ctrl Z" data-tooltip-placement="bottom" data-shell-action="Undo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4.5 11.5 9 16M5 11.5h7.5a6 6 0 0 1 6 6"/></svg>
+        </button>
+        <button class="icon-button muted" type="button" aria-label="Redo" data-tooltip="Redo · Ctrl Shift Z" data-tooltip-placement="bottom" data-shell-action="Redo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 4.5 4.5L15 16M19 11.5h-7.5a6 6 0 0 0-6 6"/></svg>
+        </button>
+        <button class="run-button" type="button" disabled data-tooltip="Execution is not connected in this interface prototype" data-tooltip-placement="bottom">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7 8 5-8 5V7Z"/></svg>
+          Run
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace" id="workspace">
+      <div class="canvas" id="canvas" aria-label="Neuropixels workflow canvas" tabindex="0">
+        <div class="graph-transform" id="graph-transform">
+          <svg class="connection-layer" id="connection-layer" viewBox="-20000 -20000 40000 40000" aria-hidden="true">
+            <g id="connection-group"></g>
+            <path class="connection-preview" id="connection-preview"></path>
+          </svg>
+          <div class="node-layer" id="node-layer"></div>
+        </div>
+
+        <div class="empty-state" id="empty-state" hidden>
+          <p class="empty-label">EMPTY WORKFLOW</p>
+          <h1>No nodes on this canvas</h1>
+          <p class="empty-primary">Double-click anywhere to open the node library.</p>
+          <p class="empty-secondary">
+            Hold <kbd>Space</kbd> and drag to pan <span aria-hidden="true">·</span> Scroll to zoom
+          </p>
+        </div>
+      </div>
+
+      <div class="tool-rail" aria-label="Canvas tools">
+        <button class="tool-button active" type="button" data-tool="select" aria-label="Select tool" data-tooltip="Select · V" data-tooltip-placement="right">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.2 4.3 11.5 7.1-5.2 1.2-2.8 4.7L6.2 4.3Z"/></svg>
+        </button>
+        <button class="tool-button" type="button" data-tool="pan" aria-label="Pan tool" data-tooltip="Pan canvas · H" data-tooltip-placement="right">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 11V7.7a1.2 1.2 0 0 1 2.4 0v2.5M10.6 10V6.6a1.2 1.2 0 0 1 2.4 0V10M13 10V7.2a1.2 1.2 0 0 1 2.4 0v3.5M15.4 10.7V9.2a1.2 1.2 0 0 1 2.4 0v5.1c0 3.4-2.2 5.7-5.6 5.7h-.7a5.3 5.3 0 0 1-4.3-2.2l-2.6-3.6a1.3 1.3 0 0 1 2-1.6l1.6 1.5V11"/></svg>
+        </button>
+        <div class="tool-divider"></div>
+        <button class="tool-button" type="button" id="add-node-button" aria-label="Add node" data-tooltip="Add node · Double-click canvas" data-tooltip-placement="right">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button class="tool-button" type="button" aria-label="Add frame" data-tooltip="Frames are reserved for the next canvas revision" data-tooltip-placement="right" data-shell-action="Frame tool">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="6" width="14" height="12" rx="1.5"/><path d="M8 9h4"/></svg>
+        </button>
+      </div>
+
+      <button class="inspector-tab" id="inspector-tab" type="button" aria-label="Open inspector" data-tooltip="Inspect the selected node or connection" data-tooltip-placement="left">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
+        <span>Inspector</span>
+      </button>
+
+      <aside class="inspector-panel" id="inspector-panel" aria-label="Node inspector" aria-hidden="true">
+        <header class="inspector-header">
+          <div>
+            <p class="panel-kicker">INSPECTOR</p>
+            <h2 id="inspector-title">Nothing selected</h2>
+          </div>
+          <button class="panel-close" id="inspector-close" type="button" aria-label="Close inspector">×</button>
+        </header>
+        <div class="inspector-body" id="inspector-body">
+          <p class="inspector-empty">Select a node to inspect its purpose, ports, and prototype status.</p>
+        </div>
+      </aside>
+
+      <section class="node-palette" id="node-palette" aria-label="Node library" aria-hidden="true">
+        <header class="palette-header">
+          <div>
+            <p class="panel-kicker">NODE LIBRARY</p>
+            <h2>Add to workflow</h2>
+          </div>
+          <button class="panel-close" id="palette-close" type="button" aria-label="Close node library">×</button>
+        </header>
+        <label class="palette-search">
+          <span class="sr-only">Search nodes</span>
+          <input id="node-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search neural nodes…">
+          <kbd>Esc</kbd>
+        </label>
+        <div class="palette-list" id="palette-list"></div>
+        <footer class="palette-footer">
+          <span>Drag nodes after adding</span>
+          <span>Prototype · no video nodes</span>
+        </footer>
+      </section>
+
+      <div class="canvas-controls" aria-label="Canvas view controls">
+        <button class="control-button" type="button" id="zoom-out" aria-label="Zoom out" data-tooltip="Zoom out" data-tooltip-placement="top">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>
+        </button>
+        <span class="zoom-value" id="zoom-value" aria-live="polite">100%</span>
+        <button class="control-button" type="button" id="zoom-in" aria-label="Zoom in" data-tooltip="Zoom in" data-tooltip-placement="top">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>
+        </button>
+        <div class="control-divider"></div>
+        <button class="control-button" type="button" id="reset-view" aria-label="Reset view" data-tooltip="Reset view · F" data-tooltip-placement="top">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"/></svg>
+        </button>
+      </div>
+
+      <input id="kilosort-folder-input" type="file" webkitdirectory multiple hidden>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="tooltip" id="tooltip" role="tooltip"></div>
+    </main>
+
+    <footer class="statusbar">
+      <div class="status-group">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span>LOCAL</span>
+        <span class="status-separator" aria-hidden="true"></span>
+        <span>UI THREAD IDLE</span>
+      </div>
+      <div class="status-group status-center">
+        <span id="node-count">0 NODES</span>
+        <span id="connection-count">0 CONNECTIONS</span>
+        <span id="cursor-position">X 0&nbsp;&nbsp;Y 0</span>
+      </div>
+      <div class="status-group status-right">
+        <button class="status-button active" type="button" id="toggle-grid" aria-pressed="true">GRID 22</button>
+        <span class="status-runtime">PROTOTYPE · NO EXECUTION</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="./scripts/nodes/registry.js" defer></script>
+  <script src="./scripts/core/viewport.js" defer></script>
+  <script src="./scripts/graph/graph-engine.js" defer></script>
+  <script src="./scripts/ui/tooltip.js" defer></script>
+  <script src="./scripts/ui/node-palette.js" defer></script>
+  <script src="./scripts/app.js" defer></script>
+</body>
+</html>

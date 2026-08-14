@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Neuropixel Workflow 1.1.1 — Cluster and Brain Region selection with a full-page neural Viewer.">
+  <title>Neuropixel Workflow 1.1.1</title>
+  <link rel="stylesheet" href="../v1.1.0/styles/app.css">
+  <link rel="stylesheet" href="./styles/fullscreen-viewer.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <nav class="menu-strip" aria-label="Application menu">
+        <div class="menu-wrap">
+          <button class="menu-trigger" type="button" data-menu="file-menu" aria-expanded="false">File</button>
+          <div class="menu" id="file-menu" role="menu">
+            <button class="menu-item" id="new-workflow" type="button"><span>New workflow</span><kbd>Ctrl N</kbd></button>
+            <button class="menu-item" type="button" data-shell-action="Open workflow"><span>Open workflow…</span><kbd>Ctrl O</kbd></button>
+            <button class="menu-item" type="button" data-shell-action="Save workflow"><span>Save workflow</span><kbd>Ctrl S</kbd></button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" id="menu-add-data" type="button"><span>Add Experiment Data</span></button>
+            <button class="menu-item" id="menu-add-viewer" type="button"><span>Add Viewer</span></button>
+          </div>
+        </div>
+        <div class="menu-wrap">
+          <button class="menu-trigger" type="button" data-menu="edit-menu" aria-expanded="false">Edit</button>
+          <div class="menu" id="edit-menu" role="menu">
+            <button class="menu-item" type="button" data-shell-action="Undo"><span>Undo</span><kbd>Ctrl Z</kbd></button>
+            <button class="menu-item" type="button" data-shell-action="Redo"><span>Redo</span><kbd>Ctrl Shift Z</kbd></button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" id="delete-selection" type="button"><span>Delete selection</span><kbd>Delete</kbd></button>
+          </div>
+        </div>
+        <div class="menu-wrap">
+          <button class="menu-trigger" type="button" data-menu="view-menu" aria-expanded="false">View</button>
+          <div class="menu" id="view-menu" role="menu">
+            <button class="menu-item" id="menu-reset-view" type="button"><span>Reset canvas</span><kbd>F</kbd></button>
+            <button class="menu-item" id="menu-toggle-grid" type="button"><span>Dot grid</span><kbd>G</kbd><span id="grid-check">✓</span></button>
+            <button class="menu-item" id="menu-toggle-log" type="button"><span>Load log</span><kbd>L</kbd><span id="log-check">✓</span></button>
+          </div>
+        </div>
+      </nav>
+
+      <div class="document-title">
+        <span>Neural workflow</span>
+        <strong>1.1.1</strong>
+      </div>
+
+      <div class="topbar-actions">
+        <span class="scope-badge">VIEWER FULL PAGE</span>
+        <button class="run-button" type="button" disabled data-tooltip="Execution workers are intentionally not connected in this UI prototype">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7 8 5-8 5V7Z"/></svg>Run
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace" id="workspace">
+      <div class="canvas" id="canvas" tabindex="0" aria-label="Neuropixel workflow 1.1.1 canvas">
+        <div class="graph-transform" id="graph-transform">
+          <svg class="connection-layer" viewBox="-20000 -20000 40000 40000" aria-hidden="true">
+            <g id="connection-group"></g>
+            <path class="connection-preview" id="connection-preview"></path>
+          </svg>
+          <div class="node-layer" id="node-layer"></div>
+        </div>
+        <div class="empty-state" id="empty-state" hidden>
+          <strong>EMPTY WORKFLOW</strong>
+          <span>Double-click anywhere to add a node.</span>
+        </div>
+      </div>
+
+      <div class="tool-rail" aria-label="Canvas tools">
+        <button class="tool-button active" type="button" data-tool="select" data-tooltip="Select and drag nodes · V" data-tooltip-placement="right" aria-label="Select tool">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.2 4.3 11.5 7.1-5.2 1.2-2.8 4.7L6.2 4.3Z"/></svg>
+        </button>
+        <button class="tool-button" type="button" data-tool="pan" data-tooltip="Pan canvas · H" data-tooltip-placement="right" aria-label="Pan tool">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 11V7.7a1.2 1.2 0 0 1 2.4 0v2.5M10.6 10V6.6a1.2 1.2 0 0 1 2.4 0V10M13 10V7.2a1.2 1.2 0 0 1 2.4 0v3.5M15.4 10.7V9.2a1.2 1.2 0 0 1 2.4 0v5.1c0 3.4-2.2 5.7-5.6 5.7h-.7a5.3 5.3 0 0 1-4.3-2.2l-2.6-3.6a1.3 1.3 0 0 1 2-1.6l1.6 1.5V11"/></svg>
+        </button>
+        <span></span>
+        <button class="tool-button" id="add-node-button" type="button" data-tooltip="Open node library" data-tooltip-placement="right" aria-label="Add node">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+
+      <button class="inspector-tab" id="inspector-tab" type="button" data-tooltip="Inspect selected node or connection" data-tooltip-placement="left">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
+        <span>Inspector</span>
+      </button>
+
+      <aside class="side-panel" id="inspector-panel" aria-hidden="true">
+        <header><div><small>INSPECTOR</small><h2 id="inspector-title">Nothing selected</h2></div><button id="inspector-close" type="button" aria-label="Close inspector">×</button></header>
+        <div class="inspector-body" id="inspector-body"><p>Select a node to inspect its typed contracts and display state.</p></div>
+      </aside>
+
+      <section class="node-palette" id="node-palette" aria-hidden="true">
+        <header><div><small>NODE LIBRARY</small><h2>Add a node</h2></div><button id="palette-close" type="button" aria-label="Close node library">×</button></header>
+        <label class="palette-search"><input id="node-search" type="search" placeholder="Search nodes…" autocomplete="off"><kbd>Esc</kbd></label>
+        <div class="palette-list" id="palette-list"></div>
+        <footer><span>Drop a wire on a compatible port or node body</span><span>NO VIDEO</span></footer>
+      </section>
+
+      <div class="canvas-controls" data-interactive>
+        <button id="zoom-out" type="button" data-tooltip="Zoom canvas out" data-tooltip-placement="top">−</button>
+        <span id="zoom-value">100%</span>
+        <button id="zoom-in" type="button" data-tooltip="Zoom canvas in" data-tooltip-placement="top">+</button>
+        <button id="reset-view" type="button" data-tooltip="Reset canvas · F" data-tooltip-placement="top">□</button>
+      </div>
+
+      <input id="kilosort-folder-input" type="file" webkitdirectory multiple hidden>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="tooltip" id="tooltip" role="tooltip"></div>
+    </main>
+
+    <section class="log-drawer open" id="log-drawer" aria-label="Kilosort load log">
+      <header>
+        <button class="log-toggle" id="log-toggle" type="button" aria-expanded="true"><span class="log-chevron">⌄</span><strong>LOAD LOG</strong><em id="log-summary">STRUCTURE CHECK READY</em></button>
+        <div class="log-actions"><button id="copy-log" type="button">COPY</button><button id="clear-log" type="button">CLEAR</button></div>
+      </header>
+      <div class="log-body" id="log-body" role="log" aria-live="polite">
+        <div class="log-line info"><time>00:00:00</time><span>INFO</span><p>Select a Kilosort results folder from an Experiment Data node. This version audits names and file sizes without loading array contents.</p></div>
+      </div>
+    </section>
+
+    <footer class="statusbar">
+      <div><i></i><span>LOCAL</span><span id="thread-state">UI THREAD IDLE</span></div>
+      <div><span id="node-count">0 NODES</span><span id="connection-count">0 CONNECTIONS</span><span id="cursor-position">X 0&nbsp;&nbsp;Y 0</span></div>
+      <div><button id="status-log-toggle" type="button">LOG OPEN</button><button id="toggle-grid" type="button">GRID 22</button><strong>VERSION 1.1.1</strong></div>
+    </footer>
+  </div>
+
+  <script src="../v1.1.0/scripts/registry.js" defer></script>
+  <script src="./scripts/data-entity-types.js" defer></script>
+  <script src="../v1.1.0/scripts/viewport.js" defer></script>
+  <script src="../v1.1.0/scripts/viewer-controller.js" defer></script>
+  <script src="../v1.1.0/scripts/graph.js" defer></script>
+  <script src="../v1.1.0/scripts/palette.js" defer></script>
+  <script src="../v1.1.0/scripts/kilosort-qc.js" defer></script>
+  <script src="../v1.1.0/scripts/app.js" defer></script>
+  <script src="./scripts/fullscreen-viewer.js" defer></script>
+</body>
+</html>

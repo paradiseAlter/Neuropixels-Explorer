@@ -1,0 +1,243 @@
+/* v1.2.0 real-data additions. The frozen canvas and full-page styles remain in earlier versions. */
+
+.tone-loading {
+  color: #d5a36b !important;
+}
+
+.real-data-detail {
+  gap: 8px;
+}
+
+.real-catalog-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 7px 0;
+  border: 1px solid #292b2f;
+  background: #292b2f;
+}
+
+.real-catalog-metrics > div {
+  display: grid;
+  min-width: 0;
+  min-height: 46px;
+  align-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  background: #0c0d0f;
+}
+
+.real-catalog-metrics span,
+.real-select-field > span {
+  color: #60646b;
+  font-size: 7px;
+  letter-spacing: .09em;
+}
+
+.real-catalog-metrics strong {
+  overflow: hidden;
+  color: #c0c2c6;
+  font: 600 10px "Cascadia Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.real-selection-section {
+  position: relative;
+  border-color: #30343a;
+  background: linear-gradient(180deg, rgba(121,175,233,.035), transparent 60%), #101113;
+}
+
+.real-select-field {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.real-select-pair {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 7px;
+}
+
+.real-select-field select {
+  width: 100%;
+  height: 31px;
+  padding: 0 27px 0 9px;
+  overflow: hidden;
+  border: 1px solid #34373d;
+  border-radius: 2px;
+  outline: none;
+  color: #c3c5ca;
+  background: #090a0c;
+  font: 500 9px "Segoe UI", sans-serif;
+  text-overflow: ellipsis;
+}
+
+.real-select-field select:focus {
+  border-color: #628dbb;
+  box-shadow: 0 0 0 1px rgba(121,175,233,.14);
+}
+
+.real-select-field select:disabled {
+  color: #51545a;
+  border-color: #25272b;
+}
+
+.real-loader-actions {
+  display: grid;
+  grid-template-columns: 1.35fr .85fr;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.real-loader-actions button {
+  min-height: 31px;
+  border: 1px solid #3b4652;
+  border-radius: 2px;
+  color: #9fc1e5;
+  background: #151b21;
+  font: 600 8px "Cascadia Mono", monospace;
+  letter-spacing: .06em;
+}
+
+.real-loader-actions button + button {
+  color: #8b8e94;
+  border-color: #33363b;
+  background: #111214;
+}
+
+.real-loader-actions button:hover:not(:disabled) {
+  border-color: #6590bc;
+  color: #d7e8f8;
+}
+
+.real-loader-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .38;
+}
+
+.real-selection-note {
+  margin: 7px 0 0;
+  color: #666a71;
+  font-size: 7px;
+  line-height: 1.5;
+}
+
+.real-unit-list {
+  display: grid;
+  max-height: 164px;
+  overflow: auto;
+  border: 1px solid #292c30;
+  border-radius: 2px;
+  background: #0b0c0e;
+}
+
+.real-unit-row {
+  display: grid;
+  min-height: 43px;
+  align-items: center;
+  grid-template-columns: 4px minmax(0, 1fr) 27px;
+  gap: 8px;
+  padding: 0 5px 0 8px;
+  border-bottom: 1px solid #24272b;
+}
+
+.real-unit-row:last-child {
+  border-bottom: 0;
+}
+
+.real-unit-row > i {
+  width: 3px;
+  height: 24px;
+  border-radius: 2px;
+  background: #74777d;
+}
+
+.real-unit-row > i.quality-good {
+  background: #76cfa0;
+  box-shadow: 0 0 6px rgba(118,207,160,.28);
+}
+
+.real-unit-row > i.quality-mua {
+  background: #d5a36b;
+}
+
+.real-unit-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.real-unit-row strong,
+.real-unit-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.real-unit-row strong {
+  color: #bfc2c7;
+  font-size: 9px;
+  font-weight: 550;
+}
+
+.real-unit-row small {
+  color: #63676d;
+  font: 7px "Cascadia Mono", monospace;
+}
+
+.real-unit-row button {
+  width: 23px;
+  height: 23px;
+  border: 0;
+  color: #666a70;
+  background: transparent;
+  font-size: 14px;
+}
+
+.real-unit-row button:hover {
+  color: #df8a80;
+  background: rgba(209,126,119,.08);
+}
+
+.real-data-detail .entity-add-extended {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.real-data-detail .entity-add-extended button:last-child {
+  grid-column: 1 / -1;
+}
+
+.source-dot.real {
+  background: #76cfa0;
+  box-shadow: 0 0 7px rgba(118,207,160,.48);
+}
+
+.workflow-node[data-real-loading="true"] .real-selection-section::after {
+  position: absolute;
+  top: 11px;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #3d4e60;
+  border-top-color: #9dc1e6;
+  border-radius: 50%;
+  content: "";
+  animation: real-spin .75s linear infinite;
+}
+
+@keyframes real-spin {
+  to { transform: rotate(360deg); }
+}
+
+.viewer-canvas[data-real-raster="true"] {
+  cursor: crosshair;
+}
+
+@media (max-width: 720px) {
+  .real-select-pair,
+  .real-loader-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
