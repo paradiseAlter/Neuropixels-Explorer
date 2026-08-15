@@ -45,7 +45,7 @@ the active language. Its three Markdown sources are precompiled into a local
 asset, so Help remains available when the Explorer is opened through
 `file://` without a CDN or online Markdown service.
 
-The current release is **v3.2.0**. The `main` branch contains only the current
+The current release is **v3.3.0**. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.
 
@@ -56,8 +56,8 @@ tags instead of duplicated version directories.
   shared themes, language dictionaries, precompiled Help, plots, Probe
   rendering, region metadata, and the optional database client.
 - `styles/` - current application styling.
-- `server/` - reusable read-only SQLite/API service and command-line entry
-  point; no experiment-specific path or payload is embedded here.
+- `server/` - reusable SQLite/API service, transactional supplement endpoint,
+  and command-line entry point; no experiment-specific path is embedded here.
 - `database/migrations/` - ordered SQLite schema migrations represented by the
   same Git release as the Explorer UI.
 - `tests/` - portable browser checks, synthetic database/service tests, the
@@ -82,22 +82,26 @@ explicitly:
 
 ```powershell
 python -m pip install -e .
+neuropixels-explorer init-db --database <catalog.sqlite>
 neuropixels-explorer validate-db --database <catalog.sqlite>
 neuropixels-explorer serve --database <catalog.sqlite> --data-root <data-root>
 ```
 
 `--data-root` resolves the project-relative asset paths registered in the
-catalog. It is never written to a tracked configuration file. `init-db`
-creates or migrates an empty catalog for import adapters:
+catalog. It is never written to a tracked configuration file. Run `init-db`
+before serving a catalog after an upgrade; it creates a new schema or applies
+pending migrations to an existing catalog:
 
 ```powershell
 neuropixels-explorer init-db --database <new-catalog.sqlite>
 ```
 
-SQLite stores metadata and relative references only. KiloSort arrays, future
-raw voltage, and video payloads stay outside SQLite and outside Git. A
-data-source-specific importer may live with the research data, but its output
-must pass the migrations and validation shipped by this repository.
+SQLite stores metadata and relative references only. KiloSort arrays, raw
+voltage, and video payloads stay outside SQLite and outside Git. In database
+mode, Data Status can supplement a missing file or Recording folder. The local
+service stages and validates the selection, records it in one transaction, and
+rolls back database rows and managed-file moves together on failure. Existing
+assets are not overwritten; duplicates remain one `data_assets` row.
 
 ## Validation
 
@@ -105,6 +109,7 @@ Portable checks do not require private data:
 
 ```powershell
 node tests\validate-real-data.cjs --code-only
+node tests\validate-incremental-ingest.cjs
 node tests\validate-workspace-layout.cjs
 node tests\validate-i18n-help.cjs
 node scripts\build-help-content.cjs --check

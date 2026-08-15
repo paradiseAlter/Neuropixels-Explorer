@@ -19,3 +19,8 @@ Migration rules:
 3. update `SCHEMA_VERSION` in `server/neuropixels_explorer/migrations.py`;
 4. add a portable migration/contract test;
 5. keep neural and video payloads out of SQLite BLOB columns.
+
+Migration `003_incremental_ingest.sql` adds audit-only batch/item tables for
+supplements. Payload bytes are never stored in those tables. `data_assets`
+continues to hold relative paths, sizes, checksum metadata, role, availability,
+and provenance for external project files.

@@ -18,6 +18,15 @@ Use **Data status** after loading. It separates:
 - **Optional**: brain-region annotations and Probe-region tracks.
 - **Future / Video**: reserved interfaces not required in this release.
 
+For every missing core input, Data status names the affected Recording and the
+exact expected filename. Choose **Add files** for one or more individual files,
+or **Add folder** for a Recording folder. The Explorer rejects files from a
+different Recording, conflicting replacements, duplicate candidates, and NPY
+arrays with incompatible shapes. A failed supplement changes neither the
+catalog nor its managed files. A successful supplement refreshes only affected
+Recordings and preserves open Units, the focused Unit, time windows, navigation
+history, and the three-column layout.
+
 File names and KiloSort field names, such as `spike_times.npy`, `channel_shanks.npy`, and `depth_um`, remain unchanged in every interface language.
 
 ## 3. Select and compare Units
@@ -122,4 +131,3 @@ The Help documentation is stored as Markdown in this repository and precompiled 
 - **Brain region is unmapped**: confirm a compatible Legacy Table or depth mapping was included and uses the correct Recording/Unit identifiers.
 - **Raw voltage is unavailable**: KiloSort output folders often reference an external `continuous.dat`; the Explorer does not label spike timing as raw voltage.
 - **Navigation changes the wrong trace**: check whether time is Linked or Independent and which signal is focused.
-

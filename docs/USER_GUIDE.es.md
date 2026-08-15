@@ -18,6 +18,8 @@ Use **Estado de datos** después de cargar. Separa:
 - **Opcional**: anotaciones cerebrales y trayectos Sonda-región.
 - **Futuro / Vídeo**: interfaces reservadas que no son necesarias en esta versión.
 
+Para cada entrada principal faltante, **Estado de datos** identifica el Registro afectado y el nombre exacto del archivo esperado. Use **Añadir archivos** para uno o varios archivos individuales o **Añadir carpeta** para una carpeta de Registro. El Explorer rechaza archivos de otro Registro, reemplazos en conflicto, candidatos duplicados y arrays NPY con formas incompatibles. Si el suplemento falla, no deja un conjunto parcial ni en el catálogo ni en los archivos gestionados. Si termina correctamente, solo actualiza los Registros afectados y conserva las Unidades abiertas, la Unidad enfocada, las ventanas de tiempo, el historial de navegación y la disposición de tres columnas.
+
 Los nombres de archivo y campos de KiloSort, como `spike_times.npy`, `channel_shanks.npy` y `depth_um`, no se traducen.
 
 ## 3. Seleccionar y comparar Unidades
@@ -122,4 +124,3 @@ La Ayuda se conserva como Markdown y se precompila como contenido JavaScript loc
 - **Región sin mapear**: confirme una Legacy Table o mapa de profundidad compatible y los identificadores correctos.
 - **Voltaje sin procesar no disponible**: KiloSort suele referirse a un `continuous.dat` externo; el Explorer no presenta los tiempos de potenciales como voltaje bruto.
 - **La navegación cambia la señal equivocada**: compruebe Tiempo vinculado/independiente y qué señal está enfocada.
-

@@ -5,15 +5,32 @@ Git tags rather than duplicated version directories on `main`.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-08-15
+
 - Moved the reusable indexed data service, SQLite migrations, and synthetic
   contract tests into the Explorer product repository.
-- Added one portable CLI for schema initialization, validation, and read-only
+- Added one portable CLI for schema initialization, validation, and local
   Explorer/API serving with explicit runtime database and data-root paths.
 - Kept SQLite as a metadata catalog with project-relative asset references;
   large neural arrays, future raw voltage, and video remain external payloads.
 - Added Git ignore rules and an automated repository-boundary test for private
   data, generated databases and sidecars, analysis outputs, local config, and
   known machine-specific absolute paths.
+- Added exact per-Recording missing-file details and `Add files` / `Add folder`
+  actions to Data Status.
+- Added automatic Recording and asset-role detection with rejection of wrong
+  experiments, duplicate candidates, conflicting assets, invalid NPY payloads,
+  and incompatible spike/channel dimensions.
+- Added transactional incremental-ingest audit tables and atomic managed-file
+  registration. Failed batches roll back both SQLite changes and file moves;
+  existing assets are never silently overwritten.
+- Kept large NPY, raw-voltage, and video payloads outside SQLite while storing
+  their relative paths, sizes, SHA-256 checksums, type, status, and provenance.
+- Invalidated and recomputed only changed Recordings. Open Units, focused Unit,
+  time windows, navigation history, panel sizes, and the current layout remain
+  stable after a successful supplement.
+- Added portable rollback, duplicate, conflict, wrong-Recording, shape, missing
+  template, and live browser supplement acceptance tests.
 
 ## [3.2.0] - 2026-08-15
 

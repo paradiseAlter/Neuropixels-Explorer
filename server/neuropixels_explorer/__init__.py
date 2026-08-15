@@ -10,7 +10,7 @@ __all__ = [
     "validate_schema",
 ]
 
-__version__ = "3.3.0.dev0"
+__version__ = "3.3.0"
 
 
 def __getattr__(name: str):

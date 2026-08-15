@@ -126,7 +126,7 @@ function buffer(directory, name) {
   assert(/if \(!\["zoom", "pan"\]\.includes\(this\.mode\)\) return;[\s\S]{0,220}event\.preventDefault\(\)/.test(plotSource), "Plot wheel handling should preserve normal scrolling outside Zoom and Pan");
   assert(!/inTimeAxis|TIME_AXIS_HIT_ZONE/.test(plotSource), "Plot navigation should not be restricted to a hidden time-axis hit zone");
   const pageSource = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
-  assert(/Neuropixels Explorer 3\.2\.0/.test(pageSource), "The v3.2.0 page title is missing");
+  assert(/Neuropixels Explorer 3\.3\.0/.test(pageSource), "The v3.3.0 page title is missing");
   const pageIds = new Set([...pageSource.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
   const missingAppIds = [...appSource.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]).filter((id) => !pageIds.has(id));
   assert(!missingAppIds.length, `app.js references missing page IDs: ${missingAppIds.join(", ")}`);
@@ -142,8 +142,8 @@ function buffer(directory, name) {
     assert(pageIds.has(id), `Status or theme control ${id} is missing`);
   }
   assert(/role="separator"[^>]+aria-orientation="vertical"/.test(pageSource), "Workspace splitters should expose vertical separator semantics");
-  assert(/workspace-layout\.js\?v=3\.2\.0/.test(pageSource), "Workspace layout module is not loaded");
-  assert(/theme\.js\?v=3\.2\.0/.test(pageSource) && /data-status\.js\?v=3\.2\.0/.test(pageSource), "Theme or data-status module is not loaded");
+  assert(/workspace-layout\.js\?v=3\.3\.0/.test(pageSource), "Workspace layout module is not loaded");
+  assert(/theme\.js\?v=3\.3\.0/.test(pageSource) && /data-status\.js\?v=3\.3\.0/.test(pageSource), "Theme or data-status module is not loaded");
   const styleSource = fs.readFileSync(path.resolve(__dirname, "..", "styles", "app.css"), "utf8");
   assert(/--unit-panel-width: 272px/.test(styleSource) && /--probe-panel-width: 328px/.test(styleSource), "Default workspace widths are missing");
   assert(/grid-template-columns: var\(--unit-panel-width\)[^;]+var\(--probe-panel-width\)/.test(styleSource), "The resizable five-column workspace grid is missing");
@@ -158,7 +158,7 @@ function buffer(directory, name) {
   }
 
   if (codeOnly) {
-    console.log(JSON.stringify({ status: "PASS", mode: "code-only", version: "3.2.0" }, null, 2));
+    console.log(JSON.stringify({ status: "PASS", mode: "code-only", version: "3.3.0" }, null, 2));
     return;
   }
 

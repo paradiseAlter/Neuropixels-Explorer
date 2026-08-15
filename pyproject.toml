@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuropixels-explorer"
-version = "3.3.0.dev0"
+version = "3.3.0"
 description = "Local-first Neuropixels review UI and optional indexed data service"
 readme = "README.md"
 requires-python = ">=3.9"

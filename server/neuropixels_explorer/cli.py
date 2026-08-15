@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = subparsers.add_parser(
         "serve",
-        help="Serve the Explorer UI and read-only indexed API.",
+        help="Serve the Explorer UI, indexed API, and transactional supplement endpoint.",
     )
     _database_argument(serve)
     serve.add_argument(

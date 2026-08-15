@@ -65,7 +65,7 @@ for (const file of ["USER_GUIDE.en.md", "USER_GUIDE.zh-CN.md", "USER_GUIDE.es.md
 }
 
 assert(pageSource.includes('id="language-select"') && pageSource.includes('id="help-drawer"') && pageSource.includes('id="context-tooltip"'), "Language, Help drawer, or shared tooltip surface is missing");
-assert(/help-content\.js\?v=3\.2\.0/.test(pageSource) && !/(cdn|unpkg|jsdelivr|marked\.min)/i.test(pageSource), "Help must use the checked-in local precompiled asset without a CDN");
+assert(/help-content\.js\?v=3\.3\.0/.test(pageSource) && !/(cdn|unpkg|jsdelivr|marked\.min)/i.test(pageSource), "Help must use the checked-in local precompiled asset without a CDN");
 assert((pageSource.match(/class="context-help"/g) || []).length >= 12, "Too few contextual Help controls are present");
 assert(/addEventListener\("pointerover"/.test(appSource) && /addEventListener\("focusin"/.test(appSource), "Question-mark Help must support hover and keyboard focus");
 assert(/event\.key === "Escape" && !elements\.helpDrawer\.hidden/.test(appSource), "Help drawer must close with Escape");

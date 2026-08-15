@@ -17,7 +17,7 @@ outside the repository and are not required by the standalone folder workflow.
 
 ## Module map
 
-- `index.html` defines the current v3.2.0 review interface.
+- `index.html` defines the current v3.3.0 review interface.
 - `scripts/app.js` owns application state, folder selection, review modes, and
   DOM coordination.
 - `scripts/kilosort-core.js` indexes KiloSort files, parses NPY arrays, and
@@ -41,9 +41,9 @@ outside the repository and are not required by the standalone folder workflow.
   optional atlas-colored depth segments.
 - `scripts/database-client.js` adapts the optional local-service API to the
   same Explorer state model.
-- `server/neuropixels_explorer/` provides the read-only catalog API, lazy NPY
-  access, bounded in-memory caches, safe runtime path resolution, migration
-  validation, and the CLI.
+- `server/neuropixels_explorer/` provides the catalog API, transactional
+  incremental ingest, lazy NPY access, bounded in-memory caches, safe runtime
+  path resolution, migration validation, and the CLI.
 - `database/migrations/` is the canonical ordered SQLite schema history.
 - `styles/app.css` contains the current application layout and visual system.
 - `tests/validate-real-data.cjs` provides portable code checks and an optional
@@ -67,6 +67,15 @@ relative to a runtime `--data-root`. The service resolves and contains each
 path under that root, memory-maps active NPY arrays, and keeps only bounded
 Recording and Unit caches. Raw voltage and future video remain external assets
 with explicit stream and synchronization metadata.
+
+Incremental ingest uses a two-phase boundary. Selected files first stream to a
+session-specific staging directory while role, Recording identity, checksum,
+NPY shape, and conflict rules are validated. Commit then uses one SQLite
+transaction and atomic file moves into `managed-assets/`; an exception rolls
+back the database and moves every file back to staging. Only changed
+Recordings have their bounded array and Unit caches invalidated. The browser
+refreshes those Recording snapshots in place so open Units, time windows,
+history, and panel layout remain unchanged.
 
 ## Repository boundary
 
