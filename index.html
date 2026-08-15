@@ -64,7 +64,7 @@
               </div>
             </header>
             <div class="unit-list" id="unit-list" role="listbox" aria-label="Available units"></div>
-            <footer class="unit-panel-help" id="unit-panel-help"><strong>CLICK</strong> inspect · <strong>+</strong> starts Compare mode</footer>
+            <footer class="unit-panel-help" id="unit-panel-help"><strong>CLICK</strong> open only · <strong>CTRL+CLICK</strong> add · <strong>RIGHT CLICK</strong> options</footer>
           </aside>
 
           <section class="unit-review" aria-label="Selected unit review">
@@ -82,12 +82,8 @@
             <section class="plot-card primary-plot-card">
               <header class="plot-header">
                 <div class="plot-heading">
-                  <div class="review-mode-switch" role="group" aria-label="Review mode">
-                    <button class="active" id="inspect-review-mode" type="button" aria-pressed="true">INSPECT</button>
-                    <button id="compare-review-mode" type="button" aria-pressed="false">COMPARE <span id="compare-mode-count">0</span></button>
-                  </div>
                   <strong>MANUAL SPIKE REVIEW</strong>
-                  <span id="comparison-count-label">Inspect one Unit with linked signal, Probe, region, and Inspector details</span>
+                  <span id="comparison-count-label">No Unit open · select a Unit from the left</span>
                 </div>
                 <div class="plot-controls" role="group" aria-label="Time view controls">
                   <button class="time-link-button active" id="time-link-button" type="button" aria-pressed="true" title="Linked: zoom and pan every open Unit together">TIME LINKED</button>
@@ -188,6 +184,14 @@
       <div class="dialog-body" id="dialog-body"></div>
     </dialog>
 
+    <div class="unit-context-menu" id="unit-context-menu" role="menu" aria-label="Unit actions" hidden>
+      <div class="unit-context-title" id="unit-context-title">Unit actions</div>
+      <button type="button" role="menuitem" data-unit-action="open-only">Open only</button>
+      <button type="button" role="menuitem" data-unit-action="add">Add to current view</button>
+      <button type="button" role="menuitem" data-unit-action="remove">Remove from view</button>
+      <button type="button" role="menuitem" data-unit-action="locate">Locate on Probe</button>
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
@@ -195,7 +199,7 @@
   <script src="./scripts/region-core.js" defer></script>
   <script src="./scripts/plots.js" defer></script>
   <script src="./scripts/probe-view.js" defer></script>
-  <script src="./scripts/database-client.js?v=3.1.0" defer></script>
-  <script src="./scripts/app.js?v=3.1.0" defer></script>
+  <script src="./scripts/database-client.js?v=3.2.0-dev" defer></script>
+  <script src="./scripts/app.js?v=3.2.0-dev" defer></script>
 </body>
 </html>

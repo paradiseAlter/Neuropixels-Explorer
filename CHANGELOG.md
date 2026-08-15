@@ -3,6 +3,16 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [Unreleased]
+
+- Replaced Primary/Comparison/Review-mode state with `openUnits` and one
+  `focusedUnit`.
+- Made plain click open one Unit, Ctrl-click add a Unit, and right-click expose
+  shared Unit actions in the list and Probe views.
+- Removed automatic Unit selection when a Recording is opened.
+- Linked signal focus back to the corresponding Recording, Unit-list row,
+  Probe marker, and Inspector details.
+
 ## [3.1.0] - 2026-08-15
 
 - Added explicit Inspect and Compare review modes with linked multi-Unit plots.

@@ -70,10 +70,21 @@ function buffer(directory, name) {
   assert(probeView.experimentOf({ name: "ks4_exp12" }) === 12, "Recording experiment lookup changed");
   const appSource = fs.readFileSync(path.resolve(__dirname, "..", "scripts", "app.js"), "utf8");
   assert(/const MAX_OPEN_UNITS = 10;/.test(appSource), "The multi-Unit display limit should remain 10");
-  assert(/reviewMode: "inspect"/.test(appSource), "Inspect mode should remain the default review mode");
+  assert(/openUnits: new Map\(\)/.test(appSource) && /focusedUnit: null/.test(appSource), "Unit selection should use openUnits plus focusedUnit");
+  assert(!/reviewMode:|comparisonItems:|activeClusterId:/.test(appSource), "Legacy Inspect/Compare selection state should not return");
+  assert(/event\.ctrlKey \|\| event\.metaKey/.test(appSource), "Ctrl-click additive Unit selection is missing");
+  assert(/function openUnitContextMenu/.test(appSource) && /function runUnitContextAction/.test(appSource), "The shared Unit context menu is missing");
+  assert(/function selectRecording\(recording\)/.test(appSource) && !/firstGood/.test(appSource), "Selecting a Recording should not auto-open a Unit");
   assert(/interactionMode: "cursor"/.test(appSource), "Cursor mode should remain the default plot interaction");
   const pageSource = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
   assert(/Neuropixels Explorer 3\.1\.0/.test(pageSource), "The v3.1.0 page title is missing");
+  const pageIds = new Set([...pageSource.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
+  const missingAppIds = [...appSource.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]).filter((id) => !pageIds.has(id));
+  assert(!missingAppIds.length, `app.js references missing page IDs: ${missingAppIds.join(", ")}`);
+  assert(!/inspect-review-mode|compare-review-mode/.test(pageSource), "Explicit Inspect/Compare mode controls should be removed");
+  for (const action of ["open-only", "add", "remove", "locate"]) {
+    assert(pageSource.includes(`data-unit-action="${action}"`), `Unit context action ${action} is missing`);
+  }
 
   if (codeOnly) {
     console.log(JSON.stringify({ status: "PASS", mode: "code-only", version: "3.1.0" }, null, 2));

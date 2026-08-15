@@ -11,6 +11,11 @@ on the local machine and no upload or localhost service is required.
 2. Choose or drop a complete project/session folder containing the KiloSort
    outputs to inspect.
 
+No Unit is selected automatically. Click a Unit to open it by itself,
+Ctrl-click to add it to the current view, or right-click for open, add, remove,
+and Probe-location actions. Clicking an open signal focuses the same Unit in
+the list, Probe view, and Inspector.
+
 The current release is **v3.1.0**. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.

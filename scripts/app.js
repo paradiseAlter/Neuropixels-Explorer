@@ -35,9 +35,6 @@
     comparisonCount: document.getElementById("comparison-count-label"),
     comparisonTraces: document.getElementById("comparison-traces"),
     primaryPlotCard: document.querySelector(".primary-plot-card"),
-    inspectReviewMode: document.getElementById("inspect-review-mode"),
-    compareReviewMode: document.getElementById("compare-review-mode"),
-    compareModeCount: document.getElementById("compare-mode-count"),
     unitPanelHelp: document.getElementById("unit-panel-help"),
     manualReviewEmpty: document.getElementById("manual-review-empty"),
     primaryTraceLane: document.getElementById("primary-trace-lane"),
@@ -78,7 +75,9 @@
     nearbyContext: document.getElementById("nearby-context"),
     nearbyUnitList: document.getElementById("nearby-unit-list"),
     probeTooltip: document.getElementById("probe-tooltip"),
-    probeTrackStatus: document.getElementById("probe-track-status")
+    probeTrackStatus: document.getElementById("probe-track-status"),
+    unitContextMenu: document.getElementById("unit-context-menu"),
+    unitContextTitle: document.getElementById("unit-context-title")
   };
 
   const state = {
@@ -90,7 +89,6 @@
     errors: [],
     regionResult: null,
     activeRecording: null,
-    activeClusterId: null,
     quality: "all",
     search: "",
     datasetToken: 0,
@@ -100,11 +98,10 @@
     workerSequence: 0,
     pending: new Map(),
     dragDepth: 0,
-    comparisonItems: new Map(),
-    comparisonLoading: new Set(),
-    primaryItem: null,
-    activePlotKey: "primary",
-    reviewMode: "inspect",
+    openUnits: new Map(),
+    loadingUnits: new Set(),
+    focusedUnit: null,
+    contextUnit: null,
     timeLinked: true,
     syncingTime: false,
     interactionMode: "cursor"
@@ -122,7 +119,7 @@
     rateColor: "#86b8eb",
     rateFill: "rgba(87, 143, 197, .16)",
     detailEmpty: document.getElementById("spike-detail-empty")
-  }, (view) => handlePlotWindow("primary", view), (plotState) => handlePlotState("primary", plotState));
+  }, (view) => handlePlotWindow(primaryOpenUnit()?.key || "primary", view), (plotState) => handlePlotState(primaryOpenUnit()?.key || "primary", plotState));
 
   const detailPlots = new PlotManager({
     amplitude: document.getElementById("amplitude-canvas"),
@@ -149,7 +146,7 @@
     nearbyList: elements.nearbyUnitList,
     tooltip: elements.probeTooltip,
     trackStatus: elements.probeTrackStatus
-  }, ({ recording, clusterId }) => selectUnitFromProbe(recording, clusterId), ({ probeId, depth, segment }) => {
+  }, (interaction) => handleProbeUnitInteraction(interaction), ({ probeId, depth, segment }) => {
     showToast(`Probe ${Number(probeId) + 1} · ${segment?.region || "unmapped"} · ${depth.toFixed(0)} µm · nearby Units shown`);
   });
 
@@ -174,14 +171,15 @@
   }
 
   function plotEntries() {
-    return [
-      { key: "primary", manager: plots, lane: elements.primaryTraceLane, windowElement: elements.timeWindow, ...state.primaryItem },
-      ...[...state.comparisonItems.entries()].map(([key, item]) => ({ key, ...item }))
-    ];
+    return [...state.openUnits.values()].sort((left, right) => Number(right.manager === plots) - Number(left.manager === plots));
   }
 
-  function activePlotEntry() {
-    return plotEntries().find((entry) => entry.key === state.activePlotKey) || plotEntries()[0];
+  function primaryOpenUnit() {
+    return plotEntries().find((entry) => entry.manager === plots) || null;
+  }
+
+  function focusedEntry() {
+    return state.openUnits.get(state.focusedUnit) || plotEntries()[0] || null;
   }
 
   function formatTimeWindow({ start, end, span }) {
@@ -189,32 +187,13 @@
     return `${start.toFixed(digits)}–${end.toFixed(digits)} s · ${span.toFixed(digits)} s`;
   }
 
-  function updateComparisonCount() {
-    const count = (plots.data ? 1 : 0) + state.comparisonItems.size;
-    elements.compareModeCount.textContent = String(state.comparisonItems.size);
-    elements.comparisonCount.textContent = state.reviewMode === "inspect"
-      ? count === 0
-        ? "No Unit open · select a Unit from the left"
-        : "Inspect one Unit with linked signal, Probe, region, and Inspector details"
-      : count <= 1
-        ? "Add another Unit with + to start a comparison"
+  function updateOpenUnitCount() {
+    const count = state.openUnits.size;
+    elements.comparisonCount.textContent = count === 0
+      ? "No Unit open · select a Unit from the left"
+      : count === 1
+        ? "1 Unit open · click another Unit to replace it · Ctrl+click to add"
         : `${count} Units open · ${state.timeLinked ? "time axes linked" : "time axes independent"}`;
-  }
-
-  function setReviewMode(mode) {
-    state.reviewMode = mode === "compare" ? "compare" : "inspect";
-    const comparing = state.reviewMode === "compare";
-    elements.primaryPlotCard.dataset.reviewMode = state.reviewMode;
-    elements.inspectReviewMode.classList.toggle("active", !comparing);
-    elements.compareReviewMode.classList.toggle("active", comparing);
-    elements.inspectReviewMode.setAttribute("aria-pressed", String(!comparing));
-    elements.compareReviewMode.setAttribute("aria-pressed", String(comparing));
-    elements.unitPanelHelp.innerHTML = comparing
-      ? "<strong>CLICK</strong> focus · <strong>+</strong> add · <strong>×</strong> remove"
-      : "<strong>CLICK</strong> inspect · <strong>+</strong> starts Compare mode";
-    if (!comparing && state.activePlotKey !== "primary") setActivePlot("primary");
-    updateComparisonCount();
-    syncProbeView();
   }
 
   function handlePlotWindow(key, view) {
@@ -232,7 +211,7 @@
   }
 
   function handlePlotState(key, plotState) {
-    if (key !== state.activePlotKey) return;
+    if (key !== state.focusedUnit) return;
     const cursor = plotState.mode === "cursor";
     const zooming = plotState.mode === "zoom";
     const panning = plotState.mode === "pan";
@@ -249,11 +228,33 @@
     elements.resetTime.disabled = !plotState.hasData;
   }
 
-  function setActivePlot(key) {
-    const requested = state.reviewMode === "inspect" ? "primary" : key;
-    const next = plotEntries().find((entry) => entry.key === requested) || plotEntries()[0];
-    state.activePlotKey = next.key;
-    plotEntries().forEach((entry) => entry.lane?.classList.toggle("active", entry.key === next.key));
+  function revealFocusedUnit(entry) {
+    if (!entry?.recording) return;
+    const recordingChanged = state.activeRecording !== entry.recording;
+    state.activeRecording = entry.recording;
+    state.search = "";
+    state.quality = "all";
+    elements.unitSearch.value = "";
+    elements.qualityFilter.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.dataset.quality === "all"));
+    if (recordingChanged) renderRecordings();
+    renderUnitList();
+    requestAnimationFrame(() => {
+      elements.unitList.querySelector(`[data-cluster-id="${Number(entry.clusterId)}"]`)?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function setFocusedUnit(key, { reveal = true } = {}) {
+    const next = state.openUnits.get(key) || null;
+    state.focusedUnit = next?.key || null;
+    plotEntries().forEach((entry) => entry.lane?.classList.toggle("active", entry.key === state.focusedUnit));
+    if (!next) {
+      clearFocusedDetails();
+      syncProbeView();
+      renderUnitList();
+      return;
+    }
+    if (reveal) revealFocusedUnit(next);
+    else renderUnitList();
     handlePlotState(next.key, {
       mode: next.manager.mode,
       canGoBack: next.manager.history.length > 0,
@@ -276,20 +277,35 @@
       ? "Linked: zoom and pan every open Unit together"
       : "Independent: zoom and pan only the selected trace";
     if (state.timeLinked) {
-      const source = activePlotEntry();
+      const source = focusedEntry();
       if (source?.manager.data) handlePlotWindow(source.key, { start: source.manager.start, end: source.manager.start + source.manager.span, span: source.manager.span });
     }
-    updateComparisonCount();
+    updateOpenUnitCount();
   }
 
-  function clearComparisonViews() {
-    state.comparisonItems.forEach((item) => item.manager.destroy());
-    state.comparisonItems.clear();
-    state.comparisonLoading.clear();
+  function clearOpenUnitViews({ render = true } = {}) {
+    state.openUnits.forEach((item) => {
+      if (item.manager !== plots) item.manager.destroy();
+      if (item.lane !== elements.primaryTraceLane) item.lane.remove();
+    });
+    state.openUnits.clear();
+    state.loadingUnits.clear();
     elements.comparisonTraces.replaceChildren();
-    state.activePlotKey = "primary";
-    setReviewMode("inspect");
-    updateComparisonCount();
+    state.focusedUnit = null;
+    plots.clear();
+    elements.primaryTraceLane.hidden = true;
+    elements.primaryTraceLane.dataset.viewKey = "";
+    elements.primaryOverviewLabel.hidden = true;
+    elements.primaryOverviewFrame.hidden = true;
+    elements.manualReviewEmpty.hidden = false;
+    elements.primaryTraceTitle.textContent = "Unit —";
+    elements.primaryTraceMeta.textContent = "Select a Unit from the list";
+    elements.timeWindow.textContent = "—";
+    setReviewState("IDLE");
+    clearFocusedDetails();
+    syncProbeView();
+    updateOpenUnitCount();
+    if (render) renderUnitList();
   }
 
   function showToast(message) {
@@ -297,6 +313,46 @@
     elements.toast.classList.add("show");
     window.clearTimeout(showToast.timer);
     showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2400);
+  }
+
+  function hideUnitContextMenu() {
+    elements.unitContextMenu.hidden = true;
+    state.contextUnit = null;
+  }
+
+  function openUnitContextMenu(recording, clusterId, clientX, clientY) {
+    if (!recording || !Number.isFinite(Number(clusterId))) return;
+    const key = viewKey(recording, clusterId);
+    state.contextUnit = { recording, clusterId: Number(clusterId), key };
+    elements.unitContextTitle.textContent = `Unit ${Number(clusterId)} · ${recording.name}`;
+    const removeButton = elements.unitContextMenu.querySelector('[data-unit-action="remove"]');
+    removeButton.disabled = !state.openUnits.has(key);
+    elements.unitContextMenu.hidden = false;
+    const width = elements.unitContextMenu.offsetWidth;
+    const height = elements.unitContextMenu.offsetHeight;
+    elements.unitContextMenu.style.left = `${Math.max(8, Math.min(Number(clientX) || 8, window.innerWidth - width - 8))}px`;
+    elements.unitContextMenu.style.top = `${Math.max(8, Math.min(Number(clientY) || 8, window.innerHeight - height - 8))}px`;
+    elements.unitContextMenu.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
+  }
+
+  async function locateUnitOnProbe(recording, clusterId) {
+    const key = viewKey(recording, clusterId);
+    if (!state.openUnits.has(key)) await openUnitOnly(recording, clusterId);
+    else setFocusedUnit(key);
+    if (!state.openUnits.has(key)) return;
+    probeViewer.focusUnit(key);
+    elements.probeCanvas.scrollIntoView({ block: "center", behavior: "smooth" });
+    showToast(`Unit ${clusterId} located on the Probe`);
+  }
+
+  async function runUnitContextAction(action) {
+    const context = state.contextUnit;
+    hideUnitContextMenu();
+    if (!context) return;
+    if (action === "open-only") await openUnitOnly(context.recording, context.clusterId);
+    else if (action === "add") await addUnitToView(context.recording, context.clusterId);
+    else if (action === "remove") removeUnitFromView(context.key);
+    else if (action === "locate") await locateUnitOnProbe(context.recording, context.clusterId);
   }
 
   function showOnly(target) {
@@ -327,8 +383,7 @@
   }
 
   function syncProbeView() {
-    const entries = state.reviewMode === "compare" ? plotEntries() : plotEntries().filter((entry) => entry.key === "primary");
-    const items = entries.filter((entry) => entry.result && entry.recording).map((entry) => ({
+    const items = plotEntries().filter((entry) => entry.result && entry.recording).map((entry) => ({
       key: entry.key,
       result: entry.result,
       recording: entry.recording,
@@ -338,19 +393,23 @@
       locationRegion: (clusterId) => regionFor(entry.recording, clusterId),
       locationLabel: (clusterId) => labelFor(entry.recording, clusterId)
     }));
-    probeViewer.setUnits(items, state.activePlotKey, state.regionResult?.probeTrack);
+    probeViewer.setUnits(items, state.focusedUnit, state.regionResult?.probeTrack);
   }
 
-  async function selectUnitFromProbe(recording, clusterId) {
+  async function handleProbeUnitInteraction({ recording, clusterId, additive = false, contextMenu = false, clientX = 0, clientY = 0 }) {
     if (!recording || !Number.isFinite(Number(clusterId))) return;
+    if (contextMenu) {
+      openUnitContextMenu(recording, clusterId, clientX, clientY);
+      return;
+    }
     if (state.activeRecording !== recording) {
       state.activeRecording = recording;
       state.search = "";
       elements.unitSearch.value = "";
       renderRecordings();
     }
-    await inspectUnit(Number(clusterId));
-    elements.unitList.querySelector(`[data-cluster-id="${Number(clusterId)}"]`)?.scrollIntoView({ block: "nearest" });
+    if (additive) await addUnitToView(recording, Number(clusterId));
+    else await openUnitOnly(recording, Number(clusterId));
   }
 
   function qualityTone(quality) {
@@ -463,20 +522,17 @@
       const rate = Number.isFinite(unit.rateHz) ? `${unit.rateHz.toFixed(unit.rateHz < 10 ? 2 : 1)} Hz` : "— Hz";
       const spikes = Number.isFinite(unit.count) ? number(unit.count) : "—";
       const key = viewKey(state.activeRecording, unit.id);
-      const primary = Number(unit.id) === Number(state.activeClusterId);
-      const compared = state.comparisonItems.has(key);
-      const loading = state.comparisonLoading.has(key);
-      const compareLabel = primary || compared ? "×" : loading ? "…" : "+";
-      const compareTitle = primary ? "Close this signal" : compared ? "Remove from comparison" : "Add this Unit to comparison";
-      return `<div class="unit-row ${primary ? "active" : ""} ${compared ? "compared" : ""}" role="option" aria-selected="${primary}">
-        <button class="unit-row-select" type="button" data-cluster-id="${unit.id}">
+      const focused = state.focusedUnit === key;
+      const open = state.openUnits.has(key);
+      const loading = state.loadingUnits.has(key);
+      return `<div class="unit-row ${focused ? "active" : ""} ${open ? "open" : ""}" role="option" aria-selected="${focused}">
+        <button class="unit-row-select" type="button" data-cluster-id="${unit.id}" aria-label="${loading ? `Loading Unit ${unit.id}` : `Open Unit ${unit.id}. Ctrl plus click adds it to the current view.`}" ${loading ? "disabled" : ""}>
           <span class="unit-row-main">
             <span class="unit-row-title"><i class="quality-dot ${qualityTone(unit.quality)}"></i><strong>Unit ${unit.id}</strong></span>
             <small>${escapeHtml(unit.quality)} · ${escapeHtml(region)}</small>
           </span>
-          <span class="unit-row-metrics"><strong>${rate}</strong><span>${spikes} spikes</span></span>
+          <span class="unit-row-metrics"><strong>${loading ? "READING" : rate}</strong><span>${spikes} spikes${open ? " · open" : ""}</span></span>
         </button>
-        <button class="unit-row-compare ${primary || compared ? "added" : ""}" type="button" data-compare-cluster-id="${unit.id}" aria-label="${compareTitle}" title="${compareTitle}" ${loading ? "disabled" : ""}>${compareLabel}</button>
       </div>`;
     }).join("");
   }
@@ -565,60 +621,9 @@
     syncProbeView();
   }
 
-  function removeComparisonView(key, { render = true } = {}) {
-    const item = state.comparisonItems.get(key);
-    if (!item) return;
-    item.manager.destroy();
-    item.lane.remove();
-    state.comparisonItems.delete(key);
-    if (state.activePlotKey === key) setActivePlot("primary");
-    else syncProbeView();
-    updateComparisonCount();
-    if (render) renderUnitList();
-  }
-
-  function clearPrimaryView() {
-    state.activeClusterId = null;
-    state.primaryItem = null;
-    plots.clear();
-    elements.primaryTraceLane.hidden = true;
-    elements.primaryOverviewLabel.hidden = true;
-    elements.primaryOverviewFrame.hidden = true;
-    elements.manualReviewEmpty.hidden = false;
-    elements.primaryTraceTitle.textContent = "Unit —";
-    elements.primaryTraceMeta.textContent = "Select a Unit from the list";
-    elements.timeWindow.textContent = "—";
-    setReviewState("IDLE");
-    setActivePlot("primary");
-    renderUnitList();
-    updateComparisonCount();
-  }
-
-  function closePrimaryView() {
-    if (state.activeClusterId == null || !Number.isFinite(Number(state.activeClusterId))) return;
-    state.selectionToken += 1;
-    const promoted = state.comparisonItems.values().next().value;
-    if (!promoted) {
-      clearPrimaryView();
-      showToast("Signal closed");
-      return;
-    }
-    const promotedKey = viewKey(promoted.recording, promoted.clusterId);
-    const { recording, clusterId, result } = promoted;
-    removeComparisonView(promotedKey, { render: false });
-    state.activeRecording = recording;
-    state.activeClusterId = clusterId;
-    state.search = "";
-    elements.unitSearch.value = "";
-    renderRecordings();
-    renderUnitList();
-    renderReview(result, recording, clusterId);
-    showToast(`Unit ${clusterId} moved to the primary view`);
-  }
-
-  function createComparisonView(recording, clusterId, result) {
+  function createAdditionalView(recording, clusterId, result) {
     const key = viewKey(recording, clusterId);
-    const usedPaletteIndexes = new Set([...state.comparisonItems.values()].map((item) => item.paletteIndex));
+    const usedPaletteIndexes = new Set(plotEntries().map((item) => item.paletteIndex).filter((index) => index >= 0));
     const paletteIndex = comparisonColors.findIndex((_, index) => !usedPaletteIndexes.has(index));
     const palette = comparisonColors[Math.max(0, paletteIndex)];
     const label = labelFor(recording, clusterId);
@@ -656,15 +661,18 @@
       rateColor: palette.rate,
       rateFill: palette.fill
     }, (view) => handlePlotWindow(key, view), (plotState) => handlePlotState(key, plotState));
-    const item = { manager, lane, windowElement, recording, clusterId: Number(clusterId), result, paletteIndex, traceColor: palette.trace };
-    state.comparisonItems.set(key, item);
-    frame.addEventListener("pointerdown", () => setActivePlot(key), { capture: true });
+    const item = { key, manager, lane, windowElement, recording, clusterId: Number(clusterId), result, paletteIndex, traceColor: palette.trace };
+    state.openUnits.set(key, item);
+    frame.addEventListener("pointerdown", () => setFocusedUnit(key), { capture: true });
     lane.querySelector(".trace-lane-header").addEventListener("click", (event) => {
-      if (!event.target.closest(".trace-remove")) setActivePlot(key);
+      if (!event.target.closest(".trace-remove")) setFocusedUnit(key);
     });
-    lane.querySelector(".trace-remove").addEventListener("click", () => removeComparisonView(key));
+    lane.querySelector(".trace-remove").addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeUnitFromView(key);
+    });
 
-    const source = activePlotEntry();
+    const source = focusedEntry();
     state.syncingTime = true;
     try {
       manager.setData({ ...result, sampleRate: recording.sampleRate });
@@ -673,63 +681,120 @@
     } finally {
       state.syncingTime = false;
     }
-    updateComparisonCount();
-    setActivePlot(key);
+    updateOpenUnitCount();
+    setFocusedUnit(key);
+    return item;
   }
 
-  async function addComparisonUnit(clusterId) {
-    const recording = state.activeRecording;
+  function removeUnitFromView(key) {
+    const item = state.openUnits.get(key);
+    if (!item) return;
+    const removedFocused = state.focusedUnit === key;
+    state.openUnits.delete(key);
+    if (item.manager !== plots) {
+      item.manager.destroy();
+      item.lane.remove();
+    } else {
+      plots.clear();
+      const promoted = plotEntries()[0] || null;
+      if (promoted) {
+        const initialWindow = { start: promoted.manager.start, span: promoted.manager.span };
+        state.openUnits.delete(promoted.key);
+        promoted.manager.destroy();
+        promoted.lane.remove();
+        renderPrimaryView(promoted.result, promoted.recording, promoted.clusterId, { initialWindow, focus: false });
+      } else {
+        elements.primaryTraceLane.hidden = true;
+        elements.primaryTraceLane.dataset.viewKey = "";
+        elements.primaryOverviewLabel.hidden = true;
+        elements.primaryOverviewFrame.hidden = true;
+        elements.manualReviewEmpty.hidden = false;
+        elements.primaryTraceTitle.textContent = "Unit —";
+        elements.primaryTraceMeta.textContent = "Select a Unit from the list";
+        elements.timeWindow.textContent = "—";
+      }
+    }
+    const next = removedFocused ? primaryOpenUnit() || plotEntries()[0] || null : focusedEntry();
+    if (next) setFocusedUnit(next.key);
+    else {
+      state.focusedUnit = null;
+      setReviewState("IDLE");
+      clearFocusedDetails();
+      syncProbeView();
+      renderUnitList();
+    }
+    updateOpenUnitCount();
+    showToast(`Unit ${item.clusterId} removed from the current view`);
+  }
+
+  async function addUnitToView(recording, clusterId) {
     if (!recording) return;
     const key = viewKey(recording, clusterId);
-    if (state.comparisonItems.has(key)) {
-      removeComparisonView(key);
+    if (state.openUnits.has(key)) {
+      setFocusedUnit(key);
       return;
     }
-    if (Number(clusterId) === Number(state.activeClusterId)) return;
-    if (state.comparisonItems.size >= MAX_OPEN_UNITS - 1) {
+    if (state.loadingUnits.has(key)) return;
+    if (!state.openUnits.size) {
+      await openUnitOnly(recording, clusterId);
+      return;
+    }
+    if (state.openUnits.size >= MAX_OPEN_UNITS) {
       showToast(`${MAX_OPEN_UNITS} Units are already open. Remove one before adding another.`);
       return;
     }
     const datasetToken = state.datasetToken;
-    setReviewMode("compare");
-    state.comparisonLoading.add(key);
+    const selectionToken = state.selectionToken;
+    state.loadingUnits.add(key);
     renderUnitList();
     try {
       const result = await inspectRecordingUnit(recording, clusterId);
-      if (datasetToken !== state.datasetToken || state.comparisonItems.has(key)) return;
-      if (recording === state.activeRecording && Number(clusterId) === Number(state.activeClusterId)) return;
-      createComparisonView(recording, clusterId, result);
-      showToast(`Unit ${clusterId} added to comparison`);
+      if (datasetToken !== state.datasetToken || selectionToken !== state.selectionToken || state.openUnits.has(key)) return;
+      recording.unitSummaryMap = new Map(result.unitSummaries.map((item) => [item.id, item]));
+      createAdditionalView(recording, clusterId, result);
+      showToast(`Unit ${clusterId} added to the current view`);
     } catch (error) {
-      showToast(`Could not compare Unit ${clusterId}: ${error.message}`);
+      showToast(`Could not add Unit ${clusterId}: ${error.message}`);
     } finally {
-      state.comparisonLoading.delete(key);
+      state.loadingUnits.delete(key);
       renderUnitList();
     }
   }
 
-  function renderReview(result, recording, clusterId) {
+  function renderPrimaryView(result, recording, clusterId, { initialWindow = null, focus = true } = {}) {
+    const key = viewKey(recording, clusterId);
     const label = labelFor(recording, clusterId);
     const region = regionFor(recording, clusterId);
-    state.primaryItem = { recording, clusterId: Number(clusterId), result, traceColor: "#9fc6f1" };
+    const item = { key, manager: plots, lane: elements.primaryTraceLane, windowElement: elements.timeWindow, recording, clusterId: Number(clusterId), result, paletteIndex: -1, traceColor: "#9fc6f1" };
+    state.openUnits.set(key, item);
     elements.manualReviewEmpty.hidden = true;
     elements.primaryTraceLane.hidden = false;
+    elements.primaryTraceLane.dataset.viewKey = key;
     elements.primaryOverviewLabel.hidden = false;
     elements.primaryOverviewFrame.hidden = false;
     elements.primaryTraceTitle.textContent = `Unit ${clusterId}`;
     elements.primaryTraceMeta.textContent = [recording.name, label.quality, region?.region || "region unmapped", `${number(result.spikeCount)} spikes`].join(" · ");
     plots.setData({ ...result, sampleRate: recording.sampleRate });
-    setActivePlot("primary");
-    updateComparisonCount();
+    if (initialWindow) plots.setWindow(initialWindow.start, initialWindow.span);
+    if (focus) setFocusedUnit(key);
+    else syncProbeView();
+    updateOpenUnitCount();
     setReviewState(state.dataMode === "database" ? "READY · DATABASE" : result.fallback ? "READY · MAIN THREAD" : "READY", "ready");
+    return item;
   }
 
-  async function inspectUnit(clusterId, options = {}) {
-    const recording = state.activeRecording;
+  async function openUnitOnly(recording, clusterId, options = {}) {
     if (!recording || !Number.isFinite(Number(clusterId))) return;
+    const key = viewKey(recording, clusterId);
+    if (state.openUnits.size === 1 && state.openUnits.has(key)) {
+      setFocusedUnit(key);
+      return;
+    }
     const localToken = ++state.selectionToken;
-    state.activeClusterId = Number(clusterId);
-    removeComparisonView(viewKey(recording, clusterId), { render: false });
+    clearOpenUnitViews({ render: false });
+    state.activeRecording = recording;
+    state.loadingUnits.add(key);
+    renderRecordings();
     renderUnitList();
     elements.reviewTitle.textContent = `Unit ${clusterId}`;
     elements.reviewSubtitle.textContent = `${recording.name} · loading selected spike data`;
@@ -741,38 +806,36 @@
       if (!recording.clusterLabels.length && result.unitSummaries.length) {
         recording.clusterLabels = result.unitSummaries.map((item) => ({ id: item.id, quality: "unknown" }));
         if (!recording.unitSummaryMap.has(Number(clusterId)) && !options.retry) {
-          state.activeClusterId = result.unitSummaries[0].id;
+          const fallbackClusterId = result.unitSummaries[0].id;
+          state.loadingUnits.delete(key);
           renderRecordings();
           renderUnitList();
-          await inspectUnit(state.activeClusterId, { retry: true });
+          await openUnitOnly(recording, fallbackClusterId, { retry: true });
           return;
         }
         renderSummary();
         renderRecordings();
       }
+      state.loadingUnits.delete(key);
       renderUnitList();
-      renderReview(result, recording, clusterId);
+      renderPrimaryView(result, recording, clusterId);
     } catch (error) {
       if (localToken !== state.selectionToken) return;
       setReviewState("ERROR", "error");
       elements.reviewSubtitle.textContent = error.message;
-      state.primaryItem = null;
-      plots.clear();
-      clearFocusedDetails();
+      state.loadingUnits.delete(key);
+      clearOpenUnitViews();
       showToast(`Could not read Unit ${clusterId}: ${error.message}`);
     }
   }
 
-  async function selectRecording(recording) {
+  function selectRecording(recording) {
     if (!recording) return;
     state.activeRecording = recording;
-    const firstGood = recording.clusterLabels.find((item) => item.quality === "good");
-    state.activeClusterId = firstGood?.id ?? recording.clusterLabels[0]?.id ?? 0;
     state.search = "";
     elements.unitSearch.value = "";
     renderRecordings();
     renderUnitList();
-    await inspectUnit(state.activeClusterId);
   }
 
   function renderDialog() {
@@ -848,10 +911,7 @@
     state.recordings = [];
     state.errors = [];
     state.regionResult = null;
-    state.primaryItem = null;
-    clearComparisonViews();
-    plots.clear();
-    clearFocusedDetails();
+    clearOpenUnitViews({ render: false });
     elements.datasetTitle.textContent = state.rootName;
     showLoading("Inspecting folder", `${number(selectedFiles.length)} files received. Finding KiloSort recordings.`, 16);
     await clearWorker();
@@ -893,12 +953,12 @@
 
     elements.loadingProgress.style.width = "100%";
     elements.loadingTitle.textContent = "Folder ready";
-    elements.loadingMessage.textContent = `${state.recordings.length} recordings detected. Opening the first good unit.`;
+    elements.loadingMessage.textContent = `${state.recordings.length} recordings detected. Select a Unit to begin.`;
     renderSummary();
     renderDialog();
     elements.dataDetails.disabled = false;
     showOnly("explorer");
-    await selectRecording(state.recordings[0]);
+    selectRecording(state.recordings[0]);
     showToast(`${state.recordings.length} recordings ready`);
   }
 
@@ -906,11 +966,8 @@
     state.datasetToken += 1;
     state.selectionToken += 1;
     state.dataMode = "database";
-    state.primaryItem = null;
-    clearComparisonViews();
-    plots.clear();
-    clearFocusedDetails();
-    showLoading("Opening database", "Reading the local SQLite catalog and preparing the first Unit.", 18);
+    clearOpenUnitViews({ render: false });
+    showLoading("Opening database", "Reading the local SQLite catalog and preparing the Unit list.", 18);
     const catalog = await databaseClient.loadCatalog();
     if (!catalog.recordings.length) throw new Error("The database does not contain a readable Recording");
     state.databaseCatalog = catalog;
@@ -921,12 +978,12 @@
     state.regionResult = catalog.regionResult;
     elements.datasetTitle.textContent = `${state.rootName} · DATABASE`;
     elements.loadingProgress.style.width = "82%";
-    elements.loadingMessage.textContent = `${state.recordings.length} recordings and ${number(state.recordings.reduce((sum, item) => sum + item.clusterLabels.length, 0))} Units indexed. Opening the first good Unit.`;
+    elements.loadingMessage.textContent = `${state.recordings.length} recordings and ${number(state.recordings.reduce((sum, item) => sum + item.clusterLabels.length, 0))} Units indexed. Select a Unit to begin.`;
     renderSummary();
     renderDialog();
     elements.dataDetails.disabled = false;
     showOnly("explorer");
-    await selectRecording(state.recordings[0]);
+    selectRecording(state.recordings[0]);
     showToast(`Database ready · ${catalog.serverTimingMs.toFixed(1)} ms catalog query`);
   }
 
@@ -984,17 +1041,17 @@
   });
 
   elements.unitList.addEventListener("click", (event) => {
-    const compareButton = event.target.closest("[data-compare-cluster-id]");
-    if (compareButton) {
-      const clusterId = Number(compareButton.dataset.compareClusterId);
-      if (clusterId === Number(state.activeClusterId)) closePrimaryView();
-      else addComparisonUnit(clusterId);
-      return;
-    }
     const button = event.target.closest("[data-cluster-id]");
     if (!button) return;
     const clusterId = Number(button.dataset.clusterId);
-    if (clusterId !== state.activeClusterId) inspectUnit(clusterId);
+    if (event.ctrlKey || event.metaKey) addUnitToView(state.activeRecording, clusterId);
+    else openUnitOnly(state.activeRecording, clusterId);
+  });
+  elements.unitList.addEventListener("contextmenu", (event) => {
+    const button = event.target.closest("[data-cluster-id]");
+    if (!button || !state.activeRecording) return;
+    event.preventDefault();
+    openUnitContextMenu(state.activeRecording, Number(button.dataset.clusterId), event.clientX, event.clientY);
   });
 
   elements.unitSearch.addEventListener("input", (event) => {
@@ -1013,41 +1070,69 @@
   elements.unitList.addEventListener("keydown", (event) => {
     if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
     const buttons = [...elements.unitList.querySelectorAll("[data-cluster-id]")];
-    const current = buttons.findIndex((button) => Number(button.dataset.clusterId) === state.activeClusterId);
+    const current = buttons.indexOf(document.activeElement);
     const next = clamp(current + (event.key === "ArrowDown" ? 1 : -1), 0, buttons.length - 1);
     if (buttons[next]) {
       event.preventDefault();
       buttons[next].focus();
-      inspectUnit(Number(buttons[next].dataset.clusterId));
     }
   });
 
-  elements.primaryTraceLane.addEventListener("pointerdown", () => setActivePlot("primary"), { capture: true });
-  elements.primaryTraceLane.querySelector(".trace-lane-header").addEventListener("click", () => setActivePlot("primary"));
-  elements.primaryTraceRemove.addEventListener("click", (event) => { event.stopPropagation(); closePrimaryView(); });
-  document.getElementById("spike-overview-canvas").addEventListener("pointerdown", () => setActivePlot("primary"), { capture: true });
+  elements.primaryTraceLane.addEventListener("pointerdown", () => {
+    const item = primaryOpenUnit();
+    if (item) setFocusedUnit(item.key);
+  }, { capture: true });
+  elements.primaryTraceLane.querySelector(".trace-lane-header").addEventListener("click", () => {
+    const item = primaryOpenUnit();
+    if (item) setFocusedUnit(item.key);
+  });
+  elements.primaryTraceRemove.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const item = primaryOpenUnit();
+    if (item) removeUnitFromView(item.key);
+  });
+  document.getElementById("spike-overview-canvas").addEventListener("pointerdown", () => {
+    const item = primaryOpenUnit();
+    if (item) setFocusedUnit(item.key);
+  }, { capture: true });
   elements.probeLegend.addEventListener("click", (event) => {
     const item = event.target.closest("[data-view-key]");
-    if (item) setActivePlot(item.dataset.viewKey);
+    if (item) setFocusedUnit(item.dataset.viewKey);
+  });
+  elements.probeLegend.addEventListener("contextmenu", (event) => {
+    const row = event.target.closest("[data-view-key]");
+    const item = row ? state.openUnits.get(row.dataset.viewKey) : null;
+    if (!item) return;
+    event.preventDefault();
+    openUnitContextMenu(item.recording, item.clusterId, event.clientX, event.clientY);
   });
   elements.probeLegend.addEventListener("keydown", (event) => {
     if (!["Enter", " "].includes(event.key)) return;
     const item = event.target.closest("[data-view-key]");
     if (item) {
       event.preventDefault();
-      setActivePlot(item.dataset.viewKey);
+      setFocusedUnit(item.dataset.viewKey);
     }
   });
   elements.timeLink.addEventListener("click", () => setTimeLinked(!state.timeLinked));
-  elements.inspectReviewMode.addEventListener("click", () => setReviewMode("inspect"));
-  elements.compareReviewMode.addEventListener("click", () => setReviewMode("compare"));
   elements.cursorMode.addEventListener("click", () => setInteractionMode("cursor"));
   elements.zoomMode.addEventListener("click", () => setInteractionMode("zoom"));
   elements.panMode.addEventListener("click", () => setInteractionMode("pan"));
-  elements.backTime.addEventListener("click", () => activePlotEntry()?.manager.back());
-  elements.zoomOut.addEventListener("click", () => activePlotEntry()?.manager.zoom(1.5));
-  elements.zoomIn.addEventListener("click", () => activePlotEntry()?.manager.zoom(.67));
-  elements.resetTime.addEventListener("click", () => activePlotEntry()?.manager.reset());
+  elements.backTime.addEventListener("click", () => focusedEntry()?.manager.back());
+  elements.zoomOut.addEventListener("click", () => focusedEntry()?.manager.zoom(1.5));
+  elements.zoomIn.addEventListener("click", () => focusedEntry()?.manager.zoom(.67));
+  elements.resetTime.addEventListener("click", () => focusedEntry()?.manager.reset());
+  elements.unitContextMenu.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-unit-action]")?.dataset.unitAction;
+    if (action) runUnitContextAction(action);
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!elements.unitContextMenu.hidden && !event.target.closest("#unit-context-menu")) hideUnitContextMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.unitContextMenu.hidden) hideUnitContextMenu();
+  });
+  document.addEventListener("scroll", hideUnitContextMenu, true);
   elements.dataDetails.addEventListener("click", () => { renderDialog(); elements.dataDialog.showModal(); });
   elements.closeDialog.addEventListener("click", () => elements.dataDialog.close());
   elements.dataDialog.addEventListener("click", (event) => {
@@ -1106,7 +1191,7 @@
     showOnly("empty");
   }
 
-  setReviewMode("inspect");
+  updateOpenUnitCount();
   setInteractionMode("cursor");
   initialize();
 })();

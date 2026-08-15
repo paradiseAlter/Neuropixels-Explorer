@@ -54,11 +54,18 @@
       this.resizeObserver = new ResizeObserver(() => this.draw());
       this.resizeObserver.observe(elements.canvas);
       elements.canvas.addEventListener("click", (event) => this.handleCanvasClick(event));
+      elements.canvas.addEventListener("contextmenu", (event) => this.handleCanvasContextMenu(event));
       elements.canvas.addEventListener("pointermove", (event) => this.handleCanvasMove(event));
       elements.canvas.addEventListener("pointerleave", () => this.clearHover());
       elements.nearbyList?.addEventListener("click", (event) => {
         const button = event.target.closest("[data-cluster-id]");
-        if (button) this.selectUnit(Number(button.dataset.clusterId), "nearby");
+        if (button) this.selectUnit(Number(button.dataset.clusterId), "nearby", event);
+      });
+      elements.nearbyList?.addEventListener("contextmenu", (event) => {
+        const button = event.target.closest("[data-cluster-id]");
+        if (!button) return;
+        event.preventDefault();
+        this.selectUnit(Number(button.dataset.clusterId), "nearby", event);
       });
       this.clear();
     }
@@ -210,9 +217,27 @@
       this.draw();
     }
 
-    selectUnit(clusterId, source) {
+    selectUnit(clusterId, source, event = null) {
       if (!this.recording || !Number.isFinite(Number(clusterId))) return;
-      this.onUnitSelect?.({ recording: this.recording, clusterId: Number(clusterId), source });
+      this.onUnitSelect?.({
+        recording: this.recording,
+        clusterId: Number(clusterId),
+        source,
+        additive: Boolean(event?.ctrlKey || event?.metaKey),
+        contextMenu: event?.type === "contextmenu",
+        clientX: Number(event?.clientX || 0),
+        clientY: Number(event?.clientY || 0)
+      });
+    }
+
+    focusUnit(key) {
+      const focused = this.items.find((item) => item.key === key);
+      if (!focused) return false;
+      this.focusedKey = key;
+      this.renderLegend();
+      this.renderReadout(focused);
+      this.draw();
+      return true;
     }
 
     regionAt(probeId, depth) {
@@ -280,7 +305,7 @@
         if (distance <= 7 && (!closest || distance < closest.distance)) closest = { ...target, distance };
       });
       if (closest) {
-        this.selectUnit(closest.clusterId, "marker");
+        this.selectUnit(closest.clusterId, "marker", event);
         return;
       }
       const panel = this.layout.panels.find((candidate) => x >= candidate.left && x <= candidate.right && y >= this.layout.top && y <= this.layout.bottom);
@@ -294,6 +319,19 @@
       this.renderNearby(nearby, depth, segment);
       this.onRegionSelect?.({ recording: this.recording, probeId: panel.probeId, depth, segment, source: "probe-position" });
       this.draw();
+    }
+
+    handleCanvasContextMenu(event) {
+      if (!this.layout || !this.probeIds.length) return;
+      const { x, y } = this.canvasPosition(event);
+      let closest = null;
+      this.hitTargets.forEach((target) => {
+        const distance = Math.hypot(target.x - x, target.y - y);
+        if (distance <= 7 && (!closest || distance < closest.distance)) closest = { ...target, distance };
+      });
+      if (!closest) return;
+      event.preventDefault();
+      this.selectUnit(closest.clusterId, "marker", event);
     }
 
     draw() {
