@@ -26,6 +26,8 @@
     openFolder: document.getElementById("open-folder-button"),
     emptyOpen: document.getElementById("empty-open-button"),
     folderInput: document.getElementById("folder-input"),
+    supplementFileInput: document.getElementById("supplement-file-input"),
+    supplementFolderInput: document.getElementById("supplement-folder-input"),
     emptyView: document.getElementById("empty-view"),
     dropZone: document.getElementById("drop-zone"),
     loadingView: document.getElementById("loading-view"),
@@ -134,7 +136,9 @@
     contextUnit: null,
     timeLinked: true,
     syncingTime: false,
-    interactionMode: "cursor"
+    interactionMode: "cursor",
+    pendingSupplement: null,
+    supplementBusy: false
   };
 
   let helpReturnFocus = null;
@@ -682,7 +686,7 @@
     if (state.dataMode === "database") return databaseClient.loadUnitReview(recording, clusterId);
     return requestWorker({
       type: "inspect-unit",
-      experimentKey: `${state.datasetToken}:${recording.key}`,
+      experimentKey: `${state.datasetToken}:${recording.key}:${Number(recording.dataVersion || 0)}`,
       files: workerFiles(recording),
       sampleRate: recording.sampleRate,
       clusterId: Number(clusterId)
@@ -749,7 +753,17 @@
     const rows = items.length
       ? items.map((item) => {
         const localized = localizeDataStatusItem(item);
-        return `<div class="data-status-item ${escapeHtml(item.state)}"><div><strong>${escapeHtml(localized.label)}</strong><span>${escapeHtml(localized.detail)}</span></div></div>`;
+        const supplementRows = item.state === "missing" && item.missingRecordings?.length
+          ? `<div class="missing-file-list">${item.missingRecordings.flatMap((recording) => recording.files.map((file) => `
+              <div class="missing-file-row">
+                <div><strong>${escapeHtml(recording.recordingName)}</strong><span>${escapeHtml(file.filename)}</span></div>
+                <div class="missing-file-actions">
+                  <button type="button" data-supplement-kind="files" data-recording-key="${escapeHtml(recording.recordingKey)}" data-ingest-roles="${escapeHtml(file.roles.join(","))}" ${state.supplementBusy ? "disabled" : ""}>${escapeHtml(t("status.addFiles"))}</button>
+                  <button type="button" data-supplement-kind="folder" data-recording-key="${escapeHtml(recording.recordingKey)}" data-ingest-roles="${escapeHtml(file.roles.join(","))}" ${state.supplementBusy ? "disabled" : ""}>${escapeHtml(t("status.addFolder"))}</button>
+                </div>
+              </div>`)).join("")}</div>`
+          : "";
+        return `<div class="data-status-item ${escapeHtml(item.state)}"><div><strong>${escapeHtml(localized.label)}</strong><span>${escapeHtml(localized.detail)}</span>${supplementRows}</div></div>`;
       }).join("")
       : `<p class="data-status-empty">${escapeHtml(emptyText)}</p>`;
     return `<section class="data-status-group"><header><span>${escapeHtml(title)}</span><b>${items.length}</b></header>${rows}</section>`;
@@ -1263,6 +1277,138 @@
     return [...(dataTransfer.files || [])];
   }
 
+  function recordingForSupplement(key) {
+    return state.recordings.find((recording) => String(recording.databaseId || recording.key) === String(key)) || null;
+  }
+
+  function openSupplementPicker(button) {
+    if (state.supplementBusy) return;
+    const recording = recordingForSupplement(button.dataset.recordingKey);
+    const roles = String(button.dataset.ingestRoles || "").split(",").filter(Boolean);
+    if (!recording || !roles.length) {
+      showToast(t("toast.supplementTargetMissing"));
+      return;
+    }
+    const kind = button.dataset.supplementKind === "folder" ? "folder" : "files";
+    state.pendingSupplement = { recordingKey: recording.databaseId || recording.key, roles, kind };
+    const input = kind === "folder" ? elements.supplementFolderInput : elements.supplementFileInput;
+    input.value = "";
+    input.click();
+  }
+
+  function captureOpenUnitViews() {
+    return new Map(plotEntries().map((entry) => [entry.key, {
+      start: entry.manager.start,
+      span: entry.manager.span,
+      history: entry.manager.history.map((view) => ({ ...view }))
+    }]));
+  }
+
+  async function refreshAffectedOpenUnits(affectedRecordingIds, viewSnapshots, focusedKey) {
+    const affected = new Set(affectedRecordingIds.map(String));
+    const entries = plotEntries().filter((entry) => affected.has(String(entry.recording.databaseId || entry.recording.key)));
+    for (const entry of entries) {
+      const result = await inspectRecordingUnit(entry.recording, entry.clusterId);
+      entry.result = result;
+      if (Array.isArray(result.unitSummaries) && result.unitSummaries.length) {
+        entry.recording.unitSummaryMap = new Map(result.unitSummaries.map((item) => [item.id, item]));
+      }
+      const view = viewSnapshots.get(entry.key);
+      state.syncingTime = true;
+      try {
+        entry.manager.setData({ ...result, sampleRate: entry.recording.sampleRate });
+        if (view) {
+          entry.manager.history = view.history;
+          entry.manager.setWindow(view.start, view.span);
+        }
+        entry.manager.setMode(state.interactionMode);
+      } finally {
+        state.syncingTime = false;
+      }
+    }
+    if (focusedKey && state.openUnits.has(focusedKey)) setFocusedUnit(focusedKey);
+    else if (focusedEntry()) setFocusedUnit(focusedEntry().key);
+    renderUnitList();
+    updateOpenUnitCount();
+  }
+
+  async function supplementFolderRecording(recording, files, roles) {
+    const expectedRoles = new Set(roles);
+    const supported = [...files].filter((file) => expectedRoles.has(core.roleForFile(file)));
+    if (!supported.length) throw new Error(t("toast.noMatchingSupplement"));
+    const wrong = supported.map((file) => ({ file, owner: core.detectRecordingFromPath(state.recordings, file) }))
+      .find(({ owner }) => owner && owner !== recording);
+    if (wrong) {
+      throw new Error(t("toast.wrongRecording", { file: wrong.file.name, recording: wrong.owner.name, expected: recording.name }));
+    }
+    const identities = new Set();
+    for (const file of supported) {
+      const identity = `${core.roleForFile(file)}::${core.fileNameOf(file)}`;
+      if (identities.has(identity)) throw new Error(t("toast.duplicateSelection", { file: file.name }));
+      identities.add(identity);
+    }
+    const merged = await core.mergeSupplementFiles(recording, supported);
+    Object.assign(recording, merged.recording, { dataVersion: Number(recording.dataVersion || 0) + 1 });
+    state.files.push(...merged.additions);
+    return {
+      affectedRecordings: [recording.databaseId || recording.key],
+      items: merged.additions.map((file) => ({ filename: file.name, action: "inserted" })),
+      duplicates: merged.duplicates
+    };
+  }
+
+  async function applySupplement(files, pending) {
+    const selected = [...files].filter((file) => file && !String(file.name || "").startsWith("."));
+    if (!selected.length) return;
+    const recording = recordingForSupplement(pending.recordingKey);
+    if (!recording) throw new Error(t("toast.supplementTargetMissing"));
+    const focusedKey = state.focusedUnit;
+    const viewSnapshots = captureOpenUnitViews();
+    let committed;
+    if (state.dataMode === "database") {
+      committed = await databaseClient.ingestFiles(selected, {
+        expectedRecordingId: recording.databaseId,
+        expectedRoles: pending.roles,
+        sourceKind: pending.kind,
+        onProgress: ({ phase, current, total, filename }) => {
+          showToast(phase === "commit"
+            ? t("toast.supplementCommit")
+            : t("toast.supplementUpload", { current, total, file: filename }));
+        }
+      });
+      for (const recordingId of committed.affectedRecordings || []) {
+        const target = recordingForSupplement(recordingId);
+        if (target) Object.assign(target, await databaseClient.loadRecording(recordingId));
+      }
+    } else {
+      committed = await supplementFolderRecording(recording, selected, pending.roles);
+    }
+    await refreshAffectedOpenUnits(committed.affectedRecordings || [], viewSnapshots, focusedKey);
+    renderSummary();
+    renderRecordings();
+    renderDialog();
+    const added = (committed.items || []).filter((item) => item.action !== "duplicate").length;
+    const duplicates = (committed.items || []).filter((item) => item.action === "duplicate").length + Number(committed.duplicates?.length || 0);
+    showToast(t("toast.supplementReady", { added, duplicates }));
+  }
+
+  async function handleSupplementSelection(input) {
+    const pending = state.pendingSupplement;
+    if (!pending || state.supplementBusy || !input.files?.length) return;
+    state.supplementBusy = true;
+    renderDataStatus();
+    try {
+      await applySupplement(input.files, pending);
+    } catch (error) {
+      showToast(t("toast.supplementFailed", { error: error.message }));
+    } finally {
+      state.supplementBusy = false;
+      state.pendingSupplement = null;
+      input.value = "";
+      renderDataStatus();
+    }
+  }
+
   function openPicker() {
     elements.folderInput.value = "";
     elements.folderInput.click();
@@ -1288,6 +1434,12 @@
   elements.dropZone.addEventListener("click", (event) => { if (event.target === elements.dropZone || event.target.closest(".folder-mark")) openPicker(); });
   elements.dropZone.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); openPicker(); } });
   elements.folderInput.addEventListener("change", () => openFiles(elements.folderInput.files));
+  elements.supplementFileInput.addEventListener("change", () => handleSupplementSelection(elements.supplementFileInput));
+  elements.supplementFolderInput.addEventListener("change", () => handleSupplementSelection(elements.supplementFolderInput));
+  elements.dataStatusGroups.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-supplement-kind]");
+    if (button) openSupplementPicker(button);
+  });
 
   elements.recordingStrip.addEventListener("click", (event) => {
     const button = event.target.closest("[data-recording-key]");

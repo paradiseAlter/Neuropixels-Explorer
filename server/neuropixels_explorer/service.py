@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import json
 import mimetypes
+import re
 import sqlite3
 import statistics
 import threading
@@ -17,6 +18,7 @@ from urllib.parse import unquote, urlparse
 import numpy as np
 
 from . import __version__
+from .ingest import IncrementalIngestManager, IngestError
 from .migrations import SCHEMA_VERSION, validate_schema
 from .paths import RuntimePaths
 
@@ -137,6 +139,10 @@ class CatalogService:
                 raise RuntimeError(
                     f"Catalog dataset schema versions {sorted(dataset_versions)} do not match {SCHEMA_VERSION}"
                 )
+        self.incremental_ingest = IncrementalIngestManager(
+            paths,
+            on_commit=self.invalidate_recordings,
+        )
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
@@ -216,6 +222,16 @@ class CatalogService:
                 GROUP BY recording_id, asset_role
                 """
             ).fetchall()
+            asset_rows = connection.execute(
+                """
+                SELECT asset_id, recording_id, asset_role, filename, byte_size,
+                       checksum_status, availability_status, source_data_origin,
+                       processing_stage
+                FROM data_assets
+                WHERE recording_id IS NOT NULL
+                ORDER BY recording_id, asset_role, filename
+                """
+            ).fetchall()
             summary = _row_dict(
                 connection.execute(
                     """
@@ -251,11 +267,16 @@ class CatalogService:
         roles_by_recording: dict[str, set[str]] = {}
         for row in roles:
             roles_by_recording.setdefault(row["recording_id"], set()).add(row["asset_role"])
+        assets_by_recording: dict[str, list[dict[str, Any]]] = {}
+        for row in asset_rows:
+            asset = dict(row)
+            assets_by_recording.setdefault(asset["recording_id"], []).append(asset)
         recordings = []
         for row in recording_rows:
             recording = dict(row)
             recording["units"] = units_by_recording.get(recording["recording_id"], [])
             recording["assetRoles"] = sorted(roles_by_recording.get(recording["recording_id"], set()))
+            recording["assets"] = assets_by_recording.get(recording["recording_id"], [])
             recordings.append(recording)
         return {
             "dataset": dataset,
@@ -279,6 +300,61 @@ class CatalogService:
                 """
             ).fetchall()
         return {"videos": [dict(row) for row in rows]}
+
+    def recording_snapshot(self, recording_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT rc.*, r.sample_rate_hz, r.source_processing_stage,
+                       r.event_data_status, r.independence_status,
+                       EXISTS(
+                           SELECT 1 FROM signal_streams ss
+                           WHERE ss.recording_id = r.recording_id
+                             AND ss.availability_status = 'available'
+                       ) AS has_raw_signal
+                FROM recording_catalog rc
+                JOIN recordings r USING (recording_id)
+                WHERE r.recording_id = ?
+                """,
+                (recording_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown Recording: {recording_id}")
+            units = connection.execute(
+                """
+                SELECT uc.*, u.contamination_pct, u.amplitude_arbitrary_unit,
+                       br.annotation_status AS region_annotation_status
+                FROM unit_catalog uc
+                JOIN units u USING (unit_id)
+                LEFT JOIN unit_locations ul USING (unit_id)
+                LEFT JOIN brain_regions br USING (brain_region_id)
+                WHERE u.recording_id = ?
+                ORDER BY u.cluster_id
+                """,
+                (recording_id,),
+            ).fetchall()
+            assets = connection.execute(
+                """
+                SELECT asset_id, recording_id, asset_role, filename, byte_size,
+                       checksum_status, availability_status, source_data_origin,
+                       processing_stage
+                FROM data_assets
+                WHERE recording_id = ?
+                ORDER BY asset_role, filename
+                """,
+                (recording_id,),
+            ).fetchall()
+        recording = dict(row)
+        recording["units"] = [dict(unit) for unit in units]
+        recording["assets"] = [dict(asset) for asset in assets]
+        recording["assetRoles"] = sorted(
+            {
+                asset["asset_role"]
+                for asset in recording["assets"]
+                if asset["availability_status"] == "available"
+            }
+        )
+        return {"recording": recording}
 
     def _asset_paths(self, recording_id: str) -> dict[str, Path]:
         with self.connect() as connection:
@@ -563,8 +639,23 @@ class CatalogService:
             },
         }
 
+    def invalidate_recordings(self, recording_ids: set[str]) -> None:
+        affected = {str(recording_id) for recording_id in recording_ids}
+        with self._cache_lock:
+            for recording_id in affected:
+                arrays = self._recording_cache.pop(recording_id, None)
+                if arrays:
+                    for array in arrays.values():
+                        memory_map = getattr(array, "_mmap", None)
+                        if memory_map is not None:
+                            memory_map.close()
+            for unit_id, result in list(self._unit_cache.items()):
+                if str(result.get("recordingId")) in affected:
+                    self._unit_cache.pop(unit_id, None)
+
     def close(self) -> None:
         """Release memory-mapped arrays so runtime roots can be moved or removed on Windows."""
+        self.incremental_ingest.close()
         with self._cache_lock:
             for arrays in self._recording_cache.values():
                 for array in arrays.values():
@@ -612,6 +703,33 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_json(self, maximum_bytes: int = 2 * 1024 * 1024) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as error:
+            raise IngestError("content_length_invalid", "Invalid Content-Length", status=400) from error
+        if length <= 0:
+            raise IngestError("json_body_required", "A JSON request body is required", status=400)
+        if length > maximum_bytes:
+            raise IngestError("json_body_too_large", "The request metadata is too large", status=413)
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise IngestError("json_invalid", "The request body is not valid JSON", status=400) from error
+        if not isinstance(payload, dict):
+            raise IngestError("json_object_required", "The request body must be a JSON object", status=400)
+        return payload
+
+    def _ingest_error(self, error: Exception) -> None:
+        if isinstance(error, IngestError):
+            self._json(error.payload(), error.status)
+        elif isinstance(error, KeyError):
+            self._json({"error": "not_found", "message": str(error)}, HTTPStatus.NOT_FOUND)
+        elif isinstance(error, (FileNotFoundError, ValueError)):
+            self._json({"error": "invalid_data", "message": str(error)}, HTTPStatus.UNPROCESSABLE_ENTITY)
+        else:
+            self._json({"error": "internal_error", "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
     def _static(self, requested_path: str) -> None:
         relative = "index.html" if requested_path in {"", "/"} else unquote(requested_path.lstrip("/"))
         candidate = (self.server.static_root / relative).resolve()
@@ -644,6 +762,9 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
                 self._json(self.server.service.cache_status())
             elif parsed.path == "/api/videos":
                 self._json(self.server.service.videos())
+            elif parsed.path.startswith("/api/recordings/"):
+                recording_id = unquote(parsed.path[len("/api/recordings/"):]).strip("/")
+                self._json(self.server.service.recording_snapshot(recording_id))
             elif parsed.path.startswith("/api/units/") and parsed.path.endswith("/review"):
                 unit_id = unquote(parsed.path[len("/api/units/"):-len("/review")]).strip("/")
                 self._json(self.server.service.unit_review(unit_id))
@@ -651,12 +772,57 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
                 self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
             else:
                 self._static(parsed.path)
-        except KeyError as error:
-            self._json({"error": "not_found", "message": str(error)}, HTTPStatus.NOT_FOUND)
-        except (FileNotFoundError, ValueError) as error:
-            self._json({"error": "invalid_data", "message": str(error)}, HTTPStatus.UNPROCESSABLE_ENTITY)
         except Exception as error:
-            self._json({"error": "internal_error", "message": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._ingest_error(error)
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        try:
+            if parsed.path == "/api/ingest/sessions":
+                self._json(
+                    self.server.service.incremental_ingest.create_session(self._read_json()),
+                    HTTPStatus.CREATED,
+                )
+                return
+            match = re.fullmatch(r"/api/ingest/sessions/([0-9a-f]+)/commit", parsed.path)
+            if match:
+                self._json(self.server.service.incremental_ingest.commit(match.group(1)))
+                return
+            self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+        except Exception as error:
+            self._ingest_error(error)
+
+    def do_PUT(self) -> None:
+        parsed = urlparse(self.path)
+        try:
+            match = re.fullmatch(r"/api/ingest/sessions/([0-9a-f]+)/files/(\d+)", parsed.path)
+            if not match:
+                self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+                return
+            try:
+                content_length = int(self.headers["Content-Length"]) if self.headers.get("Content-Length") else None
+            except ValueError as error:
+                raise IngestError("content_length_invalid", "Invalid Content-Length", status=400) from error
+            result = self.server.service.incremental_ingest.upload_file(
+                match.group(1),
+                int(match.group(2)),
+                self.rfile,
+                content_length,
+            )
+            self._json(result)
+        except Exception as error:
+            self._ingest_error(error)
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        try:
+            match = re.fullmatch(r"/api/ingest/sessions/([0-9a-f]+)", parsed.path)
+            if not match:
+                self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+                return
+            self._json(self.server.service.incremental_ingest.abort(match.group(1)))
+        except Exception as error:
+            self._ingest_error(error)
 
 
 def create_server(

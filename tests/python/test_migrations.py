@@ -43,14 +43,14 @@ class MigrationTests(unittest.TestCase):
     def test_fresh_database_reaches_the_release_schema(self) -> None:
         with _temporary_directory() as temporary_directory:
             database = Path(temporary_directory) / "catalog.sqlite"
-            self.assertEqual(initialize_database(database), [1, 2])
+            self.assertEqual(initialize_database(database), [1, 2, 3])
             connection = sqlite3.connect(database)
             try:
                 validate_schema(connection)
                 rows = connection.execute(
                     "SELECT version, name FROM schema_migrations ORDER BY version"
                 ).fetchall()
-                self.assertEqual([row[0] for row in rows], [1, 2])
+                self.assertEqual([row[0] for row in rows], [1, 2, 3])
                 self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
             finally:
                 connection.close()
@@ -77,11 +77,18 @@ class MigrationTests(unittest.TestCase):
                 """,
                 encoding="utf-8",
             )
-            (migrations / "002_failure.sql").write_text(
+            (migrations / "002_valid.sql").write_text(
+                """
+                CREATE TABLE remains_after_failure(value INTEGER);
+                PRAGMA user_version = 2;
+                """,
+                encoding="utf-8",
+            )
+            (migrations / "003_failure.sql").write_text(
                 """
                 CREATE TABLE must_roll_back(value INTEGER);
                 CREATE TABLE must_roll_back(value INTEGER);
-                PRAGMA user_version = 2;
+                PRAGMA user_version = 3;
                 """,
                 encoding="utf-8",
             )
@@ -97,14 +104,19 @@ class MigrationTests(unittest.TestCase):
             try:
                 self.assertEqual(
                     connection.execute("SELECT version FROM schema_migrations").fetchall(),
-                    [(1,)],
+                    [(1,), (2,)],
                 )
                 self.assertIsNone(
                     connection.execute(
                         "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='must_roll_back'"
                     ).fetchone()
                 )
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+                self.assertIsNotNone(
+                    connection.execute(
+                        "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='remains_after_failure'"
+                    ).fetchone()
+                )
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
             finally:
                 connection.close()
 

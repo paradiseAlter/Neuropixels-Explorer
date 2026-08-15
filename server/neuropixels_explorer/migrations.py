@@ -7,7 +7,7 @@ from pathlib import Path
 from .paths import product_root
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def _utc_now() -> str:

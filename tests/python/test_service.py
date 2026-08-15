@@ -27,7 +27,8 @@ def _temporary_directory() -> tempfile.TemporaryDirectory[str]:
     return tempfile.TemporaryDirectory(dir=TEST_RUNTIME)
 
 
-def _write_fixture(root: Path) -> tuple[Path, Path]:
+def _write_fixture(root: Path, *, missing_roles: set[str] | None = None) -> tuple[Path, Path]:
+    missing_roles = missing_roles or set()
     data_root = root / "runtime-data"
     recording_root = data_root / "recordings" / "rec_01"
     recording_root.mkdir(parents=True)
@@ -49,8 +50,18 @@ def _write_fixture(root: Path) -> tuple[Path, Path]:
         ),
         "channel_positions.npy": np.array([[0, 100], [20, 200]], dtype=np.float32),
     }
+    roles = {
+        "spike_times.npy": "spike_times",
+        "spike_clusters.npy": "spike_clusters",
+        "amplitudes.npy": "spike_amplitudes",
+        "spike_positions.npy": "spike_positions",
+        "spike_templates.npy": "spike_templates",
+        "templates.npy": "templates",
+        "channel_positions.npy": "channel_positions",
+    }
     for filename, array in arrays.items():
-        np.save(recording_root / filename, array)
+        if roles[filename] not in missing_roles:
+            np.save(recording_root / filename, array)
 
     database = root / "runtime" / "catalog.sqlite"
     initialize_database(database)
@@ -62,7 +73,7 @@ def _write_fixture(root: Path) -> tuple[Path, Path]:
                 dataset_id, dataset_name, source_data_origin, import_status,
                 storage_policy, schema_version, created_at_utc, updated_at_utc
             ) VALUES ('fixture', 'Portable fixture', 'synthetic_test', 'ready',
-                      'register_in_place', 2, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+                      'register_in_place', 3, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
             """
         )
         connection.execute(
@@ -147,17 +158,9 @@ def _write_fixture(root: Path) -> tuple[Path, Path]:
                       'kilosort_probe_um', 'project://region-map.csv')
             """
         )
-        roles = {
-            "spike_times.npy": "spike_times",
-            "spike_clusters.npy": "spike_clusters",
-            "amplitudes.npy": "spike_amplitudes",
-            "spike_positions.npy": "spike_positions",
-            "spike_templates.npy": "spike_templates",
-            "templates.npy": "templates",
-            "channel_positions.npy": "channel_positions",
-        }
         for filename, role in roles.items():
             path = recording_root / filename
+            is_missing = role in missing_roles
             relative = path.relative_to(data_root).as_posix()
             connection.execute(
                 """
@@ -167,10 +170,17 @@ def _write_fixture(root: Path) -> tuple[Path, Path]:
                     checksum_status, availability_status, source_data_origin,
                     processing_stage, is_original
                 ) VALUES ('fixture', 'rec_01', ?, 'application/x-npy', 'project_file',
-                          ?, ?, ?, '.npy', ?, 'not_computed', 'available',
+                          ?, ?, ?, '.npy', ?, 'not_computed', ?,
                           'synthetic_test', 'test_fixture', 1)
                 """,
-                (role, f"project://{relative}", relative, filename, path.stat().st_size),
+                (
+                    role,
+                    f"declared://rec_01/{filename}" if is_missing else f"project://{relative}",
+                    None if is_missing else relative,
+                    filename,
+                    None if is_missing else path.stat().st_size,
+                    "missing" if is_missing else "available",
+                ),
             )
         connection.commit()
     return data_root, database
@@ -216,7 +226,7 @@ class ServiceTests(unittest.TestCase):
             with urllib.request.urlopen(f"{base}/api/health", timeout=10) as response:
                 health = json.load(response)
             self.assertEqual(health["status"], "ok")
-            self.assertEqual(health["dataset"]["schema_version"], 2)
+            self.assertEqual(health["dataset"]["schema_version"], 3)
             with urllib.request.urlopen(f"{base}/api/catalog", timeout=10) as response:
                 self.assertEqual(json.load(response)["dataset"]["dataset_id"], "fixture")
             with urllib.request.urlopen(f"{base}/", timeout=10) as response:

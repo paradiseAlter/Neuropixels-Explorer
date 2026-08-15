@@ -23,6 +23,17 @@
     "channel_map.npy",
     "channel_shanks.npy"
   ]);
+  const ROLE_BY_NAME = Object.freeze({
+    "spike_times.npy": "spike_times",
+    "spike_clusters.npy": "spike_clusters",
+    "amplitudes.npy": "spike_amplitudes",
+    "spike_positions.npy": "spike_positions",
+    "spike_templates.npy": "spike_templates",
+    "templates.npy": "templates",
+    "channel_positions.npy": "channel_positions",
+    "channel_shanks.npy": "channel_probe_groups",
+    "channel_geometry.csv": "channel_geometry"
+  });
 
   function pathOf(file) {
     return String(file?.webkitRelativePath || file?.relativePath || file?.name || "").replaceAll("\\", "/");
@@ -31,6 +42,22 @@
   function fileNameOf(file) {
     const parts = pathOf(file).split("/").filter(Boolean);
     return (parts.at(-1) || String(file?.name || "")).toLowerCase();
+  }
+
+  function roleForFile(file) {
+    const filename = fileNameOf(file);
+    if (ROLE_BY_NAME[filename]) return ROLE_BY_NAME[filename];
+    if (LABEL_FILES.includes(filename) || (filename.startsWith("cluster_") && filename.endsWith(".tsv"))) return "unit_metadata";
+    return null;
+  }
+
+  function detectRecordingFromPath(recordings, file) {
+    const parts = pathOf(file).split("/").filter(Boolean).slice(0, -1).map((part) => part.toLowerCase());
+    const exact = recordings.filter((recording) => parts.includes(String(recording.name).toLowerCase()) || parts.includes(String(recording.key).toLowerCase()));
+    if (exact.length === 1) return exact[0];
+    const numbers = new Set(parts.map((part) => Number(part.match(/(?:ks\d*[_-]?)?exp(?:eriment)?[_-]?(\d+)/i)?.[1])).filter(Number.isFinite));
+    const numbered = recordings.filter((recording) => numbers.has(Number(recording.recordingIndex || String(recording.name).match(/(\d+)/)?.[1])));
+    return numbered.length === 1 ? numbered[0] : null;
   }
 
   function rootName(files) {
@@ -222,7 +249,7 @@
       quality: Boolean(labelFile(group)),
       amplitude: names.has("amplitudes.npy"),
       position: names.has("spike_positions.npy"),
-      template: names.has("templates.npy"),
+      template: names.has("templates.npy") && names.has("spike_templates.npy"),
       geometry: names.has("channel_positions.npy") || names.has("channel_geometry.csv"),
       probeGrouping: names.has("channel_shanks.npy") || names.has("channel_geometry.csv"),
       video: group.files.some((file) => /\.(mp4|webm|mov|avi|mkv)$/i.test(fileNameOf(file))),
@@ -273,6 +300,70 @@
       capabilities: capabilitiesFor(group),
       headers: { spikeTimes: timesHeader, spikeClusters: clustersHeader }
     };
+  }
+
+  async function validateSupplementFile(recording, file) {
+    const role = roleForFile(file);
+    if (!role) throw new Error(`${file.name}: unsupported supplement file`);
+    if (!fileNameOf(file).endsWith(".npy")) return { role, shape: null, dtype: null };
+    const header = await readNpyHeader(file);
+    const shape = header.shape;
+    const spikeCount = Number(recording.spikeCount);
+    if (["spike_times", "spike_clusters"].includes(role) && shape.length !== 1) {
+      throw new Error(`${file.name}: expected a one-dimensional spike array, found (${shape.join(", ")})`);
+    }
+    if (["spike_times", "spike_clusters", "spike_amplitudes", "spike_positions", "spike_templates"].includes(role) && shape[0] !== spikeCount) {
+      throw new Error(`${file.name}: ${shape[0]} spike rows do not match ${recording.name} (${spikeCount})`);
+    }
+    if (role === "spike_positions" && (shape.length !== 2 || shape[1] < 2)) {
+      throw new Error(`${file.name}: expected shape (spikes, >=2), found (${shape.join(", ")})`);
+    }
+    if (role === "templates" && (shape.length !== 3 || shape.some((value) => value <= 0))) {
+      throw new Error(`${file.name}: expected shape (templates, samples, channels), found (${shape.join(", ")})`);
+    }
+    if (role === "channel_positions" && (shape.length !== 2 || shape[1] < 2)) {
+      throw new Error(`${file.name}: expected shape (channels, >=2), found (${shape.join(", ")})`);
+    }
+    if (role === "channel_probe_groups" && shape.length !== 1) {
+      throw new Error(`${file.name}: expected one Probe-group value per channel`);
+    }
+    let channelCount = null;
+    const existingPositions = recording.byName.get("channel_positions.npy");
+    if (existingPositions && existingPositions !== file) channelCount = (await readNpyHeader(existingPositions)).shape[0];
+    if (role === "templates" && channelCount && shape[2] !== channelCount) {
+      throw new Error(`${file.name}: ${shape[2]} channels do not match ${recording.name} (${channelCount})`);
+    }
+    if (["channel_positions", "channel_probe_groups"].includes(role) && channelCount && shape[0] !== channelCount) {
+      throw new Error(`${file.name}: ${shape[0]} channels do not match ${recording.name} (${channelCount})`);
+    }
+    return { role, shape, dtype: header.descr };
+  }
+
+  async function mergeSupplementFiles(recording, files) {
+    const additions = [];
+    const duplicates = [];
+    for (const file of files) {
+      const filename = fileNameOf(file);
+      const existing = recording.byName.get(filename);
+      if (existing) {
+        if (Number(existing.size) === Number(file.size) && Number(existing.lastModified || 0) === Number(file.lastModified || 0)) {
+          duplicates.push(filename);
+          continue;
+        }
+        throw new Error(`${recording.name} already has ${filename}; the different file was not overwritten`);
+      }
+      await validateSupplementFile(recording, file);
+      additions.push(file);
+    }
+    if (!additions.length) return { recording, additions, duplicates };
+    const group = {
+      key: recording.key,
+      name: recording.name,
+      files: [...recording.files, ...additions],
+      byName: new Map(recording.byName)
+    };
+    additions.forEach((file) => group.byName.set(fileNameOf(file), file));
+    return { recording: await indexExperiment(group), additions, duplicates };
   }
 
   function mean(values) {
@@ -549,6 +640,8 @@
     USEFUL_NAMES,
     pathOf,
     fileNameOf,
+    roleForFile,
+    detectRecordingFromPath,
     rootName,
     formatBytes,
     groupExperimentFiles,
@@ -560,6 +653,8 @@
     parseClusterMetric,
     capabilitiesFor,
     indexExperiment,
+    validateSupplementFile,
+    mergeSupplementFiles,
     analyzeUnitBuffers,
     createWorkerSource
   };

@@ -407,6 +407,15 @@ input:focus-visible,
 .data-status-item > div { display: grid; min-width: 0; gap: 3px; }
 .data-status-item strong { color: var(--text-soft); font-size: 10px; font-weight: 630; }
 .data-status-item span { overflow-wrap: anywhere; color: var(--muted); font-size: 8px; line-height: 1.4; }
+.missing-file-list { display: grid; gap: 5px; margin-top: 5px; }
+.missing-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 7px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--surface-control); }
+.missing-file-row > div:first-child { display: grid; min-width: 0; gap: 2px; }
+.missing-file-row > div:first-child strong { overflow: hidden; color: var(--text-soft); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.missing-file-row > div:first-child span { color: var(--warn); font: 600 8px/1.3 "Cascadia Mono", Consolas, monospace; }
+.missing-file-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.missing-file-actions button { min-height: 23px; padding: 0 7px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-raised); color: var(--text-soft); cursor: pointer; font: 600 8px/1 "Cascadia Mono", Consolas, monospace; }
+.missing-file-actions button:hover:not(:disabled) { border-color: var(--active-border); background: var(--surface-hover); color: var(--text); }
+.missing-file-actions button:disabled { cursor: wait; opacity: .45; }
 .data-status-empty { margin: 0; padding: 8px 12px 10px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 9px; }
 
 .recording-strip {

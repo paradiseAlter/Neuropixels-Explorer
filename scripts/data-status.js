@@ -16,6 +16,45 @@
     { key: "probeGrouping", label: "Physical Probe grouping", detail: "channel_shanks.npy or geometry CSV" }
   ]);
 
+  const LABEL_FILES = ["cluster_info.tsv", "cluster_group.tsv", "cluster_kslabel.tsv"];
+
+  function nameAvailable(recording, filename) {
+    return Boolean(recording?.byName?.has?.(filename.toLowerCase()));
+  }
+
+  function roleAvailable(recording, role) {
+    return Boolean(recording?.assets?.some?.((asset) => asset.role === role && asset.status === "available"));
+  }
+
+  function fileAvailable(recording, filename, role) {
+    return nameAvailable(recording, filename) || roleAvailable(recording, role);
+  }
+
+  function missingFilesFor(recording, key) {
+    const missing = [];
+    const exact = (filename, role) => {
+      if (!fileAvailable(recording, filename, role)) missing.push({ filename, roles: [role] });
+    };
+    if (key === "spikes") {
+      exact("spike_times.npy", "spike_times");
+      exact("spike_clusters.npy", "spike_clusters");
+    } else if (key === "quality" && !recording?.capabilities?.quality) {
+      missing.push({ filename: LABEL_FILES.join(" / "), roles: ["unit_metadata"] });
+    } else if (key === "amplitude") {
+      exact("amplitudes.npy", "spike_amplitudes");
+    } else if (key === "position") {
+      exact("spike_positions.npy", "spike_positions");
+    } else if (key === "template") {
+      exact("templates.npy", "templates");
+      exact("spike_templates.npy", "spike_templates");
+    } else if (key === "geometry" && !recording?.capabilities?.geometry) {
+      missing.push({ filename: "channel_positions.npy / channel_geometry.csv", roles: ["channel_positions", "channel_geometry"] });
+    } else if (key === "probeGrouping" && !recording?.capabilities?.probeGrouping) {
+      missing.push({ filename: "channel_shanks.npy / channel_geometry.csv", roles: ["channel_probe_groups", "channel_geometry"] });
+    }
+    return missing;
+  }
+
   function capabilityCoverage(recordings, key) {
     const total = recordings.length;
     const available = recordings.filter((recording) => Boolean(recording?.capabilities?.[key])).length;
@@ -32,10 +71,16 @@
         state: coverage.complete ? "available" : "missing",
         coverage,
         sourceDetail: definition.detail,
+        missingRecordings: recordings.map((recording) => ({
+          recordingKey: recording.databaseId || recording.key,
+          recordingName: recording.name,
+          files: missingFilesFor(recording, definition.key)
+        })).filter((recording) => recording.files.length),
         detail: coverage.complete
           ? `${definition.detail} · ${coverage.available}/${coverage.total} recordings`
           : `${definition.detail} · ${coverage.total - coverage.available}/${coverage.total} recordings missing`
       };
+      item.missingFileCount = item.missingRecordings.reduce((total, recording) => total + recording.files.length, 0);
       (coverage.complete ? available : missing).push(item);
     });
 
@@ -96,5 +141,5 @@
     return `Data status · ${counts.available} available · ${counts.missing} missing${counts.invalid ? ` · ${counts.invalid} invalid` : ""}`;
   }
 
-  return { CORE_INPUTS, capabilityCoverage, buildDataStatus, summaryText };
+  return { CORE_INPUTS, capabilityCoverage, missingFilesFor, buildDataStatus, summaryText };
 });
