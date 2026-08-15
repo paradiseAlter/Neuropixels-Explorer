@@ -29,6 +29,12 @@ keyboard steps. Double-click a divider (or press Home) to restore the default
 layout. The small chevron collapses or expands its side panel. Layout choices
 are saved on the current device and restored on the next visit.
 
+The compact Data status control summarizes complete and missing core inputs.
+Open it to inspect available, missing, invalid, optional, and future/video
+interfaces. Dark, Light, High Contrast, and System themes share one palette
+across the interface, signal canvases, Probe display, selections, and Unit
+colors. The theme preference is saved on the current device.
+
 The current release is **v3.1.0**. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.
@@ -36,8 +42,9 @@ tags instead of duplicated version directories.
 ## Repository layout
 
 - `index.html` - current Explorer entry point.
-- `scripts/` - KiloSort parsing, application state, plots, Probe rendering,
-  region metadata, and the optional database client.
+- `scripts/` - KiloSort parsing, application state, data-status classification,
+  shared themes, plots, Probe rendering, region metadata, and the optional
+  database client.
 - `styles/` - current application styling.
 - `tests/` - portable code checks and the local real-data integration test.
 - `docs/` - input contracts and interpretation boundaries.

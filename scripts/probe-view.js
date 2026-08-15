@@ -6,12 +6,49 @@
 })(typeof globalThis !== "undefined" ? globalThis : window, () => {
   "use strict";
 
-  const PROBE_COLORS = ["#66A6D9", "#E5A14F", "#60B98C", "#B98BD4", "#D46F7E", "#85A869"];
+  const DEFAULT_PROBE_THEME = {
+    background: "#0d0f11",
+    emptyText: "#68727d",
+    headerText: "#b7c0ca",
+    mutedText: "#63707c",
+    panel: "#11161a",
+    bandText: "rgba(233,238,243,.78)",
+    bandBoundary: "rgba(255,255,255,.07)",
+    channel: "#d5dde5",
+    unopened: "#7e8790",
+    focus: "#ffffff",
+    focusLine: "rgba(255,255,255,.72)",
+    lockedLine: "rgba(255,255,255,.38)",
+    hoverRing: "#bdc7d0",
+    lockedRing: "#e9eef3",
+    badgeBackground: "rgba(8,10,12,.94)",
+    badgeBorder: "#78838d",
+    badgeText: "#e0e5ea",
+    labelBackground: "rgba(9,11,13,.94)",
+    labelBorder: "rgba(255,255,255,.72)",
+    labelText: "#f1f4f7",
+    depthText: "#64717e",
+    bandAlpha: .28,
+    bandActiveAlpha: .42,
+    nonNeuralAlpha: .12,
+    probes: ["#66A6D9", "#E5A14F", "#60B98C", "#B98BD4", "#D46F7E", "#85A869"]
+  };
+  const PROBE_COLORS = [...DEFAULT_PROBE_THEME.probes];
+  let PROBE_THEME = { ...DEFAULT_PROBE_THEME, probes: PROBE_COLORS };
+  const ACTIVE_VIEWERS = new Set();
   const NON_NEURAL = new Set(["out", "void"]);
   const UNIT_HIT_RADIUS = 10;
   const UNIT_GROUP_DISTANCE = 9;
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
   const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+
+  function setProbeTheme(theme = {}) {
+    const probes = Array.isArray(theme?.probes) && theme.probes.length ? [...theme.probes] : [...DEFAULT_PROBE_THEME.probes];
+    PROBE_COLORS.splice(0, PROBE_COLORS.length, ...probes);
+    PROBE_THEME = { ...DEFAULT_PROBE_THEME, ...(theme || {}), probes: PROBE_COLORS };
+    ACTIVE_VIEWERS.forEach((viewer) => viewer.draw());
+    return { ...PROBE_THEME, probes: [...PROBE_COLORS] };
+  }
 
   function regionColor(value, fallback = "#9fc6f1") {
     const text = String(value || "").trim();
@@ -98,6 +135,7 @@
       this.layout = null;
       this.resizeObserver = new ResizeObserver(() => this.draw());
       this.resizeObserver.observe(elements.canvas);
+      ACTIVE_VIEWERS.add(this);
       elements.canvas.addEventListener("click", (event) => this.handleCanvasClick(event));
       elements.canvas.addEventListener("contextmenu", (event) => this.handleCanvasContextMenu(event));
       elements.canvas.addEventListener("pointermove", (event) => this.handleCanvasMove(event));
@@ -132,6 +170,11 @@
         if (event.key === "Escape" && (this.lockedUnitId != null || !this.elements.stackMenu?.hidden)) this.clearLockedSelection();
       });
       this.clear();
+    }
+
+    destroy() {
+      this.resizeObserver.disconnect();
+      ACTIVE_VIEWERS.delete(this);
     }
 
     setUnits(items, focusedKey, probeTrack = null) {
@@ -454,7 +497,7 @@
         button.role = "menuitem";
         button.dataset.clusterId = String(marker.location.id);
         button.classList.toggle("focused", marker.isFocused);
-        button.style.setProperty("--unit-color", marker.open ? marker.color : "#7e8790");
+        button.style.setProperty("--unit-color", marker.open ? marker.color : PROBE_THEME.unopened);
         const body = document.createElement("span");
         const title = document.createElement("strong");
         const meta = document.createElement("em");
@@ -552,12 +595,12 @@
       }
       const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.fillStyle = "#0d0f11";
+      context.fillStyle = PROBE_THEME.background;
       context.fillRect(0, 0, width, height);
       this.hitTargets = [];
       this.segmentHitTargets = [];
       if (!this.geometry.length || !this.probeIds.length) {
-        context.fillStyle = "#68727d";
+        context.fillStyle = PROBE_THEME.emptyText;
         context.font = '10px "Cascadia Mono", Consolas, monospace';
         context.textAlign = "center";
         context.fillText(this.items.length ? "Physical Probe grouping unavailable" : "Select a Unit", width / 2, height / 2);
@@ -596,13 +639,13 @@
         const locationCount = this.locations.filter((location) => Number(location.physicalProbeId) === Number(panel.probeId)).length;
         context.fillStyle = panel.accent;
         context.fillRect(panel.left, 2, panel.right - panel.left, 2);
-        context.fillStyle = "#b7c0ca";
+        context.fillStyle = PROBE_THEME.headerText;
         context.textAlign = "center";
         context.fillText(`PROBE ${Number(panel.probeId) + 1}`, (panel.left + panel.right) / 2, 16);
-        context.fillStyle = "#63707c";
+        context.fillStyle = PROBE_THEME.mutedText;
         context.font = '9px "Cascadia Mono", Consolas, monospace';
         context.fillText(`${locationCount} UNITS`, (panel.left + panel.right) / 2, 30);
-        context.fillStyle = "#11161a";
+        context.fillStyle = PROBE_THEME.panel;
         context.fillRect(panel.left, top, panel.right - panel.left, bottom - top);
 
         const panelSegments = this.visibleSegments.filter((segment) => Number(segment.probeId) === Number(panel.probeId)
@@ -614,18 +657,18 @@
           const isHovered = segment === this.hoveredSegment;
           const isSelected = segment === this.selectedSegment;
           const color = displayRegionColor(segment);
-          context.globalAlpha = NON_NEURAL.has(String(segment.region).toLowerCase()) ? .12 : isHovered || isSelected ? .42 : .28;
+          context.globalAlpha = NON_NEURAL.has(String(segment.region).toLowerCase()) ? PROBE_THEME.nonNeuralAlpha : isHovered || isSelected ? PROBE_THEME.bandActiveAlpha : PROBE_THEME.bandAlpha;
           context.fillStyle = color;
           context.fillRect(panel.left + 1, segmentTop, panel.right - panel.left - 2, segmentHeight);
           context.globalAlpha = 1;
-          context.strokeStyle = isSelected ? "#f1f5f8" : isHovered ? color : "rgba(255,255,255,.07)";
+          context.strokeStyle = isSelected ? PROBE_THEME.focus : isHovered ? color : PROBE_THEME.bandBoundary;
           context.lineWidth = isSelected ? 1.5 : 1;
           context.beginPath();
           context.moveTo(panel.left + 1, Math.round(segmentTop) + .5);
           context.lineTo(panel.right - 1, Math.round(segmentTop) + .5);
           context.stroke();
           if (segmentHeight >= 13 && panelWidth >= 38 && !NON_NEURAL.has(String(segment.region).toLowerCase())) {
-            context.fillStyle = "rgba(233,238,243,.78)";
+            context.fillStyle = PROBE_THEME.bandText;
             context.font = '8px "Cascadia Mono", Consolas, monospace';
             context.textAlign = "center";
             const label = String(segment.region).length > 8 ? `${String(segment.region).slice(0, 7)}...` : String(segment.region);
@@ -638,7 +681,7 @@
         context.globalAlpha = .42;
         context.strokeRect(panel.left + .5, top + .5, panel.right - panel.left - 1, bottom - top - 1);
         context.globalAlpha = .16;
-        context.strokeStyle = "#d5dde5";
+        context.strokeStyle = PROBE_THEME.channel;
         context.lineWidth = 1;
         channels.forEach((channel) => {
           const x = Number(this.geometry[channel * 2]);
@@ -668,7 +711,7 @@
           location,
           open,
           isFocused: Boolean(focused && Number(focused.clusterId) === Number(location.id)),
-          color: regionColor(open?.color, "#7e8790")
+          color: regionColor(open?.color, PROBE_THEME.unopened)
         };
       }).filter(Boolean);
 
@@ -682,7 +725,7 @@
         const radius = focusedMarker ? 5.5 : openMarkers.length ? 4.4 : group.markers.length > 1 ? 4 : 2.8;
 
         if (focusedMarker) {
-          context.strokeStyle = "rgba(255,255,255,.72)";
+          context.strokeStyle = PROBE_THEME.focusLine;
           context.lineWidth = 1;
           context.beginPath();
           context.moveTo(focusedMarker.panel.left + 1, Math.round(group.y) + .5);
@@ -691,7 +734,7 @@
         } else if (isLocked) {
           context.save();
           context.setLineDash([3, 3]);
-          context.strokeStyle = "rgba(255,255,255,.38)";
+          context.strokeStyle = PROBE_THEME.lockedLine;
           context.beginPath();
           context.moveTo(primary.panel.left + 1, Math.round(group.y) + .5);
           context.lineTo(primary.panel.right - 1, Math.round(group.y) + .5);
@@ -706,13 +749,13 @@
         context.fill();
         context.globalAlpha = 1;
         if (focusedMarker) {
-          context.strokeStyle = "#ffffff";
+          context.strokeStyle = PROBE_THEME.focus;
           context.lineWidth = 2;
           context.beginPath();
           context.arc(group.x, group.y, radius + 2.5, 0, Math.PI * 2);
           context.stroke();
         } else if (isHovered || isLocked) {
-          context.strokeStyle = isLocked ? "#e9eef3" : "#bdc7d0";
+          context.strokeStyle = isLocked ? PROBE_THEME.lockedRing : PROBE_THEME.hoverRing;
           context.lineWidth = 1.5;
           context.beginPath();
           context.arc(group.x, group.y, radius + 2, 0, Math.PI * 2);
@@ -725,11 +768,11 @@
           const badgeWidth = Math.max(13, context.measureText(count).width + 7);
           const badgeX = clamp(group.x + 6, primary.panel.left + 2, primary.panel.right - badgeWidth - 2);
           const badgeY = clamp(group.y - 8, top + 1, bottom - 12);
-          context.fillStyle = "rgba(8,10,12,.94)";
+          context.fillStyle = PROBE_THEME.badgeBackground;
           context.fillRect(badgeX, badgeY, badgeWidth, 12);
-          context.strokeStyle = "#78838d";
+          context.strokeStyle = PROBE_THEME.badgeBorder;
           context.strokeRect(badgeX + .5, badgeY + .5, badgeWidth - 1, 11);
-          context.fillStyle = "#e0e5ea";
+          context.fillStyle = PROBE_THEME.badgeText;
           context.textAlign = "center";
           context.fillText(count, badgeX + badgeWidth / 2, badgeY + 9);
         }
@@ -744,16 +787,16 @@
         const labelWidth = context.measureText(text).width + 10;
         const labelX = clamp(focusedMarker.x + 10, 8, Math.max(8, width - labelWidth - 8));
         const labelY = clamp(focusedMarker.y - 20, top + 2, bottom - 15);
-        context.fillStyle = "rgba(9,11,13,.94)";
+        context.fillStyle = PROBE_THEME.labelBackground;
         context.fillRect(labelX, labelY, labelWidth, 14);
-        context.strokeStyle = "rgba(255,255,255,.72)";
+        context.strokeStyle = PROBE_THEME.labelBorder;
         context.strokeRect(labelX + .5, labelY + .5, labelWidth - 1, 13);
-        context.fillStyle = "#f1f4f7";
+        context.fillStyle = PROBE_THEME.labelText;
         context.textAlign = "left";
         context.fillText(text, labelX + 5, labelY + 10);
       }
 
-      context.fillStyle = "#64717e";
+      context.fillStyle = PROBE_THEME.depthText;
       context.font = '9px "Cascadia Mono", Consolas, monospace';
       context.textAlign = "left";
       context.fillText(`${maximumY.toFixed(0)} \u00b5m`, outer, height - 7);
@@ -772,6 +815,7 @@
     groupUnitMarkers,
     nearestUnitTarget,
     unitInteraction,
-    recordingIdentity
+    recordingIdentity,
+    setProbeTheme
   };
 });

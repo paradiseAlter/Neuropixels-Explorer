@@ -4,9 +4,16 @@
   const core = window.NeuropixelExplorerCore;
   const regionCore = window.NeuropixelRegionCore;
   const PlotManager = window.NeuropixelPlots.PlotManager;
+  const setPlotTheme = window.NeuropixelPlots.setPlotTheme;
   const ProbeViewer = window.NeuropixelProbeView.ProbeViewer;
+  const setProbeTheme = window.NeuropixelProbeView.setProbeTheme;
+  const dataStatusApi = window.NeuropixelsDataStatus;
+  const themeController = window.neuropixelsThemeController;
   const databaseClient = window.NeuropixelDatabaseClient;
   const WorkspaceLayout = window.NeuropixelsWorkspaceLayout.WorkspaceLayout;
+  let themeSnapshot = themeController.snapshot();
+  setPlotTheme(themeSnapshot.palette.canvas);
+  setProbeTheme(themeSnapshot.palette.probe);
 
   const elements = {
     shell: document.getElementById("app-shell"),
@@ -23,6 +30,13 @@
     explorerView: document.getElementById("explorer-view"),
     summaryNumbers: document.getElementById("summary-numbers"),
     capabilityRow: document.getElementById("capability-row"),
+    dataStatusButton: document.getElementById("data-status-button"),
+    dataStatusSummary: document.getElementById("data-status-summary"),
+    dataStatusPopover: document.getElementById("data-status-popover"),
+    dataStatusContext: document.getElementById("data-status-context"),
+    dataStatusGroups: document.getElementById("data-status-groups"),
+    closeDataStatus: document.getElementById("close-data-status"),
+    themeSelect: document.getElementById("theme-select"),
     recordingStrip: document.getElementById("recording-strip"),
     unitCount: document.getElementById("unit-count-label"),
     unitSearch: document.getElementById("unit-search"),
@@ -129,9 +143,9 @@
     selectionLabel: document.getElementById("zoom-selection-label"),
     cursor: document.getElementById("primary-plot-cursor"),
     cursorLabel: document.getElementById("primary-plot-cursor-label"),
-    traceColor: "#9fc6f1",
-    rateColor: "#86b8eb",
-    rateFill: "rgba(87, 143, 197, .16)",
+    traceColor: themeSnapshot.palette.units.primary.trace,
+    rateColor: themeSnapshot.palette.units.primary.rate,
+    rateFill: themeSnapshot.palette.units.primary.fill,
     detailEmpty: document.getElementById("spike-detail-empty")
   }, (view) => handlePlotWindow(primaryOpenUnit()?.key || "primary", view), (plotState) => handlePlotState(primaryOpenUnit()?.key || "primary", plotState));
 
@@ -170,18 +184,31 @@
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
   const number = (value) => Number(value || 0).toLocaleString();
   const percent = (value) => Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}%` : "—";
-  const comparisonColors = [
-    { trace: "#e4b36f", rate: "#d69c51", fill: "rgba(214, 156, 81, .14)" },
-    { trace: "#8fc7a7", rate: "#69ae88", fill: "rgba(105, 174, 136, .14)" },
-    { trace: "#bea5df", rate: "#a78bd0", fill: "rgba(167, 139, 208, .14)" },
-    { trace: "#e58c8c", rate: "#d36e6e", fill: "rgba(211, 110, 110, .14)" },
-    { trace: "#75c6d8", rate: "#55aebf", fill: "rgba(85, 174, 191, .14)" },
-    { trace: "#d889b4", rate: "#c46d9d", fill: "rgba(196, 109, 157, .14)" },
-    { trace: "#b7c86f", rate: "#9daf51", fill: "rgba(157, 175, 81, .14)" },
-    { trace: "#d08e67", rate: "#ba7149", fill: "rgba(186, 113, 73, .14)" },
-    { trace: "#8ea9df", rate: "#718fc9", fill: "rgba(113, 143, 201, .14)" }
-  ];
+  let comparisonColors = [...themeSnapshot.palette.units.comparisons];
   const MAX_OPEN_UNITS = 10;
+
+  function paletteForEntry(entry) {
+    if (!entry || Number(entry.paletteIndex) < 0) return themeSnapshot.palette.units.primary;
+    return comparisonColors[Number(entry.paletteIndex) % comparisonColors.length] || themeSnapshot.palette.units.primary;
+  }
+
+  function applyThemeSnapshot(next) {
+    themeSnapshot = next;
+    comparisonColors = [...next.palette.units.comparisons];
+    elements.themeSelect.value = next.preference;
+    setPlotTheme(next.palette.canvas);
+    setProbeTheme(next.palette.probe);
+    plotEntries().forEach((entry) => {
+      const palette = paletteForEntry(entry);
+      entry.traceColor = palette.trace;
+      entry.manager.setColors(palette);
+      entry.lane?.style.setProperty("--trace-color", palette.trace);
+    });
+    detailPlots.render();
+    const focused = focusedEntry();
+    elements.detailsContext.style.setProperty("--trace-color", focused?.traceColor || next.palette.probe.unopened);
+    syncProbeView();
+  }
 
   function viewKey(recording, clusterId) {
     return `${recording?.key || "recording"}::${Number(clusterId)}`;
@@ -432,7 +459,7 @@
       recording: entry.recording,
       clusterId: Number(entry.clusterId),
       region: regionFor(entry.recording, entry.clusterId),
-      color: entry.traceColor || "#9fc6f1",
+      color: entry.traceColor || themeSnapshot.palette.units.primary.trace,
       locationRegion: (clusterId) => regionFor(entry.recording, clusterId),
       locationLabel: (clusterId) => labelFor(entry.recording, clusterId)
     }));
@@ -588,6 +615,35 @@
     elements.recordingStrip.querySelector(".recording-button.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
+  function dataStatusGroup(title, items, emptyText) {
+    const rows = items.length
+      ? items.map((item) => `<div class="data-status-item ${escapeHtml(item.state)}"><div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></div></div>`).join("")
+      : `<p class="data-status-empty">${escapeHtml(emptyText)}</p>`;
+    return `<section class="data-status-group"><header><span>${escapeHtml(title)}</span><b>${items.length}</b></header>${rows}</section>`;
+  }
+
+  function renderDataStatus() {
+    const status = dataStatusApi.buildDataStatus(state.recordings, state.regionResult, state.errors);
+    elements.dataStatusSummary.textContent = dataStatusApi.summaryText(status);
+    elements.dataStatusContext.textContent = `${state.rootName || "Loaded dataset"} · ${state.recordings.length} recording${state.recordings.length === 1 ? "" : "s"}`;
+    elements.dataStatusButton.classList.toggle("has-missing", status.counts.missing > 0);
+    elements.dataStatusButton.classList.toggle("has-invalid", status.counts.invalid > 0);
+    elements.dataStatusGroups.innerHTML = [
+      dataStatusGroup("AVAILABLE", status.available, "No core inputs are currently available."),
+      dataStatusGroup("MISSING", status.missing, "No missing core inputs."),
+      dataStatusGroup("INVALID", status.invalid, "No invalid candidate recordings."),
+      dataStatusGroup("OPTIONAL", status.optional, "No optional inputs are defined."),
+      dataStatusGroup("FUTURE / VIDEO", status.future, "No future interfaces are defined.")
+    ].join("");
+  }
+
+  function setDataStatusOpen(open) {
+    const next = Boolean(open);
+    elements.dataStatusPopover.hidden = !next;
+    elements.dataStatusButton.setAttribute("aria-expanded", String(next));
+    if (next) elements.closeDataStatus.focus({ preventScroll: true });
+  }
+
   function renderSummary() {
     const recordings = state.recordings;
     const totalUnits = recordings.reduce((total, item) => total + item.clusterLabels.length, 0);
@@ -600,21 +656,7 @@
       [core.formatBytes(totalBytes), "INDEXED"]
     ].map(([value, label]) => `<div class="summary-stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
 
-    const any = (key) => recordings.some((recording) => recording.capabilities[key]);
-    const capabilities = [
-      ["SPIKES", any("spikes")],
-      ["QUALITY", any("quality")],
-      ["AMPLITUDE", any("amplitude")],
-      ["POSITION", any("position")],
-      ["TEMPLATE", any("template")],
-      ["GEOMETRY", any("geometry")],
-      ["PROBES", any("probeGrouping")],
-      ["REGION", Boolean(state.regionResult?.valid)],
-      ["REGION TRACK", Boolean(state.regionResult?.probeTrack?.valid)],
-      ["VIDEO", any("video")],
-      ["RAW VOLTAGE", any("rawVoltage")]
-    ];
-    elements.capabilityRow.innerHTML = capabilities.map(([label, available]) => `<span class="capability ${available ? "available" : "missing"}">${label} ${available ? "READY" : "—"}</span>`).join("");
+    renderDataStatus();
   }
 
   function renderMetrics(result, recording, clusterId) {
@@ -634,7 +676,7 @@
   function clearFocusedDetails() {
     detailPlots.clear();
     probeViewer.clear();
-    elements.detailsContext.style.setProperty("--trace-color", "#59616a");
+    elements.detailsContext.style.setProperty("--trace-color", themeSnapshot.palette.probe.unopened);
     elements.detailsFocusLabel.textContent = "No Unit selected";
     elements.reviewTitle.textContent = "No Unit open";
     elements.reviewSubtitle.textContent = "Select a signal to inspect its unit-level details and physical position.";
@@ -651,7 +693,7 @@
     const clusterId = Number(entry.clusterId);
     const label = labelFor(recording, clusterId);
     const region = regionFor(recording, clusterId);
-    const traceColor = entry.traceColor || "#9fc6f1";
+    const traceColor = entry.traceColor || themeSnapshot.palette.units.primary.trace;
     elements.detailsContext.style.setProperty("--trace-color", traceColor);
     elements.detailsFocusLabel.textContent = `Unit ${clusterId} · ${recording.name}`;
     elements.reviewTitle.textContent = `Unit ${clusterId}`;
@@ -811,7 +853,10 @@
     const key = viewKey(recording, clusterId);
     const label = labelFor(recording, clusterId);
     const region = regionFor(recording, clusterId);
-    const item = { key, manager: plots, lane: elements.primaryTraceLane, windowElement: elements.timeWindow, recording, clusterId: Number(clusterId), result, paletteIndex: -1, traceColor: "#9fc6f1" };
+    const primaryPalette = themeSnapshot.palette.units.primary;
+    plots.setColors(primaryPalette);
+    elements.primaryTraceLane.style.setProperty("--trace-color", primaryPalette.trace);
+    const item = { key, manager: plots, lane: elements.primaryTraceLane, windowElement: elements.timeWindow, recording, clusterId: Number(clusterId), result, paletteIndex: -1, traceColor: primaryPalette.trace };
     state.openUnits.set(key, item);
     elements.manualReviewEmpty.hidden = true;
     elements.primaryTraceLane.hidden = false;
@@ -1076,6 +1121,14 @@
 
   elements.openFolder.addEventListener("click", openPicker);
   elements.emptyOpen.addEventListener("click", openPicker);
+  elements.themeSelect.value = themeSnapshot.preference;
+  elements.themeSelect.addEventListener("change", () => themeController.setPreference(elements.themeSelect.value));
+  themeController.onChange(applyThemeSnapshot, false);
+  elements.dataStatusButton.addEventListener("click", () => setDataStatusOpen(elements.dataStatusPopover.hidden));
+  elements.closeDataStatus.addEventListener("click", () => {
+    setDataStatusOpen(false);
+    elements.dataStatusButton.focus({ preventScroll: true });
+  });
   elements.dropZone.addEventListener("click", (event) => { if (event.target === elements.dropZone || event.target.closest(".folder-mark")) openPicker(); });
   elements.dropZone.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); openPicker(); } });
   elements.folderInput.addEventListener("change", () => openFiles(elements.folderInput.files));
@@ -1174,9 +1227,14 @@
   });
   document.addEventListener("pointerdown", (event) => {
     if (!elements.unitContextMenu.hidden && !event.target.closest("#unit-context-menu")) hideUnitContextMenu();
+    if (!elements.dataStatusPopover.hidden && !event.target.closest("#capability-row")) setDataStatusOpen(false);
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !elements.unitContextMenu.hidden) hideUnitContextMenu();
+    if (event.key === "Escape" && !elements.dataStatusPopover.hidden) {
+      setDataStatusOpen(false);
+      elements.dataStatusButton.focus({ preventScroll: true });
+    }
   });
   document.addEventListener("scroll", hideUnitContextMenu, true);
   elements.dataDetails.addEventListener("click", () => { renderDialog(); elements.dataDialog.showModal(); });

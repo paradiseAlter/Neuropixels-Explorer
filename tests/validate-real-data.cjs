@@ -7,6 +7,8 @@ const regionCore = require("../scripts/region-core.js");
 const plots = require("../scripts/plots.js");
 const probeView = require("../scripts/probe-view.js");
 const workspaceLayout = require("../scripts/workspace-layout.js");
+const theme = require("../scripts/theme.js");
+const dataStatus = require("../scripts/data-status.js");
 
 const codeOnly = process.argv.includes("--code-only");
 const repositoryRoot = path.resolve(__dirname, "..");
@@ -84,6 +86,27 @@ function buffer(directory, name) {
   assert(probeView.nearestUnitTarget(groupedProbeMarkers, 20, 43)?.markers.length === 2, "Overlap groups should be directly hit-testable");
   assert(probeView.unitInteraction(7, "marker", { type: "click", ctrlKey: true }).additive, "Probe Ctrl-click should add a Unit");
   assert(probeView.unitInteraction(7, "marker", { type: "contextmenu" }).contextMenu, "Probe right-click should open the shared Unit menu");
+  assert(theme.normalizePreference("HIGH-CONTRAST") === "contrast", "High Contrast aliases should normalize to the contrast theme");
+  assert(theme.normalizePreference("unknown") === "system", "Unknown theme preferences should safely use System");
+  assert(theme.resolveTheme("system", false) === "light" && theme.resolveTheme("system", true) === "dark", "System theme resolution changed");
+  assert(theme.resolveTheme("contrast", false) === "contrast", "High Contrast should not follow the system color scheme");
+  assert(theme.PALETTES.dark.canvas.background !== theme.PALETTES.light.canvas.background, "Canvas backgrounds should respond to the theme");
+  assert(theme.PALETTES.contrast.units.primary.trace !== theme.PALETTES.dark.units.primary.trace, "High Contrast Unit colors should use a dedicated palette");
+  const storedTheme = new Map();
+  const themeRoot = { dataset: {}, style: {} };
+  const themeController = new theme.ThemeController({
+    root: themeRoot,
+    storage: { getItem: (key) => storedTheme.get(key), setItem: (key, value) => storedTheme.set(key, value) },
+    matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} })
+  });
+  themeController.setPreference("light");
+  assert(storedTheme.get(theme.STORAGE_KEY) === "light" && themeRoot.dataset.theme === "light", "Theme choice should persist and update the document state");
+  themeController.destroy();
+  const completeStatus = dataStatus.buildDataStatus([{ capabilities: { spikes: true, quality: true, amplitude: true, position: true, template: true, geometry: true, probeGrouping: true } }], { valid: false, probeTrack: { valid: false } }, []);
+  assert(completeStatus.counts.available === 7 && completeStatus.counts.missing === 0, "Complete KiloSort inputs should collapse to seven available core capabilities");
+  assert(completeStatus.optional.length === 2 && completeStatus.future.length === 2, "Optional and future data status groups are incomplete");
+  const partialStatus = dataStatus.buildDataStatus([{ capabilities: { spikes: true } }], null, ["candidate unreadable"]);
+  assert(partialStatus.counts.missing === 6 && partialStatus.counts.invalid === 1, "Missing and invalid data status counts changed");
   const normalizedLayout = workspaceLayout.normalizeLayout({ unitWidth: 9999, probeWidth: 1, unitCollapsed: true });
   assert(normalizedLayout.unitWidth === workspaceLayout.LAYOUT_LIMITS.unit.maximum, "Units panel width should clamp to its maximum");
   assert(normalizedLayout.probeWidth === workspaceLayout.LAYOUT_LIMITS.probe.minimum, "Probe panel width should clamp to its minimum");
@@ -115,12 +138,21 @@ function buffer(directory, name) {
   for (const id of ["probe-stack-menu", "probe-stack-title", "probe-stack-list"]) {
     assert(pageIds.has(id), `Probe overlap control ${id} is missing`);
   }
+  for (const id of ["theme-select", "data-status-button", "data-status-summary", "data-status-popover", "data-status-groups"]) {
+    assert(pageIds.has(id), `Status or theme control ${id} is missing`);
+  }
   assert(/role="separator"[^>]+aria-orientation="vertical"/.test(pageSource), "Workspace splitters should expose vertical separator semantics");
   assert(/workspace-layout\.js\?v=3\.2\.0-dev/.test(pageSource), "Workspace layout module is not loaded");
+  assert(/theme\.js\?v=3\.2\.0-dev/.test(pageSource) && /data-status\.js\?v=3\.2\.0-dev/.test(pageSource), "Theme or data-status module is not loaded");
   const styleSource = fs.readFileSync(path.resolve(__dirname, "..", "styles", "app.css"), "utf8");
   assert(/--unit-panel-width: 272px/.test(styleSource) && /--probe-panel-width: 328px/.test(styleSource), "Default workspace widths are missing");
   assert(/grid-template-columns: var\(--unit-panel-width\)[^;]+var\(--probe-panel-width\)/.test(styleSource), "The resizable five-column workspace grid is missing");
   assert(/\.probe-layer-key/.test(styleSource) && /\.probe-stack-menu/.test(styleSource), "Probe layer key or overlap list styling is missing");
+  assert(/:root\[data-theme="light"\]/.test(styleSource) && /:root\[data-theme="contrast"\]/.test(styleSource), "Light or High Contrast theme tokens are missing");
+  assert(/\.data-status-popover/.test(styleSource), "Expandable data status styling is missing");
+  assert(/setPlotTheme/.test(plotSource), "Signal canvases are not connected to the shared theme");
+  const probeSource = fs.readFileSync(path.resolve(__dirname, "..", "scripts", "probe-view.js"), "utf8");
+  assert(/function setProbeTheme/.test(probeSource) && /PROBE_THEME\.background/.test(probeSource), "Probe Canvas is not connected to the shared theme");
   for (const action of ["open-only", "add", "remove", "locate"]) {
     assert(pageSource.includes(`data-unit-action="${action}"`), `Unit context action ${action} is missing`);
   }
@@ -193,6 +225,9 @@ function buffer(directory, name) {
   assert(regionResult.probeTrack.rowCount === 5120, `Expected 5,120 electrode-region rows, found ${regionResult.probeTrack.rowCount}`);
   assert(regionResult.probeTrack.probeCount === 4, `Expected four physical Probe tracks, found ${regionResult.probeTrack.probeCount}`);
   assert(regionResult.probeTrack.profiles.length === 4, `Expected four Probe track profiles, found ${regionResult.probeTrack.profiles.length}`);
+  const realDataStatus = dataStatus.buildDataStatus(recordings, regionResult, []);
+  assert(realDataStatus.counts.available === 7 && realDataStatus.counts.missing === 0, `Expected all seven core data capabilities, found ${dataStatus.summaryText(realDataStatus)}`);
+  assert(realDataStatus.optional.every((item) => item.state === "available"), "Real Unit- and Probe-region inputs should appear as available optional data");
   const exp1Unit7Track = regionResult.probeTrack.segments.find((segment) => segment.probeId === 0 && segment.startDepthUm <= 240 && segment.endDepthUm >= 240);
   assert(exp1Unit7Track?.region === "MPN", `Probe 1 at 240 µm should map to MPN, found ${exp1Unit7Track?.region}`);
 
@@ -208,6 +243,7 @@ function buffer(directory, name) {
     probeRegionRows: regionResult.probeTrack.rowCount,
     physicalProbeTracks: regionResult.probeTrack.probeCount,
     trackSegments: regionResult.probeTrack.segments.length,
+    dataStatus: dataStatus.summaryText(realDataStatus),
     reviewed
   }, null, 2));
 })().catch((error) => {

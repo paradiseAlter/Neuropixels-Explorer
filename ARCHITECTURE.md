@@ -23,6 +23,10 @@ and are not required by the standalone folder workflow.
   computes Unit-level review data.
 - `scripts/region-core.js` validates and joins Unit- and depth-level
   brain-region metadata without inferring missing anatomy.
+- `scripts/data-status.js` classifies core, optional, invalid, and future data
+  capabilities for the compact status surface.
+- `scripts/theme.js` owns the persisted theme preference and the shared UI,
+  signal-Canvas, Probe, and Unit color palettes.
 - `scripts/plots.js` renders signals and linked time-window interactions.
 - `scripts/probe-view.js` renders physical Probe groups, Unit locations, and
   optional atlas-colored depth segments.

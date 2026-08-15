@@ -6,7 +6,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : window, () => {
   "use strict";
 
-  const COLORS = {
+  const DEFAULT_COLORS = {
     background: "#0f1012",
     grid: "#24272c",
     axis: "#5f6670",
@@ -18,8 +18,18 @@
     acg: "#759bc1",
     template: "#acd0f2",
     selection: "#9fc6f1",
+    overview: "rgba(103, 145, 185, .28)",
+    overviewSelection: "rgba(159, 198, 241, .08)",
     refractory: "rgba(199, 104, 104, .10)"
   };
+  let COLORS = { ...DEFAULT_COLORS };
+  const ACTIVE_MANAGERS = new Set();
+
+  function setPlotTheme(theme = {}) {
+    COLORS = { ...DEFAULT_COLORS, ...(theme || {}) };
+    ACTIVE_MANAGERS.forEach((manager) => manager.render());
+    return { ...COLORS };
+  }
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
   const MIN_SPAN_SECONDS = .02;
@@ -149,6 +159,7 @@
       this.wheelEndTimer = null;
       this.resizeObserver = new ResizeObserver(() => this.render());
       Object.values(elements).filter((element) => element instanceof HTMLCanvasElement).forEach((canvas) => this.resizeObserver.observe(canvas));
+      ACTIVE_MANAGERS.add(this);
       this.installInteractions();
       this.setMode("cursor");
     }
@@ -393,6 +404,14 @@
       this.resizeObserver.disconnect();
       this.drag = null;
       this.data = null;
+      ACTIVE_MANAGERS.delete(this);
+    }
+
+    setColors({ trace = COLORS.spike, rate = COLORS.rate, fill = COLORS.rateFill } = {}) {
+      this.traceColor = trace;
+      this.rateColor = rate;
+      this.rateFill = fill;
+      this.render();
     }
 
     initialWindow() {
@@ -625,11 +644,11 @@
       }
       context.lineTo(left + plotWidth, top + plotHeight);
       context.closePath();
-      context.fillStyle = "rgba(103, 145, 185, .28)";
+      context.fillStyle = COLORS.overview;
       context.fill();
       const selectionX = left + this.start / this.data.duration * plotWidth;
       const selectionWidth = Math.max(3, this.span / this.data.duration * plotWidth);
-      context.fillStyle = "rgba(159, 198, 241, .08)";
+      context.fillStyle = COLORS.overviewSelection;
       context.fillRect(selectionX, top, selectionWidth, plotHeight);
       context.strokeStyle = COLORS.selection;
       context.lineWidth = 1;
@@ -766,6 +785,7 @@
     wheelPixels,
     wheelNavigationDelta,
     wheelPanOffset,
+    setPlotTheme,
     MIN_SPAN_SECONDS
   };
 });

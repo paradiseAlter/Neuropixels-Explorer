@@ -23,6 +23,11 @@ Git tags rather than duplicated version directories on `main`.
   Inspector columns, with double-click reset and device-local persistence.
 - Added collapsible side panels and compact-screen defaults that preserve the
   central signal workspace.
+- Replaced the row of READY badges with one expandable data-status entry that
+  separates available, missing, invalid, optional, and future/video inputs.
+- Added persisted Dark, Light, High Contrast, and System themes shared by the
+  interface, signal plots, Overview selections, Probe rendering, and Unit
+  palettes.
 
 ## [3.1.0] - 2026-08-15
 
