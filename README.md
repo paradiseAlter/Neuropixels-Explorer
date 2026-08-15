@@ -23,6 +23,12 @@ events outside a signal, and all wheel events in Cursor mode, keep their normal
 page-scrolling behavior. Linked time applies a navigation change to every open
 Unit; Independent time limits it to the focused signal.
 
+The Units and Probe Inspector boundaries are adjustable. Drag either divider,
+use its Left/Right arrow keys for precise changes, or hold Shift for larger
+keyboard steps. Double-click a divider (or press Home) to restore the default
+layout. The small chevron collapses or expands its side panel. Layout choices
+are saved on the current device and restored on the next visit.
+
 The current release is **v3.1.0**. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.
@@ -49,6 +55,7 @@ Portable checks do not require private data:
 
 ```powershell
 node tests\validate-real-data.cjs --code-only
+node tests\validate-workspace-layout.cjs
 ```
 
 The full integration check uses KiloSort and brain-region fixtures from the

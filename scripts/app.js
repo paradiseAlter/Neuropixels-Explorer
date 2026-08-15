@@ -6,6 +6,7 @@
   const PlotManager = window.NeuropixelPlots.PlotManager;
   const ProbeViewer = window.NeuropixelProbeView.ProbeViewer;
   const databaseClient = window.NeuropixelDatabaseClient;
+  const WorkspaceLayout = window.NeuropixelsWorkspaceLayout.WorkspaceLayout;
 
   const elements = {
     shell: document.getElementById("app-shell"),
@@ -106,6 +107,16 @@
     syncingTime: false,
     interactionMode: "cursor"
   };
+
+  const workspaceLayout = new WorkspaceLayout({
+    layout: document.getElementById("review-layout"),
+    unitPanel: document.getElementById("unit-panel"),
+    probePanel: document.getElementById("spatial-panel"),
+    unitSplitter: document.getElementById("unit-panel-splitter"),
+    probeSplitter: document.getElementById("probe-panel-splitter"),
+    unitToggle: document.getElementById("unit-panel-toggle"),
+    probeToggle: document.getElementById("probe-panel-toggle")
+  });
 
   const plots = new PlotManager({
     detail: document.getElementById("spike-detail-canvas"),

@@ -6,6 +6,7 @@ const core = require("../scripts/kilosort-core.js");
 const regionCore = require("../scripts/region-core.js");
 const plots = require("../scripts/plots.js");
 const probeView = require("../scripts/probe-view.js");
+const workspaceLayout = require("../scripts/workspace-layout.js");
 
 const codeOnly = process.argv.includes("--code-only");
 const repositoryRoot = path.resolve(__dirname, "..");
@@ -73,6 +74,12 @@ function buffer(directory, name) {
   assert(probeView.regionColor("12abEF") === "#12abEF", "Region color normalization changed");
   assert(probeView.PROBE_COLORS.length >= 4, "Physical Probe identity palette is incomplete");
   assert(probeView.experimentOf({ name: "ks4_exp12" }) === 12, "Recording experiment lookup changed");
+  const normalizedLayout = workspaceLayout.normalizeLayout({ unitWidth: 9999, probeWidth: 1, unitCollapsed: true });
+  assert(normalizedLayout.unitWidth === workspaceLayout.LAYOUT_LIMITS.unit.maximum, "Units panel width should clamp to its maximum");
+  assert(normalizedLayout.probeWidth === workspaceLayout.LAYOUT_LIMITS.probe.minimum, "Probe panel width should clamp to its minimum");
+  assert(normalizedLayout.unitCollapsed && !normalizedLayout.probeCollapsed, "Panel collapse state normalization changed");
+  assert(workspaceLayout.keyboardWidthDelta("unit", "ArrowRight") > 0, "Right arrow should widen the Units panel");
+  assert(workspaceLayout.keyboardWidthDelta("probe", "ArrowLeft") > 0, "Left arrow should widen the Probe panel");
   const appSource = fs.readFileSync(path.resolve(__dirname, "..", "scripts", "app.js"), "utf8");
   assert(/const MAX_OPEN_UNITS = 10;/.test(appSource), "The multi-Unit display limit should remain 10");
   assert(/openUnits: new Map\(\)/.test(appSource) && /focusedUnit: null/.test(appSource), "Unit selection should use openUnits plus focusedUnit");
@@ -92,6 +99,14 @@ function buffer(directory, name) {
   assert(!missingAppIds.length, `app.js references missing page IDs: ${missingAppIds.join(", ")}`);
   assert(!/inspect-review-mode|compare-review-mode/.test(pageSource), "Explicit Inspect/Compare mode controls should be removed");
   assert(!/operate only on the bottom time axis/i.test(pageSource), "Plot instructions still describe the removed time-axis restriction");
+  for (const id of ["review-layout", "unit-panel-splitter", "probe-panel-splitter", "unit-panel-toggle", "probe-panel-toggle"]) {
+    assert(pageIds.has(id), `Resizable workspace control ${id} is missing`);
+  }
+  assert(/role="separator"[^>]+aria-orientation="vertical"/.test(pageSource), "Workspace splitters should expose vertical separator semantics");
+  assert(/workspace-layout\.js\?v=3\.2\.0-dev/.test(pageSource), "Workspace layout module is not loaded");
+  const styleSource = fs.readFileSync(path.resolve(__dirname, "..", "styles", "app.css"), "utf8");
+  assert(/--unit-panel-width: 272px/.test(styleSource) && /--probe-panel-width: 328px/.test(styleSource), "Default workspace widths are missing");
+  assert(/grid-template-columns: var\(--unit-panel-width\)[^;]+var\(--probe-panel-width\)/.test(styleSource), "The resizable five-column workspace grid is missing");
   for (const action of ["open-only", "add", "remove", "locate"]) {
     assert(pageSource.includes(`data-unit-action="${action}"`), `Unit context action ${action} is missing`);
   }

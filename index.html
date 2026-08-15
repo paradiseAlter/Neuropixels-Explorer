@@ -46,8 +46,8 @@
 
         <nav class="recording-strip" id="recording-strip" aria-label="Detected recordings"></nav>
 
-        <div class="review-layout">
-          <aside class="unit-panel" aria-label="Units">
+        <div class="review-layout" id="review-layout">
+          <aside class="unit-panel" id="unit-panel" aria-label="Units">
             <header class="unit-panel-header">
               <div>
                 <strong>UNITS</strong>
@@ -66,6 +66,10 @@
             <div class="unit-list" id="unit-list" role="listbox" aria-label="Available units"></div>
             <footer class="unit-panel-help" id="unit-panel-help"><strong>CLICK</strong> open only · <strong>CTRL+CLICK</strong> add · <strong>RIGHT CLICK</strong> options</footer>
           </aside>
+
+          <div class="workspace-splitter" id="unit-panel-splitter" role="separator" aria-label="Resize Units and signal workspace" aria-orientation="vertical" aria-controls="unit-panel" tabindex="0">
+            <button class="panel-collapse-button" id="unit-panel-toggle" type="button" aria-controls="unit-panel">‹</button>
+          </div>
 
           <section class="unit-review" aria-label="Selected unit review">
             <header class="review-header">
@@ -136,7 +140,11 @@
             </div>
           </section>
 
-          <aside class="spatial-panel" aria-label="Physical Probes and brain-region location">
+          <div class="workspace-splitter" id="probe-panel-splitter" role="separator" aria-label="Resize signal workspace and Probe Inspector" aria-orientation="vertical" aria-controls="spatial-panel" tabindex="0">
+            <button class="panel-collapse-button" id="probe-panel-toggle" type="button" aria-controls="spatial-panel">›</button>
+          </div>
+
+          <aside class="spatial-panel" id="spatial-panel" aria-label="Physical Probes and brain-region location">
             <header class="spatial-panel-header">
               <div><strong>PHYSICAL PROBES</strong><span id="probe-count">No Probe data</span></div>
               <span class="region-badge" id="probe-region">UNMAPPED</span>
@@ -200,6 +208,7 @@
   <script src="./scripts/plots.js" defer></script>
   <script src="./scripts/probe-view.js" defer></script>
   <script src="./scripts/database-client.js?v=3.2.0-dev" defer></script>
+  <script src="./scripts/workspace-layout.js?v=3.2.0-dev" defer></script>
   <script src="./scripts/app.js?v=3.2.0-dev" defer></script>
 </body>
 </html>

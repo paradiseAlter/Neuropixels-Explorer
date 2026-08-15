@@ -19,6 +19,10 @@ Git tags rather than duplicated version directories on `main`.
 - Preserved normal page scrolling outside signal canvases and in Cursor mode.
 - Synchronized linked-view history so Back also restores Overview and plot
   navigation after focus moves to another Unit.
+- Added keyboard-accessible splitters for resizing the Units, signal, and Probe
+  Inspector columns, with double-click reset and device-local persistence.
+- Added collapsible side panels and compact-screen defaults that preserve the
+  central signal workspace.
 
 ## [3.1.0] - 2026-08-15
 
