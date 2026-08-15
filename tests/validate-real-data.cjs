@@ -74,6 +74,16 @@ function buffer(directory, name) {
   assert(probeView.regionColor("12abEF") === "#12abEF", "Region color normalization changed");
   assert(probeView.PROBE_COLORS.length >= 4, "Physical Probe identity palette is incomplete");
   assert(probeView.experimentOf({ name: "ks4_exp12" }) === 12, "Recording experiment lookup changed");
+  const groupedProbeMarkers = probeView.groupUnitMarkers([
+    { probeId: 0, x: 20, y: 40, location: { id: 7 } },
+    { probeId: 0, x: 20, y: 46, location: { id: 19 } },
+    { probeId: 0, x: 20, y: 70, location: { id: 29 } },
+    { probeId: 1, x: 60, y: 42, location: { id: 32 } }
+  ]);
+  assert(groupedProbeMarkers.length === 3 && groupedProbeMarkers[0].markers.length === 2, "Nearby Probe markers should form an explicit overlap group");
+  assert(probeView.nearestUnitTarget(groupedProbeMarkers, 20, 43)?.markers.length === 2, "Overlap groups should be directly hit-testable");
+  assert(probeView.unitInteraction(7, "marker", { type: "click", ctrlKey: true }).additive, "Probe Ctrl-click should add a Unit");
+  assert(probeView.unitInteraction(7, "marker", { type: "contextmenu" }).contextMenu, "Probe right-click should open the shared Unit menu");
   const normalizedLayout = workspaceLayout.normalizeLayout({ unitWidth: 9999, probeWidth: 1, unitCollapsed: true });
   assert(normalizedLayout.unitWidth === workspaceLayout.LAYOUT_LIMITS.unit.maximum, "Units panel width should clamp to its maximum");
   assert(normalizedLayout.probeWidth === workspaceLayout.LAYOUT_LIMITS.probe.minimum, "Probe panel width should clamp to its minimum");
@@ -102,11 +112,15 @@ function buffer(directory, name) {
   for (const id of ["review-layout", "unit-panel-splitter", "probe-panel-splitter", "unit-panel-toggle", "probe-panel-toggle"]) {
     assert(pageIds.has(id), `Resizable workspace control ${id} is missing`);
   }
+  for (const id of ["probe-stack-menu", "probe-stack-title", "probe-stack-list"]) {
+    assert(pageIds.has(id), `Probe overlap control ${id} is missing`);
+  }
   assert(/role="separator"[^>]+aria-orientation="vertical"/.test(pageSource), "Workspace splitters should expose vertical separator semantics");
   assert(/workspace-layout\.js\?v=3\.2\.0-dev/.test(pageSource), "Workspace layout module is not loaded");
   const styleSource = fs.readFileSync(path.resolve(__dirname, "..", "styles", "app.css"), "utf8");
   assert(/--unit-panel-width: 272px/.test(styleSource) && /--probe-panel-width: 328px/.test(styleSource), "Default workspace widths are missing");
   assert(/grid-template-columns: var\(--unit-panel-width\)[^;]+var\(--probe-panel-width\)/.test(styleSource), "The resizable five-column workspace grid is missing");
+  assert(/\.probe-layer-key/.test(styleSource) && /\.probe-stack-menu/.test(styleSource), "Probe layer key or overlap list styling is missing");
   for (const action of ["open-only", "add", "remove", "locate"]) {
     assert(pageSource.includes(`data-unit-action="${action}"`), `Unit context action ${action} is missing`);
   }

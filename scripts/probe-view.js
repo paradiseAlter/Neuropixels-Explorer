@@ -8,6 +8,8 @@
 
   const PROBE_COLORS = ["#66A6D9", "#E5A14F", "#60B98C", "#B98BD4", "#D46F7E", "#85A869"];
   const NON_NEURAL = new Set(["out", "void"]);
+  const UNIT_HIT_RADIUS = 10;
+  const UNIT_GROUP_DISTANCE = 9;
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
   const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
 
@@ -32,6 +34,46 @@
     return match ? Number(match[1]) : null;
   }
 
+  function recordingIdentity(recording) {
+    return String(recording?.key || recording?.name || "");
+  }
+
+  function groupUnitMarkers(markers, threshold = UNIT_GROUP_DISTANCE) {
+    const groups = [];
+    const sorted = [...(markers || [])].sort((left, right) => Number(left.probeId) - Number(right.probeId) || Number(left.y) - Number(right.y) || Number(left.location?.id) - Number(right.location?.id));
+    sorted.forEach((marker) => {
+      const current = groups.at(-1);
+      if (current && Number(current.probeId) === Number(marker.probeId) && Math.abs(Number(marker.y) - Number(current.y)) <= threshold) {
+        current.markers.push(marker);
+        current.x = current.markers.reduce((sum, item) => sum + Number(item.x), 0) / current.markers.length;
+        current.y = current.markers.reduce((sum, item) => sum + Number(item.y), 0) / current.markers.length;
+      } else {
+        groups.push({ probeId: Number(marker.probeId), x: Number(marker.x), y: Number(marker.y), markers: [marker] });
+      }
+    });
+    return groups;
+  }
+
+  function nearestUnitTarget(targets, x, y, radius = UNIT_HIT_RADIUS) {
+    let closest = null;
+    (targets || []).forEach((target) => {
+      const distance = Math.hypot(Number(target.x) - Number(x), Number(target.y) - Number(y));
+      if (distance <= radius && (!closest || distance < closest.distance)) closest = { ...target, distance };
+    });
+    return closest;
+  }
+
+  function unitInteraction(clusterId, source, event = null) {
+    return {
+      clusterId: Number(clusterId),
+      source,
+      additive: Boolean(event?.ctrlKey || event?.metaKey),
+      contextMenu: event?.type === "contextmenu",
+      clientX: Number(event?.clientX || 0),
+      clientY: Number(event?.clientY || 0)
+    };
+  }
+
   class ProbeViewer {
     constructor(elements, onUnitSelect = null, onRegionSelect = null) {
       this.elements = elements;
@@ -48,8 +90,11 @@
       this.visibleSegments = [];
       this.hitTargets = [];
       this.segmentHitTargets = [];
+      this.hoveredTargetKey = null;
       this.hoveredSegment = null;
       this.selectedSegment = null;
+      this.lockedUnitId = null;
+      this.lockedRecordingKey = null;
       this.layout = null;
       this.resizeObserver = new ResizeObserver(() => this.draw());
       this.resizeObserver.observe(elements.canvas);
@@ -57,15 +102,34 @@
       elements.canvas.addEventListener("contextmenu", (event) => this.handleCanvasContextMenu(event));
       elements.canvas.addEventListener("pointermove", (event) => this.handleCanvasMove(event));
       elements.canvas.addEventListener("pointerleave", () => this.clearHover());
+      elements.canvas.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        this.clearLockedSelection();
+      });
       elements.nearbyList?.addEventListener("click", (event) => {
         const button = event.target.closest("[data-cluster-id]");
-        if (button) this.selectUnit(Number(button.dataset.clusterId), "nearby", event);
+        if (!button) return;
+        this.lockUnit(Number(button.dataset.clusterId));
+        this.selectUnit(Number(button.dataset.clusterId), "nearby", event);
       });
       elements.nearbyList?.addEventListener("contextmenu", (event) => {
         const button = event.target.closest("[data-cluster-id]");
         if (!button) return;
         event.preventDefault();
+        this.lockUnit(Number(button.dataset.clusterId));
         this.selectUnit(Number(button.dataset.clusterId), "nearby", event);
+      });
+      elements.stackList?.addEventListener("click", (event) => this.handleStackSelection(event));
+      elements.stackList?.addEventListener("contextmenu", (event) => this.handleStackSelection(event));
+      elements.stackMenu?.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        this.clearLockedSelection();
+        elements.canvas.focus({ preventScroll: true });
+      });
+      if (typeof document !== "undefined") document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && (this.lockedUnitId != null || !this.elements.stackMenu?.hidden)) this.clearLockedSelection();
       });
       this.clear();
     }
@@ -75,8 +139,8 @@
       this.focusedKey = focusedKey;
       const focused = this.items.find((item) => item.key === focusedKey) || this.items[0];
       this.recording = focused?.recording || null;
-      const recordingKey = this.recording?.key;
-      this.items = this.items.filter((item) => item.recording?.key === recordingKey);
+      const recordingKey = recordingIdentity(this.recording);
+      this.items = this.items.filter((item) => recordingIdentity(item.recording) === recordingKey);
       this.geometry = focused?.result?.channelGeometry || new Float32Array(0);
       this.channelProbeIds = focused?.result?.channelProbeIds || new Int16Array(0);
       const probeIds = new Set();
@@ -99,8 +163,12 @@
         const experimentMatches = segment.experiment == null || experiment == null || Number(segment.experiment) === Number(experiment);
         return experimentMatches && this.probeIds.includes(Number(segment.probeId));
       });
+      if (this.recording && this.lockedRecordingKey && this.lockedRecordingKey !== recordingIdentity(this.recording)) this.clearLockedSelection({ draw: false });
+      if (this.recording && this.lockedUnitId != null && !this.locations.some((location) => Number(location.id) === Number(this.lockedUnitId))) this.clearLockedSelection({ draw: false });
       this.selectedSegment = null;
       this.hoveredSegment = null;
+      this.hoveredTargetKey = null;
+      this.hideStackMenu();
       this.updateTrackStatus();
       this.elements.count.textContent = this.probeIds.length
         ? `${this.probeIds.length} physical Probe${this.probeIds.length === 1 ? "" : "s"} · ${this.visibleSegments.length ? "region track ready" : `${this.items.length} Unit${this.items.length === 1 ? "" : "s"} open`}`
@@ -138,11 +206,11 @@
       this.elements.region.style.setProperty("--region-color", regionColor(resolvedRegion?.color || focused.color, "#59616a"));
       this.elements.physical.textContent = physicalProbeId == null ? "Unavailable" : `Probe ${physicalProbeId + 1}`;
       this.elements.channel.textContent = result.peakChannel == null ? "Unavailable" : String(result.peakChannel);
-      this.elements.x.textContent = finite(position?.x) == null ? "Unavailable" : `${finite(position.x).toFixed(1)} µm`;
-      this.elements.depth.textContent = finite(position?.y) == null ? "Unavailable" : `${finite(position.y).toFixed(1)} µm`;
+      this.elements.x.textContent = finite(position?.x) == null ? "Unavailable" : `${finite(position.x).toFixed(1)} \u00b5m`;
+      this.elements.depth.textContent = finite(position?.y) == null ? "Unavailable" : `${finite(position.y).toFixed(1)} \u00b5m`;
       this.elements.source.textContent = resolvedRegion?.source || "No compatible region row";
       this.elements.note.textContent = this.regionTrack
-        ? `Atlas-colored bands come from ${this.regionTrack.source}. Unit markers keep the same color as their signal; the focused Unit has a white halo.`
+        ? `Brain-region bands come from ${this.regionTrack.source}. Faint ticks are channels; circles are selectable Units.`
         : `${this.probeIds.length || 0} physical Probe group${this.probeIds.length === 1 ? "" : "s"} detected. Add a compatible Probe-region CSV to draw anatomical bands.`;
     }
 
@@ -181,7 +249,7 @@
       if (!this.elements.nearbyList) return;
       this.elements.nearbyContext.textContent = targetDepth == null
         ? "Click a Probe position"
-        : `${segment?.region ? `${segment.region} · ` : ""}${targetDepth.toFixed(0)} µm`;
+        : `${segment?.region ? `${segment.region} · ` : ""}${targetDepth.toFixed(0)} \u00b5m`;
       if (!locations.length) {
         this.elements.nearbyList.innerHTML = '<p class="nearby-empty">No nearby Unit selected</p>';
         return;
@@ -189,8 +257,8 @@
       this.elements.nearbyList.innerHTML = locations.map((location) => {
         const distance = Math.abs(Number(location.y) - Number(targetDepth));
         const quality = location.label?.quality || "unknown";
-        const region = location.region?.region || this.regionAt(location.physicalProbeId, location.y)?.region || "unmapped";
-        return `<button type="button" data-cluster-id="${location.id}"><span><strong>Unit ${location.id}</strong><em>${quality} · ${region}</em></span><b>${distance.toFixed(0)} µm</b></button>`;
+        const region = this.regionForLocation(location)?.region || "unmapped";
+        return `<button type="button" data-cluster-id="${location.id}"><span><strong>Unit ${location.id}</strong><em>${quality} · ${region}</em></span><b>${distance.toFixed(0)} \u00b5m</b></button>`;
       }).join("");
     }
 
@@ -208,41 +276,70 @@
       this.segmentHitTargets = [];
       this.selectedSegment = null;
       this.hoveredSegment = null;
+      this.hoveredTargetKey = null;
+      this.lockedUnitId = null;
+      this.lockedRecordingKey = null;
       this.elements.count.textContent = "No Probe data";
       this.elements.legend.replaceChildren();
       this.updateTrackStatus();
       this.clearReadout();
       this.renderNearby([], null, null);
+      this.hideStackMenu();
       this.hideTooltip();
       this.draw();
     }
 
     selectUnit(clusterId, source, event = null) {
       if (!this.recording || !Number.isFinite(Number(clusterId))) return;
-      this.onUnitSelect?.({
-        recording: this.recording,
-        clusterId: Number(clusterId),
-        source,
-        additive: Boolean(event?.ctrlKey || event?.metaKey),
-        contextMenu: event?.type === "contextmenu",
-        clientX: Number(event?.clientX || 0),
-        clientY: Number(event?.clientY || 0)
-      });
+      this.onUnitSelect?.({ recording: this.recording, ...unitInteraction(clusterId, source, event) });
     }
 
     focusUnit(key) {
       const focused = this.items.find((item) => item.key === key);
       if (!focused) return false;
       this.focusedKey = key;
+      this.lockUnit(focused.clusterId, { draw: false });
       this.renderLegend();
       this.renderReadout(focused);
       this.draw();
       return true;
     }
 
+    lockUnit(clusterId, { draw = true } = {}) {
+      const location = this.locations.find((candidate) => Number(candidate.id) === Number(clusterId));
+      if (!location) return false;
+      this.lockedUnitId = Number(clusterId);
+      this.lockedRecordingKey = recordingIdentity(this.recording) || null;
+      this.selectedSegment = null;
+      if (draw) this.draw();
+      return true;
+    }
+
+    clearLockedSelection({ draw = true } = {}) {
+      this.lockedUnitId = null;
+      this.lockedRecordingKey = null;
+      this.hoveredTargetKey = null;
+      this.selectedSegment = null;
+      this.hideStackMenu();
+      this.hideTooltip();
+      if (draw) this.draw();
+    }
+
     regionAt(probeId, depth) {
       return this.visibleSegments.find((segment) => Number(segment.probeId) === Number(probeId)
         && Number(depth) >= Number(segment.startDepthUm) && Number(depth) <= Number(segment.endDepthUm)) || null;
+    }
+
+    regionForLocation(location) {
+      return location?.region?.region ? location.region : this.regionAt(location?.physicalProbeId, location?.y);
+    }
+
+    focusedItem() {
+      return this.items.find((item) => item.key === this.focusedKey) || this.items[0] || null;
+    }
+
+    targetKey(target) {
+      return (target?.markers || []).map((marker) => Number(marker.location.id)).sort((left, right) => left - right).join(":");
     }
 
     canvasPosition(event) {
@@ -254,62 +351,169 @@
       return this.segmentHitTargets.find((target) => x >= target.left && x <= target.right && y >= target.top && y <= target.bottom) || null;
     }
 
+    targetAt(x, y) {
+      return nearestUnitTarget(this.hitTargets, x, y);
+    }
+
+    unitDescription(location) {
+      const region = this.regionForLocation(location)?.region || "unmapped";
+      const channel = finite(location?.peakChannel);
+      return `Unit ${Number(location.id)} · Probe ${Number(location.physicalProbeId) + 1} · ${Number(location.y).toFixed(0)} \u00b5m · ${region} · ${channel == null ? "channel unavailable" : `ch ${channel}`}`;
+    }
+
+    targetDescription(target) {
+      if (!target?.markers?.length) return "";
+      if (target.markers.length === 1) return this.unitDescription(target.markers[0].location);
+      const depths = target.markers.map((marker) => Number(marker.location.y));
+      const minimum = Math.min(...depths).toFixed(0);
+      const maximum = Math.max(...depths).toFixed(0);
+      return `${target.markers.length} overlapping Units · Probe ${Number(target.probeId) + 1} · ${minimum}–${maximum} \u00b5m · click to choose`;
+    }
+
     handleCanvasMove(event) {
       if (!this.layout) return;
       const { x, y } = this.canvasPosition(event);
-      const segmentTarget = this.segmentAt(x, y);
-      const next = segmentTarget?.segment || null;
-      if (next !== this.hoveredSegment) {
-        this.hoveredSegment = next;
-        this.draw();
-      }
-      if (!next) {
-        this.hideTooltip();
-        return;
-      }
-      const panel = this.layout.panels.find((candidate) => Number(candidate.probeId) === Number(next.probeId));
-      const ratio = clamp((y - this.layout.top) / Math.max(1, this.layout.bottom - this.layout.top), 0, 1);
-      const depth = this.layout.maximumY - ratio * (this.layout.maximumY - this.layout.minimumY);
-      this.showTooltip(x, y, `Probe ${Number(panel.probeId) + 1} · ${next.region} · ${depth.toFixed(0)} µm`);
+      const target = this.targetAt(x, y);
+      const nextTargetKey = target ? this.targetKey(target) : null;
+      const segmentTarget = target ? null : this.segmentAt(x, y);
+      const nextSegment = segmentTarget?.segment || null;
+      const changed = nextTargetKey !== this.hoveredTargetKey || nextSegment !== this.hoveredSegment;
+      this.hoveredTargetKey = nextTargetKey;
+      this.hoveredSegment = nextSegment;
+      this.elements.canvas.style.cursor = target ? "pointer" : "default";
+      if (changed) this.draw();
+      else this.refreshTooltip(x, y);
     }
 
     clearHover() {
-      if (this.hoveredSegment) {
-        this.hoveredSegment = null;
-        this.draw();
+      const changed = Boolean(this.hoveredTargetKey || this.hoveredSegment);
+      this.hoveredTargetKey = null;
+      this.hoveredSegment = null;
+      this.elements.canvas.style.cursor = "default";
+      if (changed) this.draw();
+      else this.refreshTooltip();
+    }
+
+    refreshTooltip(pointerX = null, pointerY = null) {
+      const hovered = this.hitTargets.find((target) => this.targetKey(target) === this.hoveredTargetKey);
+      if (hovered) {
+        this.showTooltip(pointerX ?? hovered.x, pointerY ?? hovered.y, this.targetDescription(hovered), false);
+        return;
+      }
+      if (this.hoveredSegment && pointerX != null && pointerY != null) {
+        const panel = this.layout?.panels.find((candidate) => Number(candidate.probeId) === Number(this.hoveredSegment.probeId));
+        if (panel) {
+          const ratio = clamp((pointerY - this.layout.top) / Math.max(1, this.layout.bottom - this.layout.top), 0, 1);
+          const depth = this.layout.maximumY - ratio * (this.layout.maximumY - this.layout.minimumY);
+          this.showTooltip(pointerX, pointerY, `Probe ${Number(panel.probeId) + 1} · ${this.hoveredSegment.region} · ${depth.toFixed(0)} \u00b5m`, false);
+          return;
+        }
+      }
+      const lockedTarget = this.hitTargets.find((target) => target.markers.some((marker) => Number(marker.location.id) === Number(this.lockedUnitId)));
+      const lockedMarker = lockedTarget?.markers.find((marker) => Number(marker.location.id) === Number(this.lockedUnitId));
+      if (lockedTarget && lockedMarker) {
+        this.showTooltip(lockedTarget.x, lockedTarget.y, this.unitDescription(lockedMarker.location), true);
+        return;
       }
       this.hideTooltip();
     }
 
-    showTooltip(x, y, text) {
+    showTooltip(x, y, text, locked = false) {
       if (!this.elements.tooltip) return;
       this.elements.tooltip.textContent = text;
       this.elements.tooltip.hidden = false;
+      this.elements.tooltip.classList.toggle("locked", locked);
       const canvas = this.elements.canvas;
       const maxLeft = Math.max(8, canvas.clientWidth - this.elements.tooltip.offsetWidth - 8);
       const maxTop = Math.max(8, canvas.clientHeight - this.elements.tooltip.offsetHeight - 8);
-      this.elements.tooltip.style.left = `${clamp(x + 12, 8, maxLeft)}px`;
-      this.elements.tooltip.style.top = `${clamp(y + 12, 8, maxTop)}px`;
+      this.elements.tooltip.style.left = `${clamp(Number(x) + 12, 8, maxLeft)}px`;
+      this.elements.tooltip.style.top = `${clamp(Number(y) + 12, 8, maxTop)}px`;
     }
 
     hideTooltip() {
-      if (this.elements.tooltip) this.elements.tooltip.hidden = true;
+      if (!this.elements.tooltip) return;
+      this.elements.tooltip.hidden = true;
+      this.elements.tooltip.classList.remove("locked");
+    }
+
+    showStackMenu(target) {
+      const menu = this.elements.stackMenu;
+      const list = this.elements.stackList;
+      if (!menu || !list || !target?.markers?.length) return;
+      const sorted = [...target.markers].sort((left, right) => {
+        const leftFocused = left.isFocused ? 1 : 0;
+        const rightFocused = right.isFocused ? 1 : 0;
+        const leftOpen = left.open ? 1 : 0;
+        const rightOpen = right.open ? 1 : 0;
+        return rightFocused - leftFocused || rightOpen - leftOpen || Number(left.location.id) - Number(right.location.id);
+      });
+      if (this.elements.stackTitle) this.elements.stackTitle.textContent = `${sorted.length} UNITS · PROBE ${Number(target.probeId) + 1}`;
+      list.replaceChildren(...sorted.map((marker) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.role = "menuitem";
+        button.dataset.clusterId = String(marker.location.id);
+        button.classList.toggle("focused", marker.isFocused);
+        button.style.setProperty("--unit-color", marker.open ? marker.color : "#7e8790");
+        const body = document.createElement("span");
+        const title = document.createElement("strong");
+        const meta = document.createElement("em");
+        const depth = document.createElement("b");
+        const region = this.regionForLocation(marker.location)?.region || "unmapped";
+        title.textContent = `Unit ${marker.location.id}${marker.isFocused ? " · focused" : marker.open ? " · open" : ""}`;
+        meta.textContent = `${marker.location.label?.quality || "unknown"} · ${region} · ch ${finite(marker.location.peakChannel) ?? "—"}`;
+        depth.textContent = `${Number(marker.location.y).toFixed(0)} \u00b5m`;
+        body.append(title, meta);
+        button.append(body, depth);
+        return button;
+      }));
+      menu.hidden = false;
+      const width = menu.offsetWidth || 240;
+      const height = menu.offsetHeight || 160;
+      const canvas = this.elements.canvas;
+      menu.style.left = `${clamp(target.x + 10, 8, Math.max(8, canvas.clientWidth - width - 8))}px`;
+      menu.style.top = `${clamp(target.y + 10, 8, Math.max(8, canvas.clientHeight - height - 8))}px`;
+      list.querySelector("button")?.focus({ preventScroll: true });
+    }
+
+    hideStackMenu() {
+      if (this.elements.stackMenu) this.elements.stackMenu.hidden = true;
+    }
+
+    handleStackSelection(event) {
+      const button = event.target.closest("[data-cluster-id]");
+      if (!button) return;
+      if (event.type === "contextmenu") event.preventDefault();
+      const clusterId = Number(button.dataset.clusterId);
+      this.lockUnit(clusterId, { draw: false });
+      this.hideStackMenu();
+      this.draw();
+      this.selectUnit(clusterId, "overlap-list", event);
     }
 
     handleCanvasClick(event) {
       if (!this.layout || !this.probeIds.length) return;
+      this.elements.canvas.focus({ preventScroll: true });
       const { x, y } = this.canvasPosition(event);
-      let closest = null;
-      this.hitTargets.forEach((target) => {
-        const distance = Math.hypot(target.x - x, target.y - y);
-        if (distance <= 7 && (!closest || distance < closest.distance)) closest = { ...target, distance };
-      });
-      if (closest) {
-        this.selectUnit(closest.clusterId, "marker", event);
+      const target = this.targetAt(x, y);
+      if (target) {
+        if (target.markers.length > 1) {
+          this.showStackMenu(target);
+          return;
+        }
+        const clusterId = Number(target.markers[0].location.id);
+        this.hideStackMenu();
+        this.lockUnit(clusterId);
+        this.selectUnit(clusterId, "marker", event);
         return;
       }
+      this.clearLockedSelection({ draw: false });
       const panel = this.layout.panels.find((candidate) => x >= candidate.left && x <= candidate.right && y >= this.layout.top && y <= this.layout.bottom);
-      if (!panel) return;
+      if (!panel) {
+        this.renderNearby([], null, null);
+        this.draw();
+        return;
+      }
       const ratio = clamp((y - this.layout.top) / Math.max(1, this.layout.bottom - this.layout.top), 0, 1);
       const depth = this.layout.maximumY - ratio * (this.layout.maximumY - this.layout.minimumY);
       const segment = this.regionAt(panel.probeId, depth);
@@ -324,14 +528,16 @@
     handleCanvasContextMenu(event) {
       if (!this.layout || !this.probeIds.length) return;
       const { x, y } = this.canvasPosition(event);
-      let closest = null;
-      this.hitTargets.forEach((target) => {
-        const distance = Math.hypot(target.x - x, target.y - y);
-        if (distance <= 7 && (!closest || distance < closest.distance)) closest = { ...target, distance };
-      });
-      if (!closest) return;
+      const target = this.targetAt(x, y);
+      if (!target) return;
       event.preventDefault();
-      this.selectUnit(closest.clusterId, "marker", event);
+      if (target.markers.length > 1) {
+        this.showStackMenu(target);
+        return;
+      }
+      const clusterId = Number(target.markers[0].location.id);
+      this.lockUnit(clusterId);
+      this.selectUnit(clusterId, "marker", event);
     }
 
     draw() {
@@ -355,6 +561,7 @@
         context.font = '10px "Cascadia Mono", Consolas, monospace';
         context.textAlign = "center";
         context.fillText(this.items.length ? "Physical Probe grouping unavailable" : "Select a Unit", width / 2, height / 2);
+        this.hideTooltip();
         return;
       }
 
@@ -407,11 +614,11 @@
           const isHovered = segment === this.hoveredSegment;
           const isSelected = segment === this.selectedSegment;
           const color = displayRegionColor(segment);
-          context.globalAlpha = NON_NEURAL.has(String(segment.region).toLowerCase()) ? .12 : isHovered || isSelected ? .38 : .24;
+          context.globalAlpha = NON_NEURAL.has(String(segment.region).toLowerCase()) ? .12 : isHovered || isSelected ? .42 : .28;
           context.fillStyle = color;
           context.fillRect(panel.left + 1, segmentTop, panel.right - panel.left - 2, segmentHeight);
           context.globalAlpha = 1;
-          context.strokeStyle = isSelected ? "#f1f5f8" : isHovered ? color : "rgba(255,255,255,.08)";
+          context.strokeStyle = isSelected ? "#f1f5f8" : isHovered ? color : "rgba(255,255,255,.07)";
           context.lineWidth = isSelected ? 1.5 : 1;
           context.beginPath();
           context.moveTo(panel.left + 1, Math.round(segmentTop) + .5);
@@ -421,64 +628,150 @@
             context.fillStyle = "rgba(233,238,243,.78)";
             context.font = '8px "Cascadia Mono", Consolas, monospace';
             context.textAlign = "center";
-            const label = String(segment.region).length > 8 ? `${String(segment.region).slice(0, 7)}…` : String(segment.region);
+            const label = String(segment.region).length > 8 ? `${String(segment.region).slice(0, 7)}...` : String(segment.region);
             context.fillText(label, (panel.left + panel.right) / 2, segmentTop + Math.min(segmentHeight - 3, 10));
           }
           this.segmentHitTargets.push({ left: panel.left, right: panel.right, top: segmentTop, bottom: segmentBottom, segment });
         });
 
         context.strokeStyle = panel.accent;
-        context.globalAlpha = .46;
+        context.globalAlpha = .42;
         context.strokeRect(panel.left + .5, top + .5, panel.right - panel.left - 1, bottom - top - 1);
-        context.globalAlpha = 1;
-        context.fillStyle = "#788590";
+        context.globalAlpha = .16;
+        context.strokeStyle = "#d5dde5";
+        context.lineWidth = 1;
         channels.forEach((channel) => {
-          const x = this.geometry[channel * 2];
-          const channelX = panel.left + 6 + (Number(x) > 16 ? panelWidth - 12 : 0);
-          context.fillRect(Math.round(channelX - 1), Math.round(yFor(this.geometry[channel * 2 + 1])), 3, 1);
+          const x = Number(this.geometry[channel * 2]);
+          const onRight = x > 16;
+          const channelX = onRight ? panel.right - 5 : panel.left + 5;
+          const channelY = Math.round(yFor(this.geometry[channel * 2 + 1])) + .5;
+          context.beginPath();
+          context.moveTo(channelX + (onRight ? -3 : 0), channelY);
+          context.lineTo(channelX + (onRight ? 0 : 3), channelY);
+          context.stroke();
         });
+        context.globalAlpha = 1;
         context.font = '9px "Cascadia Mono", Consolas, monospace';
       });
 
       const openById = new Map(this.items.map((item) => [Number(item.clusterId), item]));
-      const focused = this.items.find((item) => item.key === this.focusedKey) || this.items[0];
-      this.locations.forEach((location) => {
+      const focused = this.focusedItem();
+      const markers = this.locations.map((location) => {
         const panel = panels.find((candidate) => Number(candidate.probeId) === Number(location.physicalProbeId));
-        if (!panel) return;
-        const open = openById.get(Number(location.id));
-        const isFocused = Boolean(focused && Number(focused.clusterId) === Number(location.id));
-        const x = (panel.left + panel.right) / 2;
-        const y = yFor(location.y);
-        const trackRegion = this.regionAt(location.physicalProbeId, location.y);
-        const color = regionColor(open?.color || location.region?.color || trackRegion?.color, "#89939d");
-        context.globalAlpha = isFocused ? 1 : open ? .9 : .48;
-        context.fillStyle = color;
-        context.beginPath();
-        context.arc(x, y, isFocused ? 6 : open ? 4 : 2.3, 0, Math.PI * 2);
-        context.fill();
-        if (isFocused) {
-          context.strokeStyle = "#ffffff";
-          context.lineWidth = 2;
-          context.stroke();
-          context.strokeStyle = color;
+        if (!panel) return null;
+        const open = openById.get(Number(location.id)) || null;
+        return {
+          probeId: Number(location.physicalProbeId),
+          x: (panel.left + panel.right) / 2,
+          y: yFor(location.y),
+          panel,
+          location,
+          open,
+          isFocused: Boolean(focused && Number(focused.clusterId) === Number(location.id)),
+          color: regionColor(open?.color, "#7e8790")
+        };
+      }).filter(Boolean);
+
+      const groups = groupUnitMarkers(markers);
+      groups.forEach((group) => {
+        const focusedMarker = group.markers.find((marker) => marker.isFocused) || null;
+        const openMarkers = group.markers.filter((marker) => marker.open);
+        const primary = focusedMarker || openMarkers.at(-1) || group.markers[0];
+        const isHovered = this.targetKey(group) === this.hoveredTargetKey;
+        const isLocked = group.markers.some((marker) => Number(marker.location.id) === Number(this.lockedUnitId));
+        const radius = focusedMarker ? 5.5 : openMarkers.length ? 4.4 : group.markers.length > 1 ? 4 : 2.8;
+
+        if (focusedMarker) {
+          context.strokeStyle = "rgba(255,255,255,.72)";
           context.lineWidth = 1;
           context.beginPath();
-          context.moveTo(panel.left, Math.round(y) + .5);
-          context.lineTo(panel.right, Math.round(y) + .5);
+          context.moveTo(focusedMarker.panel.left + 1, Math.round(group.y) + .5);
+          context.lineTo(focusedMarker.panel.right - 1, Math.round(group.y) + .5);
+          context.stroke();
+        } else if (isLocked) {
+          context.save();
+          context.setLineDash([3, 3]);
+          context.strokeStyle = "rgba(255,255,255,.38)";
+          context.beginPath();
+          context.moveTo(primary.panel.left + 1, Math.round(group.y) + .5);
+          context.lineTo(primary.panel.right - 1, Math.round(group.y) + .5);
+          context.stroke();
+          context.restore();
+        }
+
+        context.globalAlpha = focusedMarker ? 1 : openMarkers.length ? .95 : .72;
+        context.fillStyle = primary.color;
+        context.beginPath();
+        context.arc(group.x, group.y, radius, 0, Math.PI * 2);
+        context.fill();
+        context.globalAlpha = 1;
+        if (focusedMarker) {
+          context.strokeStyle = "#ffffff";
+          context.lineWidth = 2;
+          context.beginPath();
+          context.arc(group.x, group.y, radius + 2.5, 0, Math.PI * 2);
+          context.stroke();
+        } else if (isHovered || isLocked) {
+          context.strokeStyle = isLocked ? "#e9eef3" : "#bdc7d0";
+          context.lineWidth = 1.5;
+          context.beginPath();
+          context.arc(group.x, group.y, radius + 2, 0, Math.PI * 2);
           context.stroke();
         }
-        context.globalAlpha = 1;
-        this.hitTargets.push({ x, y, clusterId: Number(location.id) });
+
+        if (group.markers.length > 1) {
+          const count = String(group.markers.length);
+          context.font = '700 8px "Cascadia Mono", Consolas, monospace';
+          const badgeWidth = Math.max(13, context.measureText(count).width + 7);
+          const badgeX = clamp(group.x + 6, primary.panel.left + 2, primary.panel.right - badgeWidth - 2);
+          const badgeY = clamp(group.y - 8, top + 1, bottom - 12);
+          context.fillStyle = "rgba(8,10,12,.94)";
+          context.fillRect(badgeX, badgeY, badgeWidth, 12);
+          context.strokeStyle = "#78838d";
+          context.strokeRect(badgeX + .5, badgeY + .5, badgeWidth - 1, 11);
+          context.fillStyle = "#e0e5ea";
+          context.textAlign = "center";
+          context.fillText(count, badgeX + badgeWidth / 2, badgeY + 9);
+        }
+
+        this.hitTargets.push({ ...group, radius: UNIT_HIT_RADIUS });
       });
+
+      const focusedMarker = markers.find((marker) => marker.isFocused);
+      if (focusedMarker) {
+        const text = `UNIT ${focusedMarker.location.id} · ${Number(focusedMarker.location.y).toFixed(0)} \u00b5m`;
+        context.font = '700 8px "Cascadia Mono", Consolas, monospace';
+        const labelWidth = context.measureText(text).width + 10;
+        const labelX = clamp(focusedMarker.x + 10, 8, Math.max(8, width - labelWidth - 8));
+        const labelY = clamp(focusedMarker.y - 20, top + 2, bottom - 15);
+        context.fillStyle = "rgba(9,11,13,.94)";
+        context.fillRect(labelX, labelY, labelWidth, 14);
+        context.strokeStyle = "rgba(255,255,255,.72)";
+        context.strokeRect(labelX + .5, labelY + .5, labelWidth - 1, 13);
+        context.fillStyle = "#f1f4f7";
+        context.textAlign = "left";
+        context.fillText(text, labelX + 5, labelY + 10);
+      }
 
       context.fillStyle = "#64717e";
       context.font = '9px "Cascadia Mono", Consolas, monospace';
       context.textAlign = "left";
-      context.fillText(`${maximumY.toFixed(0)} µm`, outer, height - 7);
+      context.fillText(`${maximumY.toFixed(0)} \u00b5m`, outer, height - 7);
       context.textAlign = "right";
-      context.fillText(`${minimumY.toFixed(0)} µm`, width - outer, height - 7);
+      context.fillText(`${minimumY.toFixed(0)} \u00b5m`, width - outer, height - 7);
+      this.refreshTooltip();
     }
   }
 
-  return { ProbeViewer, regionColor, displayRegionColor, PROBE_COLORS, experimentOf };
+  return {
+    ProbeViewer,
+    regionColor,
+    displayRegionColor,
+    PROBE_COLORS,
+    experimentOf,
+    groupUnitMarkers,
+    nearestUnitTarget,
+    unitInteraction,
+    recordingIdentity
+  };
 });

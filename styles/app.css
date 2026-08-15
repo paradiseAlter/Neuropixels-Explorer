@@ -547,8 +547,30 @@ input:focus-visible,
 .probe-card { display: grid; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line-soft); }
 .probe-card > strong { overflow: hidden; font-size: 10px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 .probe-canvas-wrap { position: relative; min-width: 0; }
-.probe-card canvas { display: block; width: 100%; height: 390px; border: 1px solid var(--line-soft); background: #0d0f11; cursor: pointer; }
+.probe-card canvas { display: block; width: 100%; height: 390px; border: 1px solid var(--line-soft); background: #0d0f11; cursor: default; }
 .probe-tooltip { position: absolute; z-index: 4; max-width: calc(100% - 16px); padding: 5px 7px; border: 1px solid #48515a; border-radius: 3px; background: rgba(12, 14, 16, .96); color: #d5dce3; font: 500 8px/1.25 "Cascadia Mono", Consolas, monospace; pointer-events: none; white-space: nowrap; }
+.probe-tooltip.locked { border-color: #e7edf3; box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
+.probe-stack-menu { position: absolute; z-index: 7; width: min(250px, calc(100% - 16px)); overflow: hidden; border: 1px solid #59636d; border-radius: 4px; background: rgba(11, 13, 15, .985); box-shadow: 0 12px 28px rgba(0,0,0,.42); }
+.probe-stack-menu > header { display: grid; gap: 3px; padding: 8px 9px; border-bottom: 1px solid #292e33; }
+.probe-stack-menu > header strong { color: #d7dde3; font-size: 8px; letter-spacing: .07em; }
+.probe-stack-menu > header span { color: #6f7881; font-size: 7px; }
+.probe-stack-menu > div { display: grid; max-height: 190px; overflow-y: auto; scrollbar-color: #34383e transparent; scrollbar-width: thin; }
+.probe-stack-menu button { --unit-color: #7e8790; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; min-height: 38px; align-items: center; gap: 7px; padding: 5px 9px; border: 0; border-bottom: 1px solid #202429; background: transparent; color: #a9b1b9; text-align: left; cursor: pointer; }
+.probe-stack-menu button:last-child { border-bottom: 0; }
+.probe-stack-menu button:hover,
+.probe-stack-menu button:focus-visible { outline: none; background: #171c21; color: #f0f3f6; }
+.probe-stack-menu button::before { width: 7px; height: 7px; border-radius: 50%; background: var(--unit-color); content: ""; }
+.probe-stack-menu button.focused::before { box-shadow: 0 0 0 2px #fff; }
+.probe-stack-menu button > span { display: grid; min-width: 0; gap: 3px; }
+.probe-stack-menu button strong { font-size: 8px; }
+.probe-stack-menu button em { overflow: hidden; color: #717b85; font-size: 7px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.probe-stack-menu button b { color: #9ba6b0; font-size: 7px; font-weight: 600; white-space: nowrap; }
+.probe-layer-key { display: flex; flex-wrap: wrap; gap: 6px 10px; color: #69737d; font-size: 7px; letter-spacing: .05em; }
+.probe-layer-key span { display: inline-flex; align-items: center; gap: 5px; }
+.probe-layer-key span::before { display: inline-block; width: 10px; height: 5px; border: 1px solid #4d5660; content: ""; }
+.probe-layer-key .regions::before { background: #5b7386; opacity: .58; }
+.probe-layer-key .channels::before { width: 8px; height: 1px; border: 0; background: #aeb8c1; opacity: .35; }
+.probe-layer-key .units::before { width: 6px; height: 6px; border-radius: 50%; background: #8e99a3; }
 .probe-legend { display: grid; max-height: 142px; overflow-y: auto; border: 1px solid var(--line-soft); background: #0b0d0f; scrollbar-color: #34383e transparent; scrollbar-width: thin; }
 .probe-legend:empty { display: none; }
 .probe-legend-item { --unit-color: #9fc6f1; display: grid; grid-template-columns: 8px auto minmax(0, 1fr); min-height: 26px; align-items: center; gap: 6px; padding: 0 7px; border-bottom: 1px solid #1c2024; color: #747b84; cursor: pointer; }

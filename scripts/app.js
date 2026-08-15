@@ -76,6 +76,9 @@
     nearbyContext: document.getElementById("nearby-context"),
     nearbyUnitList: document.getElementById("nearby-unit-list"),
     probeTooltip: document.getElementById("probe-tooltip"),
+    probeStackMenu: document.getElementById("probe-stack-menu"),
+    probeStackTitle: document.getElementById("probe-stack-title"),
+    probeStackList: document.getElementById("probe-stack-list"),
     probeTrackStatus: document.getElementById("probe-track-status"),
     unitContextMenu: document.getElementById("unit-context-menu"),
     unitContextTitle: document.getElementById("unit-context-title")
@@ -156,6 +159,9 @@
     nearbyContext: elements.nearbyContext,
     nearbyList: elements.nearbyUnitList,
     tooltip: elements.probeTooltip,
+    stackMenu: elements.probeStackMenu,
+    stackTitle: elements.probeStackTitle,
+    stackList: elements.probeStackList,
     trackStatus: elements.probeTrackStatus
   }, (interaction) => handleProbeUnitInteraction(interaction), ({ probeId, depth, segment }) => {
     showToast(`Probe ${Number(probeId) + 1} · ${segment?.region || "unmapped"} · ${depth.toFixed(0)} µm · nearby Units shown`);

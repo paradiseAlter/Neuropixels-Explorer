@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="description" content="A local-first interactive explorer for Neuropixels units, signals, physical probes, and brain regions.">
   <title>Neuropixels Explorer 3.1.0</title>
-  <link rel="stylesheet" href="./styles/app.css">
+  <link rel="stylesheet" href="./styles/app.css?v=3.2.0-dev">
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -154,7 +154,12 @@
               <div class="probe-canvas-wrap">
                 <canvas id="probe-canvas" tabindex="0" aria-label="Physical Probe overview, brain-region track, and Unit positions"></canvas>
                 <div class="probe-tooltip" id="probe-tooltip" hidden></div>
+                <div class="probe-stack-menu" id="probe-stack-menu" role="menu" aria-label="Overlapping Units at this Probe depth" hidden>
+                  <header><strong id="probe-stack-title">UNITS AT THIS DEPTH</strong><span>Click to open · Ctrl-click to add</span></header>
+                  <div id="probe-stack-list"></div>
+                </div>
               </div>
+              <div class="probe-layer-key" aria-label="Probe display layers"><span class="regions">BRAIN REGIONS</span><span class="channels">CHANNEL TICKS</span><span class="units">UNITS</span></div>
               <div class="probe-legend" id="probe-legend" aria-label="Units shown on the Probe"></div>
             </section>
             <section class="position-readout">
@@ -206,7 +211,7 @@
   <script src="./scripts/kilosort-core.js" defer></script>
   <script src="./scripts/region-core.js" defer></script>
   <script src="./scripts/plots.js" defer></script>
-  <script src="./scripts/probe-view.js" defer></script>
+  <script src="./scripts/probe-view.js?v=3.2.0-dev" defer></script>
   <script src="./scripts/database-client.js?v=3.2.0-dev" defer></script>
   <script src="./scripts/workspace-layout.js?v=3.2.0-dev" defer></script>
   <script src="./scripts/app.js?v=3.2.0-dev" defer></script>
