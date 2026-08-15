@@ -1,71 +1,47 @@
-# Neuropixel Workflow UI architecture
+# Neuropixels Explorer architecture
 
-This folder is the development source for the workflow editor. The current
-milestone is a neural-only interaction prototype: semantic nodes can be added,
-dragged, connected, selected, and inspected, but no analysis executor is
-connected yet.
+## Runtime model
 
-## Delivery model
+The supported default is a local browser workflow. `index.html` loads plain
+JavaScript and CSS, and the user explicitly selects a folder through the
+browser file API. KiloSort arrays are parsed locally and are not uploaded.
 
-- Development source is split into small HTML, CSS, and JavaScript modules so
-  the interface can be maintained without one continuously growing source file.
-- A later build step will bundle the production release into one standalone
-  HTML file, preserving the mentor-facing delivery requirement.
-- Splitting source files improves maintainability, not runtime performance by
-  itself.
+Large arrays are loaded lazily for the active Recording. Unit analysis runs in
+a Web Worker when available and falls back to the main thread with an explicit
+status indication.
 
-## Performance boundary
+An optional database client is present for a separately operated local service.
+The service, its SQLite database, and research data are outside this repository
+and are not required by the standalone folder workflow.
 
-The interactive canvas must remain responsive even when analysis inputs are
-large. Future implementation should keep these boundaries:
+## Module map
 
-- UI thread: pointer interaction, node layout, selection, lightweight drawing,
-  and display state only.
-- Worker layer: Kilosort parsing, binning, PCA, clustering, transforms, and
-  other CPU-heavy analysis.
-- Data layer: typed arrays, low-copy transfer, explicit cache ownership, and
-  invalidation by node input/version.
-- Rendering layer: viewport culling, level-of-detail limits, and drawing only
-  visible samples or aggregates.
-- Node registry: lazy-load node definitions and heavy code only when a workflow
-  uses them.
+- `index.html` defines the current v3.1.0 review interface.
+- `scripts/app.js` owns application state, folder selection, review modes, and
+  DOM coordination.
+- `scripts/kilosort-core.js` indexes KiloSort files, parses NPY arrays, and
+  computes Unit-level review data.
+- `scripts/region-core.js` validates and joins Unit- and depth-level
+  brain-region metadata without inferring missing anatomy.
+- `scripts/plots.js` renders signals and linked time-window interactions.
+- `scripts/probe-view.js` renders physical Probe groups, Unit locations, and
+  optional atlas-colored depth segments.
+- `scripts/database-client.js` adapts the optional local-service API to the
+  same Explorer state model.
+- `styles/app.css` contains the current application layout and visual system.
+- `tests/validate-real-data.cjs` provides portable code checks and an optional
+  local real-data integration path.
 
-## Two-layer graph
+## Data boundary
 
-The visible canvas is a semantic graph. It intentionally uses a small set of
-nodes such as Experiment Data, Auto Analysis, Neural Viewer, and Population
-Analysis. Fine-grained steps such as individual NPY reads, spike extraction,
-filters, array transfer, and cache operations belong to a separate internal
-execution graph.
+KiloSort is the source for spikes, amplitudes, templates, positions, and Probe
+geometry. Brain-region labels are a separate optional input. Missing anatomy is
+reported as unavailable rather than inferred. A depth-level mapping is not a
+registered three-dimensional atlas trajectory.
 
-This avoids making the user wire every mechanical operation while preserving
-inspectable execution and plugin boundaries. A future Auto Analysis node should
-be expandable into the internal plan rather than becoming an opaque black box.
+## Versioning policy
 
-The current Experiment Data node performs only a lightweight folder/file-name
-audit for `spike_times.npy`, `spike_clusters.npy`, and `params.py`. It does not
-parse arrays or calculate neural results. Workers, node execution, and real
-analysis remain future milestones.
-
-## Extension contract
-
-New node definitions belong in `scripts/nodes/registry.js`. Each definition
-declares a stable type, version-ready inputs and outputs, category, renderer,
-and future executor boundary. Video and behavior nodes are deliberately absent
-from this prototype; they can be registered later without changing the graph
-engine.
-
-## Current modules
-
-- `index.html`: semantic workbench structure.
-- `styles/tokens.css`: Graphite and Classic theme tokens.
-- `styles/workbench.css`: workbench layout and component styling.
-- `styles/nodes.css`: node, connection, palette, and inspector styling.
-- `scripts/core/viewport.js`: pan, zoom, coordinates, and grid state.
-- `scripts/graph/graph-engine.js`: node layout, dragging, selection, and typed
-  connections.
-- `scripts/nodes/registry.js`: readable semantic node definitions.
-- `scripts/ui/tooltip.js`: viewport-aware tooltip placement.
-- `scripts/ui/node-palette.js`: searchable neural-node library.
-- `scripts/app.js`: application wiring, prototype Kilosort folder audit, menus,
-  shortcuts, theme preference, and the initial example workflow.
+`main` contains one current application tree. Releases are represented by Git
+tags and release notes in `CHANGELOG.md`; full `vX.Y.Z/` snapshot directories
+are not added to the current tree. Previous layouts remain recoverable from Git
+history.
