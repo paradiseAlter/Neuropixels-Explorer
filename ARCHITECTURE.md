@@ -27,6 +27,14 @@ and are not required by the standalone folder workflow.
   capabilities for the compact status surface.
 - `scripts/theme.js` owns the persisted theme preference and the shared UI,
   signal-Canvas, Probe, and Unit color palettes.
+- `scripts/i18n.js` owns the persisted language preference, the English,
+  Simplified Chinese, and Spanish dictionaries, and the professional
+  terminology glossary. File names, brain-region abbreviations, and KiloSort
+  field names are deliberately outside translation.
+- `docs/USER_GUIDE.*.md` are the editable Help sources.
+  `scripts/build-help-content.cjs` precompiles them into the checked-in
+  `scripts/help-content.js` asset, keeping the Help drawer compatible with
+  direct `file://` use and independent of online Markdown services.
 - `scripts/plots.js` renders signals and linked time-window interactions.
 - `scripts/probe-view.js` renders physical Probe groups, Unit locations, and
   optional atlas-colored depth segments.
@@ -35,6 +43,9 @@ and are not required by the standalone folder workflow.
 - `styles/app.css` contains the current application layout and visual system.
 - `tests/validate-real-data.cjs` provides portable code checks and an optional
   local real-data integration path.
+- `tests/validate-i18n-help.cjs` validates dictionary coverage, glossary terms,
+  local Help parity, contextual explanations, and keyboard-accessibility
+  contracts.
 
 ## Data boundary
 

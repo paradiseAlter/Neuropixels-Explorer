@@ -114,6 +114,11 @@
   class ProbeViewer {
     constructor(elements, onUnitSelect = null, onRegionSelect = null) {
       this.elements = elements;
+      this.t = (key, values = {}) => ({
+        "probe.noData": "No Probe data", "probe.noTrack": "No compatible Probe-region mapping", "review.noSelected": "No Unit selected",
+        "probe.unmapped": "UNMAPPED", "probe.selectNote": "Select a Unit or click a Probe marker to inspect the linked signal.",
+        "probe.clickPosition": "Click a Probe position", "probe.noNearby": "No nearby Unit selected", "units.unmapped": "unmapped"
+      }[key] || String(key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? ""));
       this.onUnitSelect = onUnitSelect;
       this.onRegionSelect = onRegionSelect;
       this.items = [];
@@ -177,6 +182,10 @@
       ACTIVE_VIEWERS.delete(this);
     }
 
+    setTranslator(translator) {
+      if (typeof translator === "function") this.t = translator;
+    }
+
     setUnits(items, focusedKey, probeTrack = null) {
       this.items = (items || []).filter((item) => item?.result && item?.recording).map((item) => ({ ...item, clusterId: Number(item.clusterId) }));
       this.focusedKey = focusedKey;
@@ -214,8 +223,8 @@
       this.hideStackMenu();
       this.updateTrackStatus();
       this.elements.count.textContent = this.probeIds.length
-        ? `${this.probeIds.length} physical Probe${this.probeIds.length === 1 ? "" : "s"} · ${this.visibleSegments.length ? "region track ready" : `${this.items.length} Unit${this.items.length === 1 ? "" : "s"} open`}`
-        : "Probe grouping unavailable";
+        ? this.t("probe.count", { count: this.probeIds.length, status: this.visibleSegments.length ? this.t("probe.trackReady") : this.t("probe.openUnits", { count: this.items.length }) })
+        : this.t("probe.groupingUnavailable");
       this.renderLegend();
       this.renderNearby([], null, null);
       if (!focused) {
@@ -231,11 +240,11 @@
       if (!this.elements.trackStatus) return;
       if (!this.regionTrack) {
         this.elements.trackStatus.className = "mapping-contract-state missing";
-        this.elements.trackStatus.textContent = "No compatible Probe-region mapping";
+        this.elements.trackStatus.textContent = this.t("probe.noTrack");
         return;
       }
       this.elements.trackStatus.className = "mapping-contract-state ready";
-      this.elements.trackStatus.textContent = `${this.regionTrack.source} · ${this.regionTrack.rowCount.toLocaleString()} electrode rows · ${this.regionTrack.probeCount} Probes`;
+      this.elements.trackStatus.textContent = this.t("probe.trackStatus", { source: this.regionTrack.source, rows: this.regionTrack.rowCount.toLocaleString(), probes: this.regionTrack.probeCount });
     }
 
     renderReadout(focused) {
@@ -244,29 +253,29 @@
       const physicalProbeId = finite(result.physicalProbeId);
       const trackRegion = physicalProbeId == null || finite(position?.y) == null ? null : this.regionAt(physicalProbeId, finite(position.y));
       const resolvedRegion = region?.region ? region : trackRegion ? { region: trackRegion.region, color: trackRegion.color, source: this.regionTrack?.source } : null;
-      this.elements.unit.textContent = `Unit ${clusterId} · ${recording.name}`;
-      this.elements.region.textContent = resolvedRegion?.region || "UNMAPPED";
+      this.elements.unit.textContent = this.t("probe.selected", { id: clusterId, recording: recording.name });
+      this.elements.region.textContent = resolvedRegion?.region || this.t("probe.unmapped");
       this.elements.region.style.setProperty("--region-color", regionColor(resolvedRegion?.color || focused.color, "#59616a"));
-      this.elements.physical.textContent = physicalProbeId == null ? "Unavailable" : `Probe ${physicalProbeId + 1}`;
-      this.elements.channel.textContent = result.peakChannel == null ? "Unavailable" : String(result.peakChannel);
-      this.elements.x.textContent = finite(position?.x) == null ? "Unavailable" : `${finite(position.x).toFixed(1)} \u00b5m`;
-      this.elements.depth.textContent = finite(position?.y) == null ? "Unavailable" : `${finite(position.y).toFixed(1)} \u00b5m`;
-      this.elements.source.textContent = resolvedRegion?.source || "No compatible region row";
+      this.elements.physical.textContent = physicalProbeId == null ? this.t("probe.unavailable") : `${this.t("probe.singular")} ${physicalProbeId + 1}`;
+      this.elements.channel.textContent = result.peakChannel == null ? this.t("probe.unavailable") : String(result.peakChannel);
+      this.elements.x.textContent = finite(position?.x) == null ? this.t("probe.unavailable") : `${finite(position.x).toFixed(1)} \u00b5m`;
+      this.elements.depth.textContent = finite(position?.y) == null ? this.t("probe.unavailable") : `${finite(position.y).toFixed(1)} \u00b5m`;
+      this.elements.source.textContent = resolvedRegion?.source || this.t("probe.noRegionRow");
       this.elements.note.textContent = this.regionTrack
-        ? `Brain-region bands come from ${this.regionTrack.source}. Faint ticks are channels; circles are selectable Units.`
-        : `${this.probeIds.length || 0} physical Probe group${this.probeIds.length === 1 ? "" : "s"} detected. Add a compatible Probe-region CSV to draw anatomical bands.`;
+        ? this.t("probe.bandSource", { source: this.regionTrack.source })
+        : this.t("probe.addTrackNote", { count: this.probeIds.length || 0 });
     }
 
     clearReadout() {
-      this.elements.unit.textContent = "No Unit selected";
-      this.elements.region.textContent = "UNMAPPED";
+      this.elements.unit.textContent = this.t("review.noSelected");
+      this.elements.region.textContent = this.t("probe.unmapped");
       this.elements.region.style.setProperty("--region-color", "#59616a");
       this.elements.physical.textContent = "—";
       this.elements.channel.textContent = "—";
       this.elements.x.textContent = "—";
       this.elements.depth.textContent = "—";
       this.elements.source.textContent = "—";
-      this.elements.note.textContent = "Select a Unit or click a Probe marker to inspect the linked signal.";
+      this.elements.note.textContent = this.t("probe.selectNote");
     }
 
     renderLegend() {
@@ -281,8 +290,8 @@
         const dot = document.createElement("i");
         const title = document.createElement("strong");
         const description = document.createElement("span");
-        title.textContent = `Unit ${item.clusterId}`;
-        description.textContent = `Probe ${Number(item.result.physicalProbeId ?? 0) + 1} · ${item.region?.region || "unmapped"}`;
+        title.textContent = this.t("probe.unitLabel", { id: item.clusterId });
+        description.textContent = `${this.t("probe.singular")} ${Number(item.result.physicalProbeId ?? 0) + 1} · ${item.region?.region || this.t("units.unmapped")}`;
         row.append(dot, title, description);
         return row;
       }));
@@ -291,17 +300,17 @@
     renderNearby(locations, targetDepth, segment) {
       if (!this.elements.nearbyList) return;
       this.elements.nearbyContext.textContent = targetDepth == null
-        ? "Click a Probe position"
+        ? this.t("probe.clickPosition")
         : `${segment?.region ? `${segment.region} · ` : ""}${targetDepth.toFixed(0)} \u00b5m`;
       if (!locations.length) {
-        this.elements.nearbyList.innerHTML = '<p class="nearby-empty">No nearby Unit selected</p>';
+        this.elements.nearbyList.innerHTML = `<p class="nearby-empty">${this.t("probe.noNearby")}</p>`;
         return;
       }
       this.elements.nearbyList.innerHTML = locations.map((location) => {
         const distance = Math.abs(Number(location.y) - Number(targetDepth));
         const quality = location.label?.quality || "unknown";
-        const region = this.regionForLocation(location)?.region || "unmapped";
-        return `<button type="button" data-cluster-id="${location.id}"><span><strong>Unit ${location.id}</strong><em>${quality} · ${region}</em></span><b>${distance.toFixed(0)} \u00b5m</b></button>`;
+        const region = this.regionForLocation(location)?.region || this.t("units.unmapped");
+        return `<button type="button" data-cluster-id="${location.id}"><span><strong>${this.t("probe.unitLabel", { id: location.id })}</strong><em>${quality} · ${region}</em></span><b>${distance.toFixed(0)} \u00b5m</b></button>`;
       }).join("");
     }
 
@@ -322,7 +331,7 @@
       this.hoveredTargetKey = null;
       this.lockedUnitId = null;
       this.lockedRecordingKey = null;
-      this.elements.count.textContent = "No Probe data";
+      this.elements.count.textContent = this.t("probe.noData");
       this.elements.legend.replaceChildren();
       this.updateTrackStatus();
       this.clearReadout();
@@ -399,9 +408,9 @@
     }
 
     unitDescription(location) {
-      const region = this.regionForLocation(location)?.region || "unmapped";
+      const region = this.regionForLocation(location)?.region || this.t("units.unmapped");
       const channel = finite(location?.peakChannel);
-      return `Unit ${Number(location.id)} · Probe ${Number(location.physicalProbeId) + 1} · ${Number(location.y).toFixed(0)} \u00b5m · ${region} · ${channel == null ? "channel unavailable" : `ch ${channel}`}`;
+      return `${this.t("probe.unitLabel", { id: Number(location.id) })} · ${this.t("probe.singular")} ${Number(location.physicalProbeId) + 1} · ${Number(location.y).toFixed(0)} \u00b5m · ${region} · ${channel == null ? this.t("probe.channelUnavailable") : `ch ${channel}`}`;
     }
 
     targetDescription(target) {
@@ -410,7 +419,7 @@
       const depths = target.markers.map((marker) => Number(marker.location.y));
       const minimum = Math.min(...depths).toFixed(0);
       const maximum = Math.max(...depths).toFixed(0);
-      return `${target.markers.length} overlapping Units · Probe ${Number(target.probeId) + 1} · ${minimum}–${maximum} \u00b5m · click to choose`;
+      return this.t("probe.overlapDescription", { count: target.markers.length, probe: Number(target.probeId) + 1, minimum, maximum });
     }
 
     handleCanvasMove(event) {
@@ -448,7 +457,7 @@
         if (panel) {
           const ratio = clamp((pointerY - this.layout.top) / Math.max(1, this.layout.bottom - this.layout.top), 0, 1);
           const depth = this.layout.maximumY - ratio * (this.layout.maximumY - this.layout.minimumY);
-          this.showTooltip(pointerX, pointerY, `Probe ${Number(panel.probeId) + 1} · ${this.hoveredSegment.region} · ${depth.toFixed(0)} \u00b5m`, false);
+          this.showTooltip(pointerX, pointerY, `${this.t("probe.singular")} ${Number(panel.probeId) + 1} · ${this.hoveredSegment.region} · ${depth.toFixed(0)} \u00b5m`, false);
           return;
         }
       }
@@ -490,7 +499,7 @@
         const rightOpen = right.open ? 1 : 0;
         return rightFocused - leftFocused || rightOpen - leftOpen || Number(left.location.id) - Number(right.location.id);
       });
-      if (this.elements.stackTitle) this.elements.stackTitle.textContent = `${sorted.length} UNITS · PROBE ${Number(target.probeId) + 1}`;
+      if (this.elements.stackTitle) this.elements.stackTitle.textContent = this.t("probe.stackTitle", { count: sorted.length, probe: Number(target.probeId) + 1 });
       list.replaceChildren(...sorted.map((marker) => {
         const button = document.createElement("button");
         button.type = "button";
@@ -502,8 +511,8 @@
         const title = document.createElement("strong");
         const meta = document.createElement("em");
         const depth = document.createElement("b");
-        const region = this.regionForLocation(marker.location)?.region || "unmapped";
-        title.textContent = `Unit ${marker.location.id}${marker.isFocused ? " · focused" : marker.open ? " · open" : ""}`;
+        const region = this.regionForLocation(marker.location)?.region || this.t("units.unmapped");
+        title.textContent = `${this.t("probe.unitLabel", { id: marker.location.id })}${marker.isFocused ? ` · ${this.t("probe.focused")}` : marker.open ? ` · ${this.t("units.open")}` : ""}`;
         meta.textContent = `${marker.location.label?.quality || "unknown"} · ${region} · ch ${finite(marker.location.peakChannel) ?? "—"}`;
         depth.textContent = `${Number(marker.location.y).toFixed(0)} \u00b5m`;
         body.append(title, meta);
@@ -603,7 +612,7 @@
         context.fillStyle = PROBE_THEME.emptyText;
         context.font = '10px "Cascadia Mono", Consolas, monospace';
         context.textAlign = "center";
-        context.fillText(this.items.length ? "Physical Probe grouping unavailable" : "Select a Unit", width / 2, height / 2);
+        context.fillText(this.items.length ? this.t("probe.groupingUnavailable") : this.t("review.selectUnit"), width / 2, height / 2);
         this.hideTooltip();
         return;
       }

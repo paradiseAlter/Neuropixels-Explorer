@@ -6,8 +6,14 @@
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="A local-first interactive explorer for Neuropixels units, signals, physical probes, and brain regions.">
   <title>Neuropixels Explorer 3.1.0</title>
+  <script src="./scripts/i18n.js?v=3.2.0-dev"></script>
   <script src="./scripts/theme.js?v=3.2.0-dev"></script>
   <script>
+    window.neuropixelsLanguageController = new window.NeuropixelsI18n.LanguageController({
+      root: document.documentElement,
+      storage: (() => { try { return window.localStorage; } catch { return null; } })(),
+      navigatorLanguage: window.navigator.language
+    });
     window.neuropixelsThemeController = new window.NeuropixelsTheme.ThemeController({
       root: document.documentElement,
       storage: (() => { try { return window.localStorage; } catch { return null; } })(),
@@ -20,80 +26,84 @@
   <div class="app-shell" id="app-shell">
     <header class="app-bar">
       <div class="app-title">
-        <strong>NEUROPIXELS EXPLORER</strong>
+        <strong data-i18n="app.title">NEUROPIXELS EXPLORER</strong>
         <span id="version-label">3.1.0</span>
       </div>
-      <div class="dataset-title" id="dataset-title">No folder loaded</div>
+      <div class="dataset-title" id="dataset-title" data-i18n="app.noFolder">No folder loaded</div>
       <div class="app-actions">
-        <label class="theme-picker" for="theme-select"><span>THEME</span><select id="theme-select" aria-label="Explorer theme"><option value="dark">Dark</option><option value="light">Light</option><option value="contrast">High Contrast</option><option value="system">System</option></select></label>
-        <button class="quiet-button" id="data-details-button" type="button" disabled>DATA DETAILS</button>
-        <button class="primary-button" id="open-folder-button" type="button">OPEN FOLDER</button>
+        <label class="preference-picker" for="language-select"><span data-i18n="app.language">LANGUAGE</span><select id="language-select" aria-label="Explorer language" data-i18n-aria-label="app.languageAria"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="es">Español</option></select></label>
+        <label class="preference-picker" for="theme-select"><span data-i18n="app.theme">THEME</span><select id="theme-select" aria-label="Explorer theme" data-i18n-aria-label="app.themeAria"><option value="dark" data-i18n="theme.dark">Dark</option><option value="light" data-i18n="theme.light">Light</option><option value="contrast" data-i18n="theme.contrast">High Contrast</option><option value="system" data-i18n="theme.system">System</option></select></label>
+        <button class="quiet-button" id="help-button" type="button" aria-haspopup="dialog" aria-controls="help-drawer" data-i18n="app.help">HELP</button>
+        <button class="quiet-button" id="data-details-button" type="button" disabled data-i18n="app.dataDetails">DATA DETAILS</button>
+        <button class="primary-button" id="open-folder-button" type="button" data-i18n="app.openFolder">OPEN FOLDER</button>
       </div>
     </header>
 
     <main class="main-content">
       <section class="empty-view" id="empty-view">
-        <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="Drop or choose a Neuropixels data folder">
+        <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="Drop or choose a Neuropixels data folder" data-i18n-aria-label="empty.aria">
           <div class="folder-mark" aria-hidden="true"><span></span></div>
-          <strong>DROP SESSION FOLDER</strong>
-          <p>KiloSort recordings and physical Probe groups are detected automatically.</p>
-          <button class="secondary-button" id="empty-open-button" type="button">CHOOSE FOLDER</button>
+          <strong data-i18n="empty.drop">DROP SESSION FOLDER</strong>
+          <p data-i18n="empty.description">KiloSort recordings and physical Probe groups are detected automatically.</p>
+          <button class="secondary-button" id="empty-open-button" type="button" data-i18n="empty.choose">CHOOSE FOLDER</button>
         </div>
       </section>
 
       <section class="loading-view" id="loading-view" hidden aria-live="polite">
         <div class="loading-track"><span id="loading-progress"></span></div>
-        <strong id="loading-title">Inspecting folder</strong>
-        <p id="loading-message">Finding KiloSort recordings and readable metadata.</p>
+        <strong id="loading-title" data-i18n="loading.inspectTitle">Inspecting folder</strong>
+        <p id="loading-message" data-i18n="loading.inspectMessage">Finding KiloSort recordings and readable metadata.</p>
       </section>
 
       <section class="explorer-view" id="explorer-view" hidden>
-        <section class="dataset-summary" aria-label="Loaded data summary">
+        <section class="dataset-summary" aria-label="Loaded data summary" data-i18n-aria-label="summary.aria">
           <div class="summary-numbers" id="summary-numbers"></div>
           <div class="data-status" id="capability-row">
-            <button class="data-status-button" id="data-status-button" type="button" aria-expanded="false" aria-controls="data-status-popover"><i></i><span id="data-status-summary">Data status</span><b aria-hidden="true">⌄</b></button>
-            <div class="data-status-popover" id="data-status-popover" role="region" aria-label="Detailed data status" hidden>
-              <header><div><strong>DATA STATUS</strong><span id="data-status-context">Loaded dataset</span></div><button id="close-data-status" type="button" aria-label="Close data status">×</button></header>
+            <button class="context-help" type="button" data-help-key="tips.dataStatus" data-help-topic="status.summary">?</button>
+            <button class="data-status-button" id="data-status-button" type="button" aria-expanded="false" aria-controls="data-status-popover"><i></i><span id="data-status-summary" data-i18n="status.summary">Data status</span><b aria-hidden="true">⌄</b></button>
+            <div class="data-status-popover" id="data-status-popover" role="region" aria-label="Detailed data status" data-i18n-aria-label="status.detailAria" hidden>
+              <header><div><strong data-i18n="status.title">DATA STATUS</strong><span id="data-status-context" data-i18n="status.loadedDataset">Loaded dataset</span></div><button id="close-data-status" type="button" aria-label="Close data status" data-i18n-aria-label="status.close">×</button></header>
               <div id="data-status-groups"></div>
             </div>
           </div>
         </section>
 
-        <nav class="recording-strip" id="recording-strip" aria-label="Detected recordings"></nav>
+        <nav class="recording-strip" id="recording-strip" aria-label="Detected recordings" data-i18n-aria-label="recordings.aria"></nav>
 
         <div class="review-layout" id="review-layout">
-          <aside class="unit-panel" id="unit-panel" aria-label="Units">
+          <aside class="unit-panel" id="unit-panel" aria-label="Units" data-i18n-aria-label="units.aria">
             <header class="unit-panel-header">
-              <div>
-                <strong>UNITS</strong>
+              <div class="panel-heading-row">
+                <span class="heading-with-help"><strong data-i18n="units.title">UNITS</strong><button class="context-help" type="button" data-help-key="tips.unitList" data-help-topic="units.title">?</button></span>
                 <span id="unit-count-label">0</span>
               </div>
               <label class="unit-search">
-                <span class="sr-only">Search units</span>
-                <input id="unit-search" type="search" placeholder="Search ID or region" autocomplete="off">
+                <span class="sr-only" data-i18n="units.searchLabel">Search Units</span>
+                <input id="unit-search" type="search" placeholder="Search ID or region" data-i18n-placeholder="units.searchPlaceholder" autocomplete="off">
               </label>
-              <div class="quality-filter" id="quality-filter" role="group" aria-label="Filter units by KiloSort label">
-                <button class="active" type="button" data-quality="all">ALL</button>
-                <button type="button" data-quality="good">GOOD</button>
-                <button type="button" data-quality="mua">MUA</button>
+              <div class="filter-caption"><span data-i18n="units.filterCaption">KiloSort label</span><button class="context-help" type="button" data-help-key="tips.qualityFilter" data-help-topic="units.filterAria">?</button></div>
+              <div class="quality-filter" id="quality-filter" role="group" aria-label="Filter Units by KiloSort label" data-i18n-aria-label="units.filterAria">
+                <button class="active" type="button" data-quality="all" data-i18n="units.all">ALL</button>
+                <button type="button" data-quality="good" data-i18n="units.good">GOOD</button>
+                <button type="button" data-quality="mua" data-i18n="units.mua">MUA</button>
               </div>
             </header>
-            <div class="unit-list" id="unit-list" role="listbox" aria-label="Available units"></div>
-            <footer class="unit-panel-help" id="unit-panel-help"><strong>CLICK</strong> open only · <strong>CTRL+CLICK</strong> add · <strong>RIGHT CLICK</strong> options</footer>
+            <div class="unit-list" id="unit-list" role="listbox" aria-label="Available Units" data-i18n-aria-label="units.availableAria"></div>
+            <footer class="unit-panel-help" id="unit-panel-help" data-i18n="units.help">CLICK open only · CTRL+CLICK add · RIGHT CLICK options</footer>
           </aside>
 
-          <div class="workspace-splitter" id="unit-panel-splitter" role="separator" aria-label="Resize Units and signal workspace" aria-orientation="vertical" aria-controls="unit-panel" tabindex="0">
+          <div class="workspace-splitter" id="unit-panel-splitter" role="separator" aria-label="Resize Units and signal workspace" data-i18n-aria-label="layout.unitSplitter" aria-orientation="vertical" aria-controls="unit-panel" tabindex="0">
             <button class="panel-collapse-button" id="unit-panel-toggle" type="button" aria-controls="unit-panel">‹</button>
           </div>
 
-          <section class="unit-review" aria-label="Selected unit review">
+          <section class="unit-review" aria-label="Selected Unit review" data-i18n-aria-label="review.aria">
             <header class="review-header">
               <div>
-                <div class="review-kicker" id="review-kicker">FOCUSED UNIT</div>
+                <div class="review-kicker" id="review-kicker" data-i18n="review.focused">FOCUSED UNIT</div>
                 <h1 id="review-title">—</h1>
-                <p id="review-subtitle">Select a unit to inspect its spike data.</p>
+                <p id="review-subtitle" data-i18n="review.select">Select a Unit to inspect its spike data.</p>
               </div>
-              <div class="review-state" id="review-state">IDLE</div>
+              <div class="review-state" id="review-state" data-i18n="review.idle">IDLE</div>
             </header>
 
             <div class="metric-row" id="metric-row"></div>
@@ -101,100 +111,100 @@
             <section class="plot-card primary-plot-card">
               <header class="plot-header">
                 <div class="plot-heading">
-                  <strong>MANUAL SPIKE REVIEW</strong>
+                  <span class="heading-with-help"><strong data-i18n="review.manual">MANUAL SPIKE REVIEW</strong><button class="context-help" type="button" data-help-key="tips.manualReview" data-help-topic="review.manual">?</button></span>
                   <span id="comparison-count-label">No Unit open · select a Unit from the left</span>
                 </div>
                 <div class="plot-controls" role="group" aria-label="Time view controls">
-                  <button class="time-link-button active" id="time-link-button" type="button" aria-pressed="true" title="Linked: zoom and pan every open Unit together">TIME LINKED</button>
+                  <span class="control-with-help"><button class="time-link-button active" id="time-link-button" type="button" aria-pressed="true" title="Linked: zoom and pan every open Unit together" data-i18n="controls.timeLinked" data-i18n-title="controls.linkedTitle">TIME LINKED</button><button class="context-help" type="button" data-help-key="tips.timeLink" data-help-topic="controls.timeLinked">?</button></span>
                   <span class="plot-control-divider" aria-hidden="true"></span>
-                  <button class="interaction-mode active" id="cursor-mode-button" type="button" aria-pressed="true" title="Cursor mode: inspect time without changing the view">CURSOR</button>
-                  <button class="interaction-mode" id="zoom-mode-button" type="button" aria-pressed="false" title="Zoom mode: drag anywhere in a signal or use the wheel at the pointer">ZOOM</button>
-                  <button class="interaction-mode" id="pan-mode-button" type="button" aria-pressed="false" title="Pan mode: drag anywhere in a signal or use the wheel to move through time">PAN</button>
-                  <button id="back-time-button" type="button" title="Return to the previous time view" disabled>BACK</button>
+                  <span class="control-with-help"><button class="interaction-mode active" id="cursor-mode-button" type="button" aria-pressed="true" title="Cursor mode: inspect time without changing the view" data-i18n="controls.cursor" data-i18n-title="controls.cursorTitle">CURSOR</button><button class="context-help" type="button" data-help-key="tips.cursor" data-help-topic="controls.cursor">?</button></span>
+                  <span class="control-with-help"><button class="interaction-mode" id="zoom-mode-button" type="button" aria-pressed="false" title="Zoom mode: drag anywhere in a signal or use the wheel at the pointer" data-i18n="controls.zoom" data-i18n-title="controls.zoomTitle">ZOOM</button><button class="context-help" type="button" data-help-key="tips.zoom" data-help-topic="controls.zoom">?</button></span>
+                  <span class="control-with-help"><button class="interaction-mode" id="pan-mode-button" type="button" aria-pressed="false" title="Pan mode: drag anywhere in a signal or use the wheel to move through time" data-i18n="controls.pan" data-i18n-title="controls.panTitle">PAN</button><button class="context-help" type="button" data-help-key="tips.pan" data-help-topic="controls.pan">?</button></span>
+                  <button id="back-time-button" type="button" title="Return to the previous time view" data-i18n="controls.back" data-i18n-title="controls.backTitle" disabled>BACK</button>
                   <span class="plot-control-divider" aria-hidden="true"></span>
-                  <button id="zoom-out-button" type="button" aria-label="Zoom out">−</button>
-                  <button id="zoom-in-button" type="button" aria-label="Zoom in">+</button>
-                  <button id="reset-time-button" type="button">RESET</button>
+                  <button id="zoom-out-button" type="button" aria-label="Zoom out" data-i18n-aria-label="controls.zoomOut">−</button>
+                  <button id="zoom-in-button" type="button" aria-label="Zoom in" data-i18n-aria-label="controls.zoomIn">+</button>
+                  <button id="reset-time-button" type="button" data-i18n="controls.reset">RESET</button>
                 </div>
               </header>
-              <div class="manual-review-empty" id="manual-review-empty" hidden>Select a Unit from the left to open its signal.</div>
+              <div class="manual-review-empty" id="manual-review-empty" hidden data-i18n="review.empty">Select a Unit from the left to open its signal.</div>
               <article class="trace-lane active" id="primary-trace-lane" data-view-key="primary">
                 <header class="trace-lane-header">
-                  <div class="trace-identity"><i></i><strong id="primary-trace-title">Unit —</strong><span id="primary-trace-meta">Select a Unit from the list</span></div>
-                  <div class="trace-lane-actions"><span class="trace-window" id="time-window-label">—</span><button class="trace-remove" id="primary-trace-remove" type="button" aria-label="Close primary signal" title="Close this signal">×</button></div>
+                  <div class="trace-identity"><i></i><strong id="primary-trace-title" data-i18n="review.unitPlaceholder">Unit —</strong><span id="primary-trace-meta" data-i18n="review.selectFromList">Select a Unit from the list</span></div>
+                  <div class="trace-lane-actions"><span class="trace-window" id="time-window-label">—</span><button class="trace-remove" id="primary-trace-remove" type="button" aria-label="Close primary signal" data-i18n-aria-label="review.closePrimarySignal" title="Close this signal" data-i18n-title="review.closeSignalTitle">×</button></div>
                 </header>
                 <div class="canvas-frame detail-frame" id="spike-detail-frame" data-interaction-mode="cursor">
-                  <canvas id="spike-detail-canvas" tabindex="0" aria-label="Detailed spike raster and firing rate"></canvas>
+                  <canvas id="spike-detail-canvas" tabindex="0" aria-label="Detailed spike raster and firing rate" data-i18n-aria-label="plots.detailAria"></canvas>
                   <div class="zoom-selection" id="zoom-selection" hidden><span id="zoom-selection-label"></span></div>
                   <div class="plot-cursor" id="primary-plot-cursor" hidden><span id="primary-plot-cursor-label"></span></div>
-                  <div class="canvas-empty" id="spike-detail-empty">Select a unit</div>
+                  <div class="canvas-empty" id="spike-detail-empty" data-i18n="review.selectUnit">Select a Unit</div>
                 </div>
               </article>
               <div class="comparison-traces" id="comparison-traces" aria-live="polite"></div>
-              <div class="overview-label" id="primary-overview-label"><span>PRIMARY UNIT · FULL RECORDING</span><em>Click or drag to move its detail window</em></div>
+              <div class="overview-label" id="primary-overview-label"><span class="heading-with-help"><span data-i18n="review.fullRecording">PRIMARY UNIT · FULL RECORDING</span><button class="context-help" type="button" data-help-key="tips.overview" data-help-topic="review.fullRecording">?</button></span><em data-i18n="review.overviewHint">Click or drag to move its detail window</em></div>
               <div class="canvas-frame overview-frame" id="primary-overview-frame">
-                <canvas id="spike-overview-canvas" aria-label="Full recording spike density overview"></canvas>
+                <canvas id="spike-overview-canvas" aria-label="Full recording spike density overview" data-i18n-aria-label="plots.overviewAria"></canvas>
               </div>
-              <footer class="interaction-hint"><strong>CURSOR</strong> inspect time · <strong>ZOOM</strong> drag or wheel anywhere in a signal · <strong>PAN</strong> drag or wheel through time · <strong>DOUBLE CLICK</strong> reset</footer>
+              <footer class="interaction-hint" data-i18n="review.interactionHint">CURSOR inspect time · ZOOM drag or wheel anywhere in a signal · PAN drag or wheel through time · DOUBLE CLICK reset</footer>
             </section>
 
-            <div class="details-context" id="details-context"><i></i><strong>DETAILS FOR</strong><span id="details-focus-label">No Unit selected</span></div>
+            <div class="details-context" id="details-context"><i></i><strong data-i18n="review.detailsFor">DETAILS FOR</strong><span id="details-focus-label" data-i18n="review.noSelected">No Unit selected</span></div>
             <div class="secondary-plots">
               <section class="plot-card">
-                <header class="plot-header"><div><strong>AMPLITUDE STABILITY</strong><span>Relative amplitude across the recording</span></div></header>
-                <div class="canvas-frame small-frame"><canvas id="amplitude-canvas" aria-label="Spike amplitude over time"></canvas><div class="canvas-empty" id="amplitude-empty">Not available</div></div>
+                <header class="plot-header"><div><span class="heading-with-help"><strong data-i18n="plots.amplitude">AMPLITUDE STABILITY</strong><button class="context-help" type="button" data-help-key="tips.amplitude" data-help-topic="plots.amplitude">?</button></span><span data-i18n="plots.amplitudeSubtitle">Relative amplitude across the recording</span></div></header>
+                <div class="canvas-frame small-frame"><canvas id="amplitude-canvas" aria-label="Spike amplitude over time" data-i18n-aria-label="plots.amplitudeAria"></canvas><div class="canvas-empty" id="amplitude-empty" data-i18n="plots.notAvailable">Not available</div></div>
               </section>
               <section class="plot-card">
-                <header class="plot-header"><div><strong>AUTOCORRELOGRAM</strong><span>±100 ms · 2 ms bins</span></div></header>
-                <div class="canvas-frame small-frame"><canvas id="acg-canvas" aria-label="Unit autocorrelogram"></canvas><div class="canvas-empty" id="acg-empty">Not available</div></div>
+                <header class="plot-header"><div><span class="heading-with-help"><strong data-i18n="plots.acg">AUTOCORRELOGRAM</strong><button class="context-help" type="button" data-help-key="tips.autocorrelogram" data-help-topic="plots.acg">?</button></span><span data-i18n="plots.acgSubtitle">±100 ms · 2 ms bins</span></div></header>
+                <div class="canvas-frame small-frame"><canvas id="acg-canvas" aria-label="Unit autocorrelogram" data-i18n-aria-label="plots.acgAria"></canvas><div class="canvas-empty" id="acg-empty" data-i18n="plots.notAvailable">Not available</div></div>
               </section>
               <section class="plot-card">
-                <header class="plot-header"><div><strong>KILOSORT TEMPLATE</strong><span id="template-label">Peak channel · arbitrary units</span></div></header>
-                <div class="canvas-frame small-frame"><canvas id="template-canvas" aria-label="KiloSort template waveform"></canvas><div class="canvas-empty" id="template-empty">Not available</div></div>
+                <header class="plot-header"><div><span class="heading-with-help"><strong data-i18n="plots.template">KILOSORT TEMPLATE</strong><button class="context-help" type="button" data-help-key="tips.template" data-help-topic="plots.template">?</button></span><span id="template-label" data-i18n="review.templateDefault">Peak channel · arbitrary units</span></div></header>
+                <div class="canvas-frame small-frame"><canvas id="template-canvas" aria-label="KiloSort template waveform" data-i18n-aria-label="plots.templateAria"></canvas><div class="canvas-empty" id="template-empty" data-i18n="plots.notAvailable">Not available</div></div>
               </section>
             </div>
           </section>
 
-          <div class="workspace-splitter" id="probe-panel-splitter" role="separator" aria-label="Resize signal workspace and Probe Inspector" aria-orientation="vertical" aria-controls="spatial-panel" tabindex="0">
+          <div class="workspace-splitter" id="probe-panel-splitter" role="separator" aria-label="Resize signal workspace and Probe Inspector" data-i18n-aria-label="layout.probeSplitter" aria-orientation="vertical" aria-controls="spatial-panel" tabindex="0">
             <button class="panel-collapse-button" id="probe-panel-toggle" type="button" aria-controls="spatial-panel">›</button>
           </div>
 
-          <aside class="spatial-panel" id="spatial-panel" aria-label="Physical Probes and brain-region location">
+          <aside class="spatial-panel" id="spatial-panel" aria-label="Physical Probes and brain-region location" data-i18n-aria-label="probe.panelAria">
             <header class="spatial-panel-header">
-              <div><strong>PHYSICAL PROBES</strong><span id="probe-count">No Probe data</span></div>
-              <span class="region-badge" id="probe-region">UNMAPPED</span>
+              <div><span class="heading-with-help"><strong data-i18n="probe.title">PHYSICAL PROBES</strong><button class="context-help" type="button" data-help-key="tips.probe" data-help-topic="probe.title">?</button></span><span id="probe-count" data-i18n="probe.noData">No Probe data</span></div>
+              <span class="region-badge" id="probe-region" data-i18n="probe.unmapped">UNMAPPED</span>
             </header>
             <section class="probe-card">
-              <strong id="probe-unit">No Unit selected</strong>
+              <strong id="probe-unit" data-i18n="review.noSelected">No Unit selected</strong>
               <div class="probe-canvas-wrap">
-                <canvas id="probe-canvas" tabindex="0" aria-label="Physical Probe overview, brain-region track, and Unit positions"></canvas>
+                <canvas id="probe-canvas" tabindex="0" aria-label="Physical Probe overview, brain-region track, and Unit positions" data-i18n-aria-label="probe.canvasAria"></canvas>
                 <div class="probe-tooltip" id="probe-tooltip" hidden></div>
-                <div class="probe-stack-menu" id="probe-stack-menu" role="menu" aria-label="Overlapping Units at this Probe depth" hidden>
-                  <header><strong id="probe-stack-title">UNITS AT THIS DEPTH</strong><span>Click to open · Ctrl-click to add</span></header>
+                <div class="probe-stack-menu" id="probe-stack-menu" role="menu" aria-label="Overlapping Units at this Probe depth" data-i18n-aria-label="probe.overlapAria" hidden>
+                  <header><strong id="probe-stack-title" data-i18n="probe.unitsAtDepth">UNITS AT THIS DEPTH</strong><span data-i18n="probe.overlapHint">Click to open · Ctrl-click to add</span></header>
                   <div id="probe-stack-list"></div>
                 </div>
               </div>
-              <div class="probe-layer-key" aria-label="Probe display layers"><span class="regions">BRAIN REGIONS</span><span class="channels">CHANNEL TICKS</span><span class="units">UNITS</span></div>
-              <div class="probe-legend" id="probe-legend" aria-label="Units shown on the Probe"></div>
+              <div class="probe-layer-key" aria-label="Probe display layers" data-i18n-aria-label="probe.layersAria"><span class="regions" data-i18n="probe.regions">BRAIN REGIONS</span><span class="channels" data-i18n="probe.channels">CHANNEL TICKS</span><span class="units" data-i18n="probe.units">UNITS</span></div>
+              <div class="probe-legend" id="probe-legend" aria-label="Units shown on the Probe" data-i18n-aria-label="probe.legendAria"></div>
             </section>
             <section class="position-readout">
-              <div><span>PHYSICAL PROBE</span><strong id="probe-physical">—</strong></div>
-              <div><span>PEAK CHANNEL</span><strong id="probe-channel">—</strong></div>
-              <div><span>X POSITION</span><strong id="probe-x">—</strong></div>
-              <div><span>DEPTH</span><strong id="probe-depth">—</strong></div>
-              <div class="position-source"><span>REGION SOURCE</span><strong id="probe-source">—</strong></div>
+              <div><span data-i18n="probe.physical">PHYSICAL PROBE</span><strong id="probe-physical">—</strong></div>
+              <div><span data-i18n="probe.peakChannel">PEAK CHANNEL</span><strong id="probe-channel">—</strong></div>
+              <div><span data-i18n="probe.xPosition">X POSITION</span><strong id="probe-x">—</strong></div>
+              <div><span data-i18n="probe.depth">DEPTH</span><strong id="probe-depth">—</strong></div>
+              <div class="position-source"><span data-i18n="probe.regionSource">REGION SOURCE</span><strong id="probe-source">—</strong></div>
             </section>
-            <p class="position-note" id="probe-note">Select a Unit or click a Probe marker to inspect the linked signal.</p>
-            <section class="nearby-units" aria-label="Nearby Units">
-              <header><strong>NEARBY UNITS</strong><span id="nearby-context">Click a Probe position</span></header>
+            <p class="position-note" id="probe-note" data-i18n="probe.selectNote">Select a Unit or click a Probe marker to inspect the linked signal.</p>
+            <section class="nearby-units" aria-label="Nearby Units" data-i18n-aria-label="probe.nearbyAria">
+              <header><span class="heading-with-help"><strong data-i18n="probe.nearby">NEARBY UNITS</strong><button class="context-help" type="button" data-help-key="tips.nearbyUnits" data-help-topic="probe.nearby">?</button></span><span id="nearby-context" data-i18n="probe.clickPosition">Click a Probe position</span></header>
               <div id="nearby-unit-list"></div>
             </section>
             <section class="mapping-status">
-              <strong>POSITION CONTRACT</strong>
-              <p><span class="status-ready">READY</span> Physical Probe groups from <code>channel_shanks.npy</code></p>
-              <p><span class="status-ready">READY</span> Unit region from the loaded Legacy Table</p>
-              <p><span class="status-ready">TRACK</span> <span class="mapping-contract-state missing" id="probe-track-status">No compatible Probe-region mapping</span></p>
-              <p class="mapping-contract-help">Required CSV columns: <code>probe/shank</code>, <code>depth_um</code>, <code>region</code>. Recommended: <code>electrode</code>, <code>atlas_id</code>, <code>color</code>, and <code>recording_id</code> for session-specific tracks.</p>
+              <span class="heading-with-help"><strong data-i18n="probe.positionContract">POSITION CONTRACT</strong><button class="context-help" type="button" data-help-key="tips.positionContract" data-help-topic="probe.positionContract">?</button></span>
+              <p><span class="status-ready" data-i18n="probe.ready">READY</span> <span data-i18n="probe.groupSource">Physical Probe groups from</span> <code>channel_shanks.npy</code></p>
+              <p><span class="status-ready" data-i18n="probe.ready">READY</span> <span data-i18n="probe.regionSourceLegacy">Unit region from the loaded Legacy Table</span></p>
+              <p><span class="status-ready" data-i18n="probe.track">TRACK</span> <span class="mapping-contract-state missing" id="probe-track-status" data-i18n="probe.noTrack">No compatible Probe-region mapping</span></p>
+              <p class="mapping-contract-help"><span data-i18n="probe.requiredColumns">Required CSV columns:</span> <code>probe/shank</code>, <code>depth_um</code>, <code>region</code>. <span data-i18n="probe.recommendedColumns">Recommended:</span> <code>electrode</code>, <code>atlas_id</code>, <code>color</code>, and <code>recording_id</code> <span data-i18n="probe.sessionTracks">for session-specific tracks.</span></p>
             </section>
           </aside>
         </div>
@@ -204,27 +214,39 @@
     <input id="folder-input" type="file" webkitdirectory multiple hidden>
 
     <div class="drop-overlay" id="drop-overlay" hidden>
-      <strong>DROP TO OPEN FOLDER</strong>
+      <strong data-i18n="drop.open">DROP TO OPEN FOLDER</strong>
     </div>
 
     <dialog class="data-dialog" id="data-dialog">
-      <header><div><strong>DATA DETAILS</strong><span id="dialog-folder-name"></span></div><button id="close-data-dialog" type="button" aria-label="Close">×</button></header>
+      <header><div><strong data-i18n="dialog.title">DATA DETAILS</strong><span id="dialog-folder-name"></span></div><button id="close-data-dialog" type="button" aria-label="Close" data-i18n-aria-label="dialog.close">×</button></header>
       <div class="dialog-body" id="dialog-body"></div>
     </dialog>
 
-    <div class="unit-context-menu" id="unit-context-menu" role="menu" aria-label="Unit actions" hidden>
-      <div class="unit-context-title" id="unit-context-title">Unit actions</div>
-      <button type="button" role="menuitem" data-unit-action="open-only">Open only</button>
-      <button type="button" role="menuitem" data-unit-action="add">Add to current view</button>
-      <button type="button" role="menuitem" data-unit-action="remove">Remove from view</button>
-      <button type="button" role="menuitem" data-unit-action="locate">Locate on Probe</button>
+    <div class="unit-context-menu" id="unit-context-menu" role="menu" aria-label="Unit actions" data-i18n-aria-label="context.aria" hidden>
+      <div class="unit-context-title" id="unit-context-title" data-i18n="context.title">Unit actions</div>
+      <button type="button" role="menuitem" data-unit-action="open-only" data-i18n="context.openOnly">Open only</button>
+      <button type="button" role="menuitem" data-unit-action="add" data-i18n="context.add">Add to current view</button>
+      <button type="button" role="menuitem" data-unit-action="remove" data-i18n="context.remove">Remove from view</button>
+      <button type="button" role="menuitem" data-unit-action="locate" data-i18n="context.locate">Locate on Probe</button>
     </div>
+
+    <div class="help-backdrop" id="help-backdrop" hidden></div>
+    <aside class="help-drawer" id="help-drawer" role="dialog" aria-modal="true" aria-label="Neuropixels Explorer user guide" data-i18n-aria-label="help.drawerAria" hidden>
+      <header>
+        <div><strong data-i18n="help.title">USER GUIDE</strong><span data-i18n="help.currentLanguage">Guide language follows the Explorer language.</span></div>
+        <button id="close-help-button" type="button" aria-label="Close user guide" data-i18n-aria-label="help.close">×</button>
+      </header>
+      <article class="help-content" id="help-content" tabindex="0"></article>
+    </aside>
+
+    <div class="context-tooltip" id="context-tooltip" role="tooltip" hidden></div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
   <script src="./scripts/kilosort-core.js" defer></script>
   <script src="./scripts/region-core.js" defer></script>
+  <script src="./scripts/help-content.js?v=3.2.0-dev" defer></script>
   <script src="./scripts/data-status.js?v=3.2.0-dev" defer></script>
   <script src="./scripts/plots.js" defer></script>
   <script src="./scripts/probe-view.js?v=3.2.0-dev" defer></script>

@@ -9,9 +9,14 @@
   const setProbeTheme = window.NeuropixelProbeView.setProbeTheme;
   const dataStatusApi = window.NeuropixelsDataStatus;
   const themeController = window.neuropixelsThemeController;
+  const i18nApi = window.NeuropixelsI18n;
+  const languageController = window.neuropixelsLanguageController;
+  const helpContent = window.NeuropixelsHelpContent;
   const databaseClient = window.NeuropixelDatabaseClient;
   const WorkspaceLayout = window.NeuropixelsWorkspaceLayout.WorkspaceLayout;
   let themeSnapshot = themeController.snapshot();
+  let languageSnapshot = languageController.snapshot();
+  const t = (key, values) => languageController.t(key, values);
   setPlotTheme(themeSnapshot.palette.canvas);
   setProbeTheme(themeSnapshot.palette.probe);
 
@@ -37,6 +42,13 @@
     dataStatusGroups: document.getElementById("data-status-groups"),
     closeDataStatus: document.getElementById("close-data-status"),
     themeSelect: document.getElementById("theme-select"),
+    languageSelect: document.getElementById("language-select"),
+    helpButton: document.getElementById("help-button"),
+    helpDrawer: document.getElementById("help-drawer"),
+    helpBackdrop: document.getElementById("help-backdrop"),
+    closeHelp: document.getElementById("close-help-button"),
+    helpContent: document.getElementById("help-content"),
+    contextTooltip: document.getElementById("context-tooltip"),
     recordingStrip: document.getElementById("recording-strip"),
     unitCount: document.getElementById("unit-count-label"),
     unitSearch: document.getElementById("unit-search"),
@@ -125,6 +137,9 @@
     interactionMode: "cursor"
   };
 
+  let helpReturnFocus = null;
+  let activeHelpControl = null;
+
   const workspaceLayout = new WorkspaceLayout({
     layout: document.getElementById("review-layout"),
     unitPanel: document.getElementById("unit-panel"),
@@ -178,7 +193,7 @@
     stackList: elements.probeStackList,
     trackStatus: elements.probeTrackStatus
   }, (interaction) => handleProbeUnitInteraction(interaction), ({ probeId, depth, segment }) => {
-    showToast(`Probe ${Number(probeId) + 1} · ${segment?.region || "unmapped"} · ${depth.toFixed(0)} µm · nearby Units shown`);
+    showToast(t("toast.probePosition", { probe: Number(probeId) + 1, region: segment?.region || t("units.unmapped"), depth: depth.toFixed(0) }));
   });
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -210,6 +225,123 @@
     syncProbeView();
   }
 
+  function localizeHelpControls() {
+    document.querySelectorAll(".context-help[data-help-key]").forEach((button) => {
+      const topic = t(button.dataset.helpTopic || button.dataset.helpKey);
+      button.setAttribute("aria-label", t("help.tipAria", { topic }));
+    });
+  }
+
+  function renderHelpContent() {
+    const content = helpContent?.[languageSnapshot.language] || helpContent?.en;
+    elements.helpContent.innerHTML = content?.html || "";
+    elements.helpContent.scrollTop = 0;
+  }
+
+  function openHelp() {
+    helpReturnFocus = document.activeElement;
+    renderHelpContent();
+    elements.helpDrawer.hidden = false;
+    elements.helpBackdrop.hidden = false;
+    elements.helpButton.setAttribute("aria-expanded", "true");
+    elements.closeHelp.focus({ preventScroll: true });
+  }
+
+  function closeHelp({ restoreFocus = true } = {}) {
+    elements.helpDrawer.hidden = true;
+    elements.helpBackdrop.hidden = true;
+    elements.helpButton.setAttribute("aria-expanded", "false");
+    if (restoreFocus && helpReturnFocus?.focus) helpReturnFocus.focus({ preventScroll: true });
+    helpReturnFocus = null;
+  }
+
+  function positionContextTooltip(control) {
+    const margin = 8;
+    const gap = 7;
+    const rectangle = control.getBoundingClientRect();
+    const tooltip = elements.contextTooltip;
+    const width = tooltip.offsetWidth;
+    const height = tooltip.offsetHeight;
+    let left = rectangle.left + rectangle.width / 2 - width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+    let top = rectangle.bottom + gap;
+    if (top + height > window.innerHeight - margin) top = rectangle.top - height - gap;
+    top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  }
+
+  function showContextHelp(control) {
+    if (!control?.dataset.helpKey) return;
+    if (activeHelpControl && activeHelpControl !== control) hideContextHelp(activeHelpControl);
+    activeHelpControl = control;
+    elements.contextTooltip.textContent = t(control.dataset.helpKey);
+    elements.contextTooltip.hidden = false;
+    control.setAttribute("aria-describedby", "context-tooltip");
+    control.setAttribute("aria-expanded", "true");
+    positionContextTooltip(control);
+  }
+
+  function hideContextHelp(control = activeHelpControl) {
+    if (!control || control !== activeHelpControl) return;
+    control.removeAttribute("aria-describedby");
+    control.setAttribute("aria-expanded", "false");
+    elements.contextTooltip.hidden = true;
+    activeHelpControl = null;
+  }
+
+  function applyLanguageSnapshot(next) {
+    languageSnapshot = next;
+    elements.languageSelect.value = next.language;
+    i18nApi.translateDocument(document, next.language);
+    localizeHelpControls();
+    probeViewer.setTranslator?.(t);
+    workspaceLayout.setTranslator?.(t);
+    if (!elements.helpDrawer.hidden) renderHelpContent();
+    if (activeHelpControl) showContextHelp(activeHelpControl);
+    if (state.recordings.length) {
+      renderSummary();
+      renderRecordings();
+      renderUnitList();
+      updateOpenUnitCount();
+      refreshOpenUnitLabels();
+      const focused = focusedEntry();
+      if (focused) {
+        renderFocusedDetails(focused);
+        setReviewState(t(state.dataMode === "database" ? "review.database" : focused.result?.fallback ? "review.mainThread" : "review.ready"), "ready");
+      }
+      else clearFocusedDetails();
+      renderDialog();
+    } else {
+      elements.datasetTitle.textContent = t("app.noFolder");
+      clearFocusedDetails();
+      updateOpenUnitCount();
+    }
+    setTimeLinked(state.timeLinked);
+    syncProbeView();
+  }
+
+  function refreshOpenUnitLabels() {
+    const unitTerm = i18nApi.GLOSSARY.unit[languageSnapshot.language];
+    const spikeTerm = i18nApi.GLOSSARY.spike[languageSnapshot.language];
+    plotEntries().forEach((entry) => {
+      const label = labelFor(entry.recording, entry.clusterId);
+      const region = regionFor(entry.recording, entry.clusterId)?.region || t("review.regionShortUnmapped");
+      const meta = [entry.recording.name, label.quality, region, `${number(entry.result.spikeCount)} ${spikeTerm}`].join(" · ");
+      const title = entry.lane?.querySelector(".trace-identity strong");
+      const description = entry.lane?.querySelector(".trace-identity span");
+      const close = entry.lane?.querySelector(".trace-remove");
+      const canvas = entry.lane?.querySelector(".detail-frame canvas");
+      if (title) title.textContent = `${unitTerm} ${entry.clusterId}`;
+      if (description) description.textContent = meta;
+      if (close) {
+        close.setAttribute("aria-label", t("review.closeUnitSignal", { id: entry.clusterId }));
+        close.title = t("review.closeSignalTitle");
+      }
+      if (canvas) canvas.setAttribute("aria-label", `${unitTerm} ${entry.clusterId} · ${spikeTerm} · ${i18nApi.GLOSSARY.firingRate[languageSnapshot.language]}`);
+    });
+  }
+
   function viewKey(recording, clusterId) {
     return `${recording?.key || "recording"}::${Number(clusterId)}`;
   }
@@ -234,10 +366,10 @@
   function updateOpenUnitCount() {
     const count = state.openUnits.size;
     elements.comparisonCount.textContent = count === 0
-      ? "No Unit open · select a Unit from the left"
+      ? t("review.noUnitsHint")
       : count === 1
-        ? "1 Unit open · click another Unit to replace it · Ctrl+click to add"
-        : `${count} Units open · ${state.timeLinked ? "time axes linked" : "time axes independent"}`;
+        ? t("review.oneUnitHint")
+        : t("review.manyUnitsHint", { count, linkState: t(state.timeLinked ? "review.linkedAxes" : "review.independentAxes") });
   }
 
   function handlePlotWindow(key, view) {
@@ -336,10 +468,8 @@
     state.timeLinked = Boolean(linked);
     elements.timeLink.classList.toggle("active", state.timeLinked);
     elements.timeLink.setAttribute("aria-pressed", String(state.timeLinked));
-    elements.timeLink.textContent = state.timeLinked ? "TIME LINKED" : "TIME INDEPENDENT";
-    elements.timeLink.title = state.timeLinked
-      ? "Linked: zoom and pan every open Unit together"
-      : "Independent: zoom and pan only the selected trace";
+    elements.timeLink.textContent = t(state.timeLinked ? "controls.timeLinked" : "controls.timeIndependent");
+    elements.timeLink.title = t(state.timeLinked ? "controls.linkedTitle" : "controls.independentTitle");
     if (state.timeLinked) {
       const source = focusedEntry();
       if (!wasLinked) {
@@ -368,10 +498,10 @@
     elements.primaryOverviewLabel.hidden = true;
     elements.primaryOverviewFrame.hidden = true;
     elements.manualReviewEmpty.hidden = false;
-    elements.primaryTraceTitle.textContent = "Unit —";
-    elements.primaryTraceMeta.textContent = "Select a Unit from the list";
+    elements.primaryTraceTitle.textContent = t("review.unitPlaceholder");
+    elements.primaryTraceMeta.textContent = t("review.selectFromList");
     elements.timeWindow.textContent = "—";
-    setReviewState("IDLE");
+    setReviewState(t("review.idle"));
     clearFocusedDetails();
     syncProbeView();
     updateOpenUnitCount();
@@ -394,7 +524,7 @@
     if (!recording || !Number.isFinite(Number(clusterId))) return;
     const key = viewKey(recording, clusterId);
     state.contextUnit = { recording, clusterId: Number(clusterId), key };
-    elements.unitContextTitle.textContent = `Unit ${Number(clusterId)} · ${recording.name}`;
+    elements.unitContextTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${Number(clusterId)} · ${recording.name}`;
     const removeButton = elements.unitContextMenu.querySelector('[data-unit-action="remove"]');
     removeButton.disabled = !state.openUnits.has(key);
     elements.unitContextMenu.hidden = false;
@@ -412,7 +542,7 @@
     if (!state.openUnits.has(key)) return;
     probeViewer.focusUnit(key);
     elements.probeCanvas.scrollIntoView({ block: "center", behavior: "smooth" });
-    showToast(`Unit ${clusterId} located on the Probe`);
+    showToast(t("probe.locatedToast", { id: clusterId }));
   }
 
   async function runUnitContextAction(action) {
@@ -584,11 +714,11 @@
     const units = filteredUnits();
     elements.unitCount.textContent = `${units.length}/${recordingUnits(state.activeRecording).length}`;
     if (!units.length) {
-      elements.unitList.innerHTML = `<div class="unit-list-empty">No units match the current filter.</div>`;
+      elements.unitList.innerHTML = `<div class="unit-list-empty">${escapeHtml(t("units.none"))}</div>`;
       return;
     }
     elements.unitList.innerHTML = units.map((unit) => {
-      const region = regionFor(state.activeRecording, unit.id)?.region || "Unmapped";
+      const region = regionFor(state.activeRecording, unit.id)?.region || t("units.unmapped");
       const rate = Number.isFinite(unit.rateHz) ? `${unit.rateHz.toFixed(unit.rateHz < 10 ? 2 : 1)} Hz` : "— Hz";
       const spikes = Number.isFinite(unit.count) ? number(unit.count) : "—";
       const key = viewKey(state.activeRecording, unit.id);
@@ -596,12 +726,12 @@
       const open = state.openUnits.has(key);
       const loading = state.loadingUnits.has(key);
       return `<div class="unit-row ${focused ? "active" : ""} ${open ? "open" : ""}" role="option" aria-selected="${focused}">
-        <button class="unit-row-select" type="button" data-cluster-id="${unit.id}" aria-label="${loading ? `Loading Unit ${unit.id}` : `Open Unit ${unit.id}. Ctrl plus click adds it to the current view.`}" ${loading ? "disabled" : ""}>
+        <button class="unit-row-select" type="button" data-cluster-id="${unit.id}" aria-label="${escapeHtml(loading ? t("units.loadingAria", { id: unit.id }) : t("units.rowAria", { id: unit.id }))}" ${loading ? "disabled" : ""}>
           <span class="unit-row-main">
-            <span class="unit-row-title"><i class="quality-dot ${qualityTone(unit.quality)}"></i><strong>Unit ${unit.id}</strong></span>
+            <span class="unit-row-title"><i class="quality-dot ${qualityTone(unit.quality)}"></i><strong>${escapeHtml(i18nApi.GLOSSARY.unit[languageSnapshot.language])} ${unit.id}</strong></span>
             <small>${escapeHtml(unit.quality)} · ${escapeHtml(region)}</small>
           </span>
-          <span class="unit-row-metrics"><strong>${loading ? "READING" : rate}</strong><span>${spikes} spikes${open ? " · open" : ""}</span></span>
+          <span class="unit-row-metrics"><strong>${loading ? escapeHtml(t("units.loading")) : rate}</strong><span>${spikes} ${escapeHtml(i18nApi.GLOSSARY.spike[languageSnapshot.language])}${open ? ` · ${escapeHtml(t("units.open"))}` : ""}</span></span>
         </button>
       </div>`;
     }).join("");
@@ -610,30 +740,49 @@
   function renderRecordings() {
     elements.recordingStrip.innerHTML = state.recordings.map((recording) => `<button class="recording-button ${recording === state.activeRecording ? "active" : ""}" type="button" data-recording-key="${escapeHtml(recording.key)}">
       <strong>${escapeHtml(recording.name)}</strong>
-      <span>${number(recording.clusterLabels.length)} units · ${recording.duration.toFixed(1)} s</span>
+      <span>${escapeHtml(t("units.countMeta", { count: number(recording.clusterLabels.length), duration: recording.duration.toFixed(1) }))}</span>
     </button>`).join("");
     elements.recordingStrip.querySelector(".recording-button.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   function dataStatusGroup(title, items, emptyText) {
     const rows = items.length
-      ? items.map((item) => `<div class="data-status-item ${escapeHtml(item.state)}"><div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></div></div>`).join("")
+      ? items.map((item) => {
+        const localized = localizeDataStatusItem(item);
+        return `<div class="data-status-item ${escapeHtml(item.state)}"><div><strong>${escapeHtml(localized.label)}</strong><span>${escapeHtml(localized.detail)}</span></div></div>`;
+      }).join("")
       : `<p class="data-status-empty">${escapeHtml(emptyText)}</p>`;
     return `<section class="data-status-group"><header><span>${escapeHtml(title)}</span><b>${items.length}</b></header>${rows}</section>`;
   }
 
+  function localizeDataStatusItem(item) {
+    const coreKeys = { spikes: "spikeTiming", quality: "quality", amplitude: "amplitude", position: "position", template: "template", geometry: "geometry", probeGrouping: "probeGrouping" };
+    const suffix = coreKeys[item.key];
+    if (suffix) {
+      const coverage = item.coverage || { available: 0, total: 0 };
+      const filename = item.sourceDetail || item.detail?.split(" · ")[0] || "";
+      const stateText = t(item.state === "available" ? "status.file.availableAcross" : "status.file.missingAcross");
+      return { label: t(`status.file.${suffix}`), detail: `${filename} · ${coverage.available}/${coverage.total} · ${stateText}` };
+    }
+    if (item.key === "unitRegions") return { label: t("status.file.region"), detail: item.state === "available" ? t("status.file.regionAvailable", { count: number(item.count) }) : t("status.file.regionMissing") };
+    if (item.key === "probeTrack") return { label: t("status.file.track"), detail: item.state === "available" ? t("status.file.trackAvailable", { count: number(item.count), probes: number(item.probes) }) : t("status.file.trackMissing") };
+    if (item.key === "video") return { label: t("status.file.video"), detail: t("status.file.videoDetail") };
+    if (item.key === "rawVoltage") return { label: t("status.file.rawVoltage"), detail: t("status.file.rawVoltageDetail") };
+    return { label: t("status.file.invalid"), detail: item.detail };
+  }
+
   function renderDataStatus() {
     const status = dataStatusApi.buildDataStatus(state.recordings, state.regionResult, state.errors);
-    elements.dataStatusSummary.textContent = dataStatusApi.summaryText(status);
-    elements.dataStatusContext.textContent = `${state.rootName || "Loaded dataset"} · ${state.recordings.length} recording${state.recordings.length === 1 ? "" : "s"}`;
+    elements.dataStatusSummary.textContent = t("status.summaryCounts", status.counts) + (status.counts.invalid ? t("status.summaryInvalid", status.counts) : "");
+    elements.dataStatusContext.textContent = t("status.recordingContext", { dataset: state.rootName || t("status.loadedDataset"), count: state.recordings.length });
     elements.dataStatusButton.classList.toggle("has-missing", status.counts.missing > 0);
     elements.dataStatusButton.classList.toggle("has-invalid", status.counts.invalid > 0);
     elements.dataStatusGroups.innerHTML = [
-      dataStatusGroup("AVAILABLE", status.available, "No core inputs are currently available."),
-      dataStatusGroup("MISSING", status.missing, "No missing core inputs."),
-      dataStatusGroup("INVALID", status.invalid, "No invalid candidate recordings."),
-      dataStatusGroup("OPTIONAL", status.optional, "No optional inputs are defined."),
-      dataStatusGroup("FUTURE / VIDEO", status.future, "No future interfaces are defined.")
+      dataStatusGroup(t("status.available"), status.available, t("status.noneAvailable")),
+      dataStatusGroup(t("status.missing"), status.missing, t("status.noneMissing")),
+      dataStatusGroup(t("status.invalid"), status.invalid, t("status.noneInvalid")),
+      dataStatusGroup(t("status.optional"), status.optional, t("status.noneOptional")),
+      dataStatusGroup(t("status.future"), status.future, t("status.noneFuture"))
     ].join("");
   }
 
@@ -650,10 +799,10 @@
     const totalSpikes = recordings.reduce((total, item) => total + item.spikeCount, 0);
     const totalBytes = recordings.reduce((total, item) => total + item.totalBytes, 0);
     elements.summaryNumbers.innerHTML = [
-      [recordings.length, "RECORDINGS"],
-      [number(totalUnits), "UNITS"],
-      [number(totalSpikes), "SPIKES"],
-      [core.formatBytes(totalBytes), "INDEXED"]
+      [recordings.length, t("summary.recordings")],
+      [number(totalUnits), t("summary.units")],
+      [number(totalSpikes), t("summary.spikes")],
+      [core.formatBytes(totalBytes), t("summary.indexed")]
     ].map(([value, label]) => `<div class="summary-stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
 
     renderDataStatus();
@@ -663,25 +812,25 @@
     const ksAmplitude = recording.amplitudeByCluster.get(Number(clusterId));
     const contamination = recording.contaminationByCluster.get(Number(clusterId));
     const values = [
-      ["SPIKES", number(result.spikeCount)],
-      ["MEAN RATE", `${result.rateHz.toFixed(result.rateHz < 10 ? 3 : 2)} Hz`],
-      ["ISI < 2 MS", percent(result.isiViolationPercent)],
-      ["PRESENCE", percent(result.presenceRatio * 100)],
-      ["KS AMPLITUDE", Number.isFinite(ksAmplitude) ? ksAmplitude.toFixed(1) : "—"],
-      ["KS CONTAM.", Number.isFinite(contamination) ? `${contamination.toFixed(1)}%` : "—"]
+      ["metrics.spikes", number(result.spikeCount), "tips.metricSpikes"],
+      ["metrics.meanRate", `${result.rateHz.toFixed(result.rateHz < 10 ? 3 : 2)} Hz`, "tips.metricRate"],
+      ["metrics.isi", percent(result.isiViolationPercent), "tips.metricIsi"],
+      ["metrics.presence", percent(result.presenceRatio * 100), "tips.metricPresence"],
+      ["metrics.ksAmplitude", Number.isFinite(ksAmplitude) ? ksAmplitude.toFixed(1) : "—", "tips.metricAmplitude"],
+      ["metrics.ksContam", Number.isFinite(contamination) ? `${contamination.toFixed(1)}%` : "—", "tips.metricContam"]
     ];
-    elements.metricRow.innerHTML = values.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+    elements.metricRow.innerHTML = values.map(([label, value, helpKey]) => `<div class="metric"><span class="heading-with-help"><span>${escapeHtml(t(label))}</span><button class="context-help" type="button" data-help-key="${helpKey}" data-help-topic="${label}" aria-label="${escapeHtml(t("help.tipAria", { topic: t(label) }))}">?</button></span><strong>${escapeHtml(value)}</strong></div>`).join("");
   }
 
   function clearFocusedDetails() {
     detailPlots.clear();
     probeViewer.clear();
     elements.detailsContext.style.setProperty("--trace-color", themeSnapshot.palette.probe.unopened);
-    elements.detailsFocusLabel.textContent = "No Unit selected";
-    elements.reviewTitle.textContent = "No Unit open";
-    elements.reviewSubtitle.textContent = "Select a signal to inspect its unit-level details and physical position.";
+    elements.detailsFocusLabel.textContent = t("review.noSelected");
+    elements.reviewTitle.textContent = t("review.noOpen");
+    elements.reviewSubtitle.textContent = t("review.selectSignal");
     elements.metricRow.replaceChildren();
-    elements.templateLabel.textContent = "Peak channel · arbitrary units";
+    elements.templateLabel.textContent = t("review.templateDefault");
   }
 
   function renderFocusedDetails(entry) {
@@ -695,13 +844,13 @@
     const region = regionFor(recording, clusterId);
     const traceColor = entry.traceColor || themeSnapshot.palette.units.primary.trace;
     elements.detailsContext.style.setProperty("--trace-color", traceColor);
-    elements.detailsFocusLabel.textContent = `Unit ${clusterId} · ${recording.name}`;
-    elements.reviewTitle.textContent = `Unit ${clusterId}`;
-    elements.reviewSubtitle.textContent = [recording.name, label.quality, region?.region || "brain region unmapped", `${recording.duration.toFixed(2)} s recording`].join(" · ");
+    elements.detailsFocusLabel.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId} · ${recording.name}`;
+    elements.reviewTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId}`;
+    elements.reviewSubtitle.textContent = [recording.name, label.quality, region?.region || t("review.regionUnmapped"), t("review.recordingDuration", { duration: recording.duration.toFixed(2) })].join(" · ");
     renderMetrics(result, recording, clusterId);
-    const channelText = result.peakChannel == null ? "peak channel unavailable" : `peak channel ${result.peakChannel}`;
+    const channelText = result.peakChannel == null ? t("review.peakChannelUnavailable") : t("review.peakChannel", { channel: result.peakChannel });
     const depthText = result.peakChannelPosition?.y == null ? "" : ` · ${result.peakChannelPosition.y.toFixed(0)} µm`;
-    elements.templateLabel.textContent = `Template ${result.templateId} · ${channelText}${depthText} · a.u.`;
+    elements.templateLabel.textContent = t("review.templateLabel", { template: result.templateId, channel: channelText, depth: depthText });
     detailPlots.setData({ ...result, sampleRate: recording.sampleRate });
     syncProbeView();
   }
@@ -712,21 +861,23 @@
     const paletteIndex = comparisonColors.findIndex((_, index) => !usedPaletteIndexes.has(index));
     const palette = comparisonColors[Math.max(0, paletteIndex)];
     const label = labelFor(recording, clusterId);
-    const region = regionFor(recording, clusterId)?.region || "region unmapped";
+    const region = regionFor(recording, clusterId)?.region || t("review.regionShortUnmapped");
+    const unitTerm = i18nApi.GLOSSARY.unit[languageSnapshot.language];
+    const spikeTerm = i18nApi.GLOSSARY.spike[languageSnapshot.language];
     const lane = document.createElement("article");
     lane.className = "trace-lane";
     lane.dataset.viewKey = key;
     lane.style.setProperty("--trace-color", palette.trace);
     lane.innerHTML = `
       <header class="trace-lane-header">
-        <div class="trace-identity"><i></i><strong>Unit ${Number(clusterId)}</strong><span>${escapeHtml(recording.name)} · ${escapeHtml(label.quality)} · ${escapeHtml(region)} · ${number(result.spikeCount)} spikes</span></div>
-        <div class="trace-lane-actions"><span class="trace-window">—</span><button class="trace-remove" type="button" aria-label="Close Unit ${Number(clusterId)} signal" title="Close this signal">×</button></div>
+        <div class="trace-identity"><i></i><strong>${escapeHtml(unitTerm)} ${Number(clusterId)}</strong><span>${escapeHtml(recording.name)} · ${escapeHtml(label.quality)} · ${escapeHtml(region)} · ${number(result.spikeCount)} ${escapeHtml(spikeTerm)}</span></div>
+        <div class="trace-lane-actions"><span class="trace-window">—</span><button class="trace-remove" type="button" aria-label="${escapeHtml(t("review.closeUnitSignal", { id: Number(clusterId) }))}" title="${escapeHtml(t("review.closeSignalTitle"))}">×</button></div>
       </header>
       <div class="canvas-frame detail-frame" data-interaction-mode="${state.interactionMode}">
-        <canvas tabindex="0" aria-label="Unit ${Number(clusterId)} spike timing and firing rate"></canvas>
+        <canvas tabindex="0" aria-label="${escapeHtml(unitTerm)} ${Number(clusterId)} · ${escapeHtml(i18nApi.GLOSSARY.spike[languageSnapshot.language])} · ${escapeHtml(i18nApi.GLOSSARY.firingRate[languageSnapshot.language])}"></canvas>
         <div class="zoom-selection" hidden><span></span></div>
         <div class="plot-cursor" hidden><span></span></div>
-        <div class="canvas-empty">Loading Unit ${Number(clusterId)}</div>
+        <div class="canvas-empty">${escapeHtml(t("units.loadingAria", { id: Number(clusterId) }))}</div>
       </div>`;
     elements.comparisonTraces.append(lane);
     const frame = lane.querySelector(".detail-frame");
@@ -797,8 +948,8 @@
         elements.primaryOverviewLabel.hidden = true;
         elements.primaryOverviewFrame.hidden = true;
         elements.manualReviewEmpty.hidden = false;
-        elements.primaryTraceTitle.textContent = "Unit —";
-        elements.primaryTraceMeta.textContent = "Select a Unit from the list";
+        elements.primaryTraceTitle.textContent = t("review.unitPlaceholder");
+        elements.primaryTraceMeta.textContent = t("review.selectFromList");
         elements.timeWindow.textContent = "—";
       }
     }
@@ -806,13 +957,13 @@
     if (next) setFocusedUnit(next.key);
     else {
       state.focusedUnit = null;
-      setReviewState("IDLE");
+      setReviewState(t("review.idle"));
       clearFocusedDetails();
       syncProbeView();
       renderUnitList();
     }
     updateOpenUnitCount();
-    showToast(`Unit ${item.clusterId} removed from the current view`);
+    showToast(t("toast.removed", { id: item.clusterId }));
   }
 
   async function addUnitToView(recording, clusterId) {
@@ -828,7 +979,7 @@
       return;
     }
     if (state.openUnits.size >= MAX_OPEN_UNITS) {
-      showToast(`${MAX_OPEN_UNITS} Units are already open. Remove one before adding another.`);
+      showToast(t("toast.maxUnits", { count: MAX_OPEN_UNITS }));
       return;
     }
     const datasetToken = state.datasetToken;
@@ -840,9 +991,9 @@
       if (datasetToken !== state.datasetToken || selectionToken !== state.selectionToken || state.openUnits.has(key)) return;
       recording.unitSummaryMap = new Map(result.unitSummaries.map((item) => [item.id, item]));
       createAdditionalView(recording, clusterId, result);
-      showToast(`Unit ${clusterId} added to the current view`);
+      showToast(t("toast.added", { id: clusterId }));
     } catch (error) {
-      showToast(`Could not add Unit ${clusterId}: ${error.message}`);
+      showToast(t("toast.couldNotAdd", { id: clusterId, error: error.message }));
     } finally {
       state.loadingUnits.delete(key);
       renderUnitList();
@@ -863,14 +1014,14 @@
     elements.primaryTraceLane.dataset.viewKey = key;
     elements.primaryOverviewLabel.hidden = false;
     elements.primaryOverviewFrame.hidden = false;
-    elements.primaryTraceTitle.textContent = `Unit ${clusterId}`;
-    elements.primaryTraceMeta.textContent = [recording.name, label.quality, region?.region || "region unmapped", `${number(result.spikeCount)} spikes`].join(" · ");
+    elements.primaryTraceTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId}`;
+    elements.primaryTraceMeta.textContent = [recording.name, label.quality, region?.region || t("review.regionShortUnmapped"), `${number(result.spikeCount)} ${i18nApi.GLOSSARY.spike[languageSnapshot.language]}`].join(" · ");
     plots.setData({ ...result, sampleRate: recording.sampleRate });
     if (initialWindow) plots.setWindow(initialWindow.start, initialWindow.span);
     if (focus) setFocusedUnit(key);
     else syncProbeView();
     updateOpenUnitCount();
-    setReviewState(state.dataMode === "database" ? "READY · DATABASE" : result.fallback ? "READY · MAIN THREAD" : "READY", "ready");
+    setReviewState(t(state.dataMode === "database" ? "review.database" : result.fallback ? "review.mainThread" : "review.ready"), "ready");
     return item;
   }
 
@@ -887,9 +1038,9 @@
     state.loadingUnits.add(key);
     renderRecordings();
     renderUnitList();
-    elements.reviewTitle.textContent = `Unit ${clusterId}`;
-    elements.reviewSubtitle.textContent = `${recording.name} · loading selected spike data`;
-    setReviewState("READING", "loading");
+    elements.reviewTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId}`;
+    elements.reviewSubtitle.textContent = `${recording.name} · ${t("review.loading")}`;
+    setReviewState(t("review.reading"), "loading");
     try {
       const result = await inspectRecordingUnit(recording, clusterId);
       if (localToken !== state.selectionToken || recording !== state.activeRecording) return;
@@ -912,11 +1063,11 @@
       renderPrimaryView(result, recording, clusterId);
     } catch (error) {
       if (localToken !== state.selectionToken) return;
-      setReviewState("ERROR", "error");
+      setReviewState(t("review.error"), "error");
       elements.reviewSubtitle.textContent = error.message;
       state.loadingUnits.delete(key);
       clearOpenUnitViews();
-      showToast(`Could not read Unit ${clusterId}: ${error.message}`);
+      showToast(t("toast.couldNotRead", { id: clusterId, error: error.message }));
     }
   }
 
@@ -938,59 +1089,57 @@
     elements.dialogFolder.textContent = state.rootName;
     elements.dialogBody.innerHTML = `
       <section class="details-section">
-        <h2>${state.dataMode === "database" ? "DATABASE CATALOG" : "FOLDER SUMMARY"}</h2>
+        <h2>${escapeHtml(t(state.dataMode === "database" ? "dialog.databaseCatalog" : "dialog.folderSummary"))}</h2>
         <div class="details-grid">
-          <div class="detail-item"><span>FILES RECEIVED</span><strong>${number(state.files.length)}</strong></div>
-          <div class="detail-item"><span>FILES USED DIRECTLY</span><strong>${number(usefulFiles)}</strong></div>
-          <div class="detail-item"><span>KILOSORT DATA SIZE</span><strong>${core.formatBytes(totalBytes)}</strong></div>
-          <div class="detail-item"><span>VALID RECORDINGS</span><strong>${number(state.recordings.length)}</strong></div>
-          <div class="detail-item"><span>LISTED UNITS</span><strong>${number(totalUnits)}</strong></div>
-          <div class="detail-item"><span>REGION MAPPINGS</span><strong>${number(state.regionResult?.count || 0)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.filesReceived"))}</span><strong>${number(state.files.length)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.filesUsed"))}</span><strong>${number(usefulFiles)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.kilosortSize"))}</span><strong>${core.formatBytes(totalBytes)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.validRecordings"))}</span><strong>${number(state.recordings.length)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.listedUnits"))}</span><strong>${number(totalUnits)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.regionMappings"))}</span><strong>${number(state.regionResult?.count || 0)}</strong></div>
         </div>
       </section>
       <section class="details-section">
-        <h2>READABLE CONTENT</h2>
+        <h2>${escapeHtml(t("dialog.readableContent"))}</h2>
         <div class="details-grid">
-          <div class="detail-item"><span>SPIKE TIMING</span><strong>spike_times.npy</strong></div>
-          <div class="detail-item"><span>UNIT ASSIGNMENT</span><strong>spike_clusters.npy</strong></div>
-          <div class="detail-item"><span>QUALITY</span><strong>cluster tables</strong></div>
-          <div class="detail-item"><span>AMPLITUDE</span><strong>amplitudes.npy</strong></div>
-          <div class="detail-item"><span>SPATIAL POSITION</span><strong>spike_positions.npy</strong></div>
-          <div class="detail-item"><span>WAVEFORM SHAPE</span><strong>templates.npy</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.spikeTiming"))}</span><strong>spike_times.npy</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.unitAssignment"))}</span><strong>spike_clusters.npy</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.quality"))}</span><strong>cluster tables</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.amplitude"))}</span><strong>amplitudes.npy</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.spatialPosition"))}</span><strong>spike_positions.npy</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.waveform"))}</span><strong>templates.npy</strong></div>
         </div>
-        <p class="details-note">${state.dataMode === "database"
-          ? "Recording, Unit, region, Probe, and asset metadata are queried from SQLite. Unit arrays are read by the local data service with a two-Recording cache; the browser receives only the selected Unit result."
-          : "Large NPY payloads are read only for the active recording in a background worker. The complete folder is indexed, but all experiments are not held in memory at the same time."}</p>
+        <p class="details-note">${escapeHtml(t(state.dataMode === "database" ? "dialog.databaseNote" : "dialog.folderNote"))}</p>
       </section>
       <section class="details-section">
-        <h2>BRAIN-REGION MAPPING</h2>
+        <h2>${escapeHtml(t("dialog.brainMapping"))}</h2>
         <div class="details-grid">
-          <div class="detail-item"><span>UNIT-REGION ROWS</span><strong>${number(state.regionResult?.count || 0)}</strong></div>
-          <div class="detail-item"><span>PROBE-TRACK ROWS</span><strong>${number(probeTrack?.rowCount || 0)}</strong></div>
-          <div class="detail-item"><span>PHYSICAL PROBES</span><strong>${number(probeTrack?.probeCount || 0)}</strong></div>
-          <div class="detail-item"><span>TRACK SOURCE</span><strong>${escapeHtml(probeTrack?.source || "Not provided")}</strong></div>
-          <div class="detail-item"><span>REQUIRED COLUMNS</span><strong>probe · depth_um · region</strong></div>
-          <div class="detail-item"><span>RECOMMENDED JOIN</span><strong>electrode_index</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.unitRegionRows"))}</span><strong>${number(state.regionResult?.count || 0)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.probeTrackRows"))}</span><strong>${number(probeTrack?.rowCount || 0)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.physicalProbes"))}</span><strong>${number(probeTrack?.probeCount || 0)}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.trackSource"))}</span><strong>${escapeHtml(probeTrack?.source || t("dialog.notProvided"))}</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.requiredColumns"))}</span><strong>probe · depth_um · region</strong></div>
+          <div class="detail-item"><span>${escapeHtml(t("dialog.recommendedJoin"))}</span><strong>electrode_index</strong></div>
         </div>
-        <p class="details-note">A compatible track CSV maps electrode or Probe depth to an atlas region and optional atlas color. The current <code>pinpoint_parsed.csv</code> provides this electrode-level mapping. It does not provide full Allen CCF x/y/z coordinates; a future 3D brain view still needs a registered trajectory or channel coordinates in atlas space.</p>
+        <p class="details-note">${escapeHtml(t("dialog.mappingNote"))}</p>
       </section>
       <section class="details-section">
-        <h2>RECORDINGS</h2>
-        <table class="file-table"><thead><tr><th>Recording</th><th>Units</th><th>Spikes</th><th>Duration</th><th>Size</th></tr></thead><tbody>
+        <h2>${escapeHtml(t("dialog.recordings"))}</h2>
+        <table class="file-table"><thead><tr><th>${escapeHtml(t("dialog.recording"))}</th><th>${escapeHtml(t("dialog.units"))}</th><th>${escapeHtml(t("dialog.spikes"))}</th><th>${escapeHtml(t("dialog.duration"))}</th><th>${escapeHtml(t("dialog.size"))}</th></tr></thead><tbody>
           ${state.recordings.map((recording) => `<tr><td>${escapeHtml(recording.name)}</td><td>${number(recording.clusterLabels.length)}</td><td>${number(recording.spikeCount)}</td><td>${recording.duration.toFixed(2)} s</td><td>${core.formatBytes(recording.totalBytes)}</td></tr>`).join("")}
         </tbody></table>
-        ${state.errors.length ? `<p class="details-note">${state.errors.length} candidate folders were not readable: ${escapeHtml(state.errors.join(" | "))}</p>` : ""}
+        ${state.errors.length ? `<p class="details-note">${escapeHtml(t("dialog.unreadable", { count: state.errors.length }))} ${escapeHtml(state.errors.join(" | "))}</p>` : ""}
       </section>
       <section class="details-section">
-        <h2>RAW VOLTAGE</h2>
-        <p class="details-note">The selected KiloSort folders contain spike-sorting outputs. Their params.py files refer to external continuous.dat paths, but the raw voltage files are not inside these folders. This interface therefore labels the primary plot as spike timing and does not present it as a raw voltage trace.</p>
+        <h2>${escapeHtml(t("dialog.rawVoltage"))}</h2>
+        <p class="details-note">${escapeHtml(t("dialog.rawVoltageNote"))}</p>
       </section>`;
   }
 
   async function openFiles(files) {
     const selectedFiles = [...files].filter((file) => file && !String(file.name || "").startsWith("."));
     if (!selectedFiles.length) {
-      showToast("The selected folder did not provide readable files");
+      showToast(t("toast.noReadableFiles"));
       return;
     }
     state.datasetToken += 1;
@@ -1004,18 +1153,18 @@
     state.regionResult = null;
     clearOpenUnitViews({ render: false });
     elements.datasetTitle.textContent = state.rootName;
-    showLoading("Inspecting folder", `${number(selectedFiles.length)} files received. Finding KiloSort recordings.`, 16);
+    showLoading(t("loading.inspectTitle"), t("loading.filesReceived", { count: number(selectedFiles.length) }), 16);
     await clearWorker();
 
     const groups = core.groupExperimentFiles(selectedFiles);
     if (!groups.length) {
       showOnly("empty");
-      elements.dropZone.querySelector("p").textContent = "No folder contains spike_times.npy, spike_clusters.npy, and params.py.";
-      showToast("No KiloSort recording folders were found");
+      elements.dropZone.querySelector("p").textContent = t("loading.noRequiredFiles");
+      showToast(t("toast.noRecordings"));
       return;
     }
 
-    elements.loadingMessage.textContent = `Checking ${groups.length} candidate recordings without loading their large arrays.`;
+    elements.loadingMessage.textContent = t("loading.checkCandidates", { count: groups.length });
     elements.loadingProgress.style.width = "34%";
     let completed = 0;
     const indexedPromise = Promise.allSettled(groups.map(async (group) => {
@@ -1023,7 +1172,7 @@
       finally {
         completed += 1;
         elements.loadingProgress.style.width = `${34 + completed / groups.length * 46}%`;
-        elements.loadingMessage.textContent = `Checking recording ${completed}/${groups.length}.`;
+        elements.loadingMessage.textContent = t("loading.checkRecording", { current: completed, total: groups.length });
       }
     }));
     const regionPromise = regionCore.scanFiles(selectedFiles).catch(() => ({ valid: false, mapping: new Map(), files: [], count: 0, regions: [] }));
@@ -1037,20 +1186,20 @@
 
     if (!state.recordings.length) {
       showOnly("empty");
-      elements.dropZone.querySelector("p").textContent = "KiloSort candidates were found, but none passed structural checks.";
-      showToast("The KiloSort recordings could not be indexed");
+      elements.dropZone.querySelector("p").textContent = t("loading.nonePassed");
+      showToast(t("toast.couldNotIndex"));
       return;
     }
 
     elements.loadingProgress.style.width = "100%";
-    elements.loadingTitle.textContent = "Folder ready";
-    elements.loadingMessage.textContent = `${state.recordings.length} recordings detected. Select a Unit to begin.`;
+    elements.loadingTitle.textContent = t("loading.folderReady");
+    elements.loadingMessage.textContent = t("loading.recordingsDetected", { count: state.recordings.length });
     renderSummary();
     renderDialog();
     elements.dataDetails.disabled = false;
     showOnly("explorer");
     selectRecording(state.recordings[0]);
-    showToast(`${state.recordings.length} recordings ready`);
+    showToast(t("toast.recordingsReady", { count: state.recordings.length }));
   }
 
   async function openDatabaseCatalog() {
@@ -1058,7 +1207,7 @@
     state.selectionToken += 1;
     state.dataMode = "database";
     clearOpenUnitViews({ render: false });
-    showLoading("Opening database", "Reading the local SQLite catalog and preparing the Unit list.", 18);
+    showLoading(t("loading.openingDatabase"), t("loading.databaseCatalog"), 18);
     const catalog = await databaseClient.loadCatalog();
     if (!catalog.recordings.length) throw new Error("The database does not contain a readable Recording");
     state.databaseCatalog = catalog;
@@ -1069,13 +1218,13 @@
     state.regionResult = catalog.regionResult;
     elements.datasetTitle.textContent = `${state.rootName} · DATABASE`;
     elements.loadingProgress.style.width = "82%";
-    elements.loadingMessage.textContent = `${state.recordings.length} recordings and ${number(state.recordings.reduce((sum, item) => sum + item.clusterLabels.length, 0))} Units indexed. Select a Unit to begin.`;
+    elements.loadingMessage.textContent = t("loading.databaseIndexed", { recordings: state.recordings.length, units: number(state.recordings.reduce((sum, item) => sum + item.clusterLabels.length, 0)) });
     renderSummary();
     renderDialog();
     elements.dataDetails.disabled = false;
     showOnly("explorer");
     selectRecording(state.recordings[0]);
-    showToast(`Database ready · ${catalog.serverTimingMs.toFixed(1)} ms catalog query`);
+    showToast(t("toast.databaseReady", { time: catalog.serverTimingMs.toFixed(1) }));
   }
 
   function attachRelativePath(file, path) {
@@ -1124,6 +1273,13 @@
   elements.themeSelect.value = themeSnapshot.preference;
   elements.themeSelect.addEventListener("change", () => themeController.setPreference(elements.themeSelect.value));
   themeController.onChange(applyThemeSnapshot, false);
+  elements.languageSelect.value = languageSnapshot.language;
+  elements.languageSelect.addEventListener("change", () => languageController.setLanguage(elements.languageSelect.value));
+  languageController.onChange(applyLanguageSnapshot, false);
+  elements.helpButton.setAttribute("aria-expanded", "false");
+  elements.helpButton.addEventListener("click", openHelp);
+  elements.closeHelp.addEventListener("click", () => closeHelp());
+  elements.helpBackdrop.addEventListener("click", () => closeHelp());
   elements.dataStatusButton.addEventListener("click", () => setDataStatusOpen(elements.dataStatusPopover.hidden));
   elements.closeDataStatus.addEventListener("click", () => {
     setDataStatusOpen(false);
@@ -1229,7 +1385,36 @@
     if (!elements.unitContextMenu.hidden && !event.target.closest("#unit-context-menu")) hideUnitContextMenu();
     if (!elements.dataStatusPopover.hidden && !event.target.closest("#capability-row")) setDataStatusOpen(false);
   });
+  document.addEventListener("pointerover", (event) => {
+    const control = event.target.closest?.(".context-help[data-help-key]");
+    if (control) showContextHelp(control);
+  });
+  document.addEventListener("pointerout", (event) => {
+    const control = event.target.closest?.(".context-help[data-help-key]");
+    if (control && !control.contains(event.relatedTarget) && document.activeElement !== control) hideContextHelp(control);
+  });
+  document.addEventListener("focusin", (event) => {
+    const control = event.target.closest?.(".context-help[data-help-key]");
+    if (control) showContextHelp(control);
+  });
+  document.addEventListener("focusout", (event) => {
+    const control = event.target.closest?.(".context-help[data-help-key]");
+    if (control && !control.matches(":hover")) hideContextHelp(control);
+  });
   document.addEventListener("keydown", (event) => {
+    if (!elements.helpDrawer.hidden && event.key === "Tab") {
+      const controls = [...elements.helpDrawer.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')].filter((item) => !item.hidden);
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    if (event.key === "Escape" && !elements.helpDrawer.hidden) {
+      event.preventDefault();
+      closeHelp();
+      return;
+    }
+    if (event.key === "Escape" && activeHelpControl) hideContextHelp(activeHelpControl);
     if (event.key === "Escape" && !elements.unitContextMenu.hidden) hideUnitContextMenu();
     if (event.key === "Escape" && !elements.dataStatusPopover.hidden) {
       setDataStatusOpen(false);
@@ -1237,6 +1422,7 @@
     }
   });
   document.addEventListener("scroll", hideUnitContextMenu, true);
+  window.addEventListener("resize", () => { if (activeHelpControl) positionContextTooltip(activeHelpControl); });
   elements.dataDetails.addEventListener("click", () => { renderDialog(); elements.dataDialog.showModal(); });
   elements.closeDialog.addEventListener("click", () => elements.dataDialog.close());
   elements.dataDialog.addEventListener("click", (event) => {
@@ -1264,11 +1450,11 @@
     state.dragDepth = 0;
     elements.dropOverlay.hidden = true;
     elements.dropZone.classList.remove("is-dragging");
-    showLoading("Reading folder", "Collecting files from the dropped directory.", 8);
+    showLoading(t("loading.readingFolder"), t("loading.collectingFiles"), 8);
     try { await openFiles(await filesFromDrop(event.dataTransfer)); }
     catch (error) {
       showOnly("empty");
-      showToast(`Could not read the dropped folder: ${error.message}`);
+      showToast(t("toast.droppedError", { error: error.message }));
     }
   });
 
@@ -1289,12 +1475,13 @@
         return;
       } catch (error) {
         showOnly("empty");
-        showToast(`Database service unavailable: ${error.message}`);
+        showToast(t("toast.databaseUnavailable", { error: error.message }));
       }
     }
     showOnly("empty");
   }
 
+  applyLanguageSnapshot(languageSnapshot);
   updateOpenUnitCount();
   setInteractionMode("cursor");
   initialize();

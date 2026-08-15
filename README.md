@@ -35,6 +35,14 @@ interfaces. Dark, Light, High Contrast, and System themes share one palette
 across the interface, signal canvases, Probe display, selections, and Unit
 colors. The theme preference is saved on the current device.
 
+English, Simplified Chinese, and Spanish share one checked-in translation
+dictionary and professional terminology glossary. Subtle question-mark
+controls explain what a feature is, how to interpret it, and when to use it;
+they work with both pointer hover and keyboard focus. The Help drawer follows
+the active language. Its three Markdown sources are precompiled into a local
+asset, so Help remains available when the Explorer is opened through
+`file://` without a CDN or online Markdown service.
+
 The current release is **v3.1.0**. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.
@@ -43,8 +51,8 @@ tags instead of duplicated version directories.
 
 - `index.html` - current Explorer entry point.
 - `scripts/` - KiloSort parsing, application state, data-status classification,
-  shared themes, plots, Probe rendering, region metadata, and the optional
-  database client.
+  shared themes, language dictionaries, precompiled Help, plots, Probe
+  rendering, region metadata, and the optional database client.
 - `styles/` - current application styling.
 - `tests/` - portable code checks and the local real-data integration test.
 - `docs/` - input contracts and interpretation boundaries.
@@ -63,6 +71,8 @@ Portable checks do not require private data:
 ```powershell
 node tests\validate-real-data.cjs --code-only
 node tests\validate-workspace-layout.cjs
+node tests\validate-i18n-help.cjs
+node scripts\build-help-content.cjs --check
 ```
 
 The full integration check uses KiloSort and brain-region fixtures from the

@@ -30,6 +30,8 @@
       const item = {
         ...definition,
         state: coverage.complete ? "available" : "missing",
+        coverage,
+        sourceDetail: definition.detail,
         detail: coverage.complete
           ? `${definition.detail} · ${coverage.available}/${coverage.total} recordings`
           : `${definition.detail} · ${coverage.total - coverage.available}/${coverage.total} recordings missing`
@@ -42,12 +44,15 @@
         key: "unitRegions",
         label: "Unit brain-region mapping",
         state: regionResult?.valid ? "available" : "not-provided",
+        count: Number(regionResult?.count || 0),
         detail: regionResult?.valid ? `${Number(regionResult.count || 0).toLocaleString()} Unit mappings` : "Optional Legacy Table not provided"
       },
       {
         key: "probeTrack",
         label: "Probe depth-to-region track",
         state: regionResult?.probeTrack?.valid ? "available" : "not-provided",
+        count: Number(regionResult?.probeTrack?.rowCount || 0),
+        probes: Number(regionResult?.probeTrack?.probeCount || 0),
         detail: regionResult?.probeTrack?.valid
           ? `${Number(regionResult.probeTrack.rowCount || 0).toLocaleString()} electrode rows`
           : "Optional Probe-region CSV not provided"

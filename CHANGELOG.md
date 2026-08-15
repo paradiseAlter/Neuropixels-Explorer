@@ -28,6 +28,15 @@ Git tags rather than duplicated version directories on `main`.
 - Added persisted Dark, Light, High Contrast, and System themes shared by the
   interface, signal plots, Overview selections, Probe rendering, and Unit
   palettes.
+- Added one persisted translation system for English, Simplified Chinese, and
+  Spanish, including a professional neuroscience terminology glossary while
+  preserving KiloSort fields, file names, and brain-region abbreviations.
+- Added low-emphasis question-mark explanations with viewport-aware placement,
+  pointer hover, and keyboard-focus support. Explanations cover what a feature
+  is, how to read it, and when to use it.
+- Added three Markdown user guides and a language-aware Help drawer. Release
+  Help is precompiled into a checked-in local asset for direct `file://` use
+  without a CDN or online Markdown dependency.
 
 ## [3.1.0] - 2026-08-15
 

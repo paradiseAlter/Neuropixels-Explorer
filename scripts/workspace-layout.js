@@ -195,21 +195,32 @@
     }
 
     updateControl(side, splitter, toggle, panel) {
+      const t = this.translate || ((key, values = {}) => ({
+        'layout.collapsed': 'Collapsed', 'layout.pixels': `${values.width} pixels`,
+        'layout.resizeTitle': 'Drag or use arrow keys to resize. Double-click or press Home to reset.',
+        'layout.panelUnits': 'Units', 'layout.panelProbe': 'Probe Inspector', 'layout.expand': 'Expand', 'layout.collapse': 'Collapse'
+      }[key] || key));
       const collapsed = this.state[this.collapsedKey(side)];
       const width = collapsed ? 0 : this.state[this.widthKey(side)];
       splitter?.setAttribute('aria-valuemin', '0');
       splitter?.setAttribute('aria-valuemax', String(Math.round(this.availableMaximum(side))));
       splitter?.setAttribute('aria-valuenow', String(width));
-      splitter?.setAttribute('aria-valuetext', collapsed ? 'Collapsed' : `${width} pixels`);
-      splitter?.setAttribute('title', 'Drag or use arrow keys to resize. Double-click or press Home to reset.');
+      splitter?.setAttribute('aria-valuetext', collapsed ? t('layout.collapsed') : t('layout.pixels', { width }));
+      splitter?.setAttribute('title', t('layout.resizeTitle'));
       if (toggle) {
-        const panelName = side === 'unit' ? 'Units' : 'Probe Inspector';
+        const panelName = t(side === 'unit' ? 'layout.panelUnits' : 'layout.panelProbe');
         toggle.textContent = side === 'unit' ? (collapsed ? '›' : '‹') : (collapsed ? '‹' : '›');
         toggle.setAttribute('aria-expanded', String(!collapsed));
-        toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} ${panelName} panel`);
-        toggle.title = `${collapsed ? 'Expand' : 'Collapse'} ${panelName} panel`;
+        const controlLabel = `${t(collapsed ? 'layout.expand' : 'layout.collapse')} ${panelName}`;
+        toggle.setAttribute('aria-label', controlLabel);
+        toggle.title = controlLabel;
       }
       panel?.setAttribute('aria-hidden', String(collapsed));
+    }
+
+    setTranslator(translator) {
+      if (typeof translator === 'function') this.translate = translator;
+      this.apply(false);
     }
   }
 
