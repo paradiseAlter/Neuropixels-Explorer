@@ -63,8 +63,13 @@ function buffer(directory, name) {
   assert(minimumView.start === 0 && minimumView.span === .02, "Detail view should clamp to the 20 ms minimum");
   assert(rightEdgeView.start === 11 && rightEdgeView.span === 1, "Detail view should stay inside the recording");
   assert(plots.wheelZoomFactor(-100) < 1 && plots.wheelZoomFactor(100) > 1, "Wheel zoom direction changed");
+  assert(plots.wheelNavigationDelta(80, 10, 0) === 80, "Trackpad horizontal navigation should use the dominant axis");
+  assert(plots.wheelNavigationDelta(10, -80, 0) === -80, "Trackpad vertical navigation should use the dominant axis");
+  assert(plots.wheelNavigationDelta(0, 5, 1) === 80, "Line-mode wheel deltas should be normalized");
+  assert(plots.wheelPanOffset(0, 100, 0, 10) > 0, "Wheel down should pan toward later time");
+  assert(plots.wheelPanOffset(0, -100, 0, 10) < 0, "Wheel up should pan toward earlier time");
+  assert(plots.wheelPanOffset(100, 5, 0, 10) > 0, "Horizontal trackpad motion should pan toward later time");
   assert(plots.formatAxisTime(12.34567, .05) === "12.3457 s", "Fine time-axis precision changed");
-  assert(plots.TIME_AXIS_HIT_ZONE === 34, "Time-axis interaction zone changed unexpectedly");
   assert(probeView.regionColor("12abEF") === "#12abEF", "Region color normalization changed");
   assert(probeView.PROBE_COLORS.length >= 4, "Physical Probe identity palette is incomplete");
   assert(probeView.experimentOf({ name: "ks4_exp12" }) === 12, "Recording experiment lookup changed");
@@ -74,14 +79,19 @@ function buffer(directory, name) {
   assert(!/reviewMode:|comparisonItems:|activeClusterId:/.test(appSource), "Legacy Inspect/Compare selection state should not return");
   assert(/event\.ctrlKey \|\| event\.metaKey/.test(appSource), "Ctrl-click additive Unit selection is missing");
   assert(/function openUnitContextMenu/.test(appSource) && /function runUnitContextAction/.test(appSource), "The shared Unit context menu is missing");
+  assert(/function backFocusedTime\(\)/.test(appSource) && /entry\?\.manager\.history\.length > item\.manager\.history\.length/.test(appSource), "Linked plots should share Back history across Unit focus changes");
   assert(/function selectRecording\(recording\)/.test(appSource) && !/firstGood/.test(appSource), "Selecting a Recording should not auto-open a Unit");
   assert(/interactionMode: "cursor"/.test(appSource), "Cursor mode should remain the default plot interaction");
+  const plotSource = fs.readFileSync(path.resolve(__dirname, "..", "scripts", "plots.js"), "utf8");
+  assert(/if \(!\["zoom", "pan"\]\.includes\(this\.mode\)\) return;[\s\S]{0,220}event\.preventDefault\(\)/.test(plotSource), "Plot wheel handling should preserve normal scrolling outside Zoom and Pan");
+  assert(!/inTimeAxis|TIME_AXIS_HIT_ZONE/.test(plotSource), "Plot navigation should not be restricted to a hidden time-axis hit zone");
   const pageSource = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
   assert(/Neuropixels Explorer 3\.1\.0/.test(pageSource), "The v3.1.0 page title is missing");
   const pageIds = new Set([...pageSource.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
   const missingAppIds = [...appSource.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]).filter((id) => !pageIds.has(id));
   assert(!missingAppIds.length, `app.js references missing page IDs: ${missingAppIds.join(", ")}`);
   assert(!/inspect-review-mode|compare-review-mode/.test(pageSource), "Explicit Inspect/Compare mode controls should be removed");
+  assert(!/operate only on the bottom time axis/i.test(pageSource), "Plot instructions still describe the removed time-axis restriction");
   for (const action of ["open-only", "add", "remove", "locate"]) {
     assert(pageSource.includes(`data-unit-action="${action}"`), `Unit context action ${action} is missing`);
   }

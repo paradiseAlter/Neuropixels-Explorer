@@ -203,11 +203,30 @@
     state.syncingTime = true;
     try {
       plotEntries().forEach((item) => {
-        if (item.key !== key && item.manager.data) item.manager.setWindow(view.start, view.span);
+        if (item.key === key || !item.manager.data) return;
+        if (entry?.manager.history.length > item.manager.history.length) {
+          item.manager.pushHistory({ start: item.manager.start, span: item.manager.span });
+        }
+        item.manager.setWindow(view.start, view.span);
       });
     } finally {
       state.syncingTime = false;
     }
+  }
+
+  function backFocusedTime() {
+    const source = focusedEntry();
+    if (!source?.manager.data || !source.manager.history.length) return;
+    if (!state.timeLinked) {
+      source.manager.back();
+      return;
+    }
+    const target = source.manager.history[source.manager.history.length - 1];
+    plotEntries().forEach((item) => {
+      if (item.manager.history.length) item.manager.history.pop();
+      item.manager.notifyState();
+    });
+    source.manager.animateTo(target.start, target.span);
   }
 
   function handlePlotState(key, plotState) {
@@ -269,6 +288,7 @@
   }
 
   function setTimeLinked(linked) {
+    const wasLinked = state.timeLinked;
     state.timeLinked = Boolean(linked);
     elements.timeLink.classList.toggle("active", state.timeLinked);
     elements.timeLink.setAttribute("aria-pressed", String(state.timeLinked));
@@ -278,6 +298,12 @@
       : "Independent: zoom and pan only the selected trace";
     if (state.timeLinked) {
       const source = focusedEntry();
+      if (!wasLinked) {
+        plotEntries().forEach((item) => {
+          item.manager.history = [];
+          item.manager.notifyState();
+        });
+      }
       if (source?.manager.data) handlePlotWindow(source.key, { start: source.manager.start, end: source.manager.start + source.manager.span, span: source.manager.span });
     }
     updateOpenUnitCount();
@@ -677,7 +703,10 @@
     try {
       manager.setData({ ...result, sampleRate: recording.sampleRate });
       manager.setMode(state.interactionMode);
-      if (state.timeLinked && source?.manager.data) manager.setWindow(source.manager.start, source.manager.span);
+      if (state.timeLinked && source?.manager.data) {
+        manager.history = source.manager.history.map((view) => ({ ...view }));
+        manager.setWindow(source.manager.start, source.manager.span);
+      }
     } finally {
       state.syncingTime = false;
     }
@@ -1118,7 +1147,7 @@
   elements.cursorMode.addEventListener("click", () => setInteractionMode("cursor"));
   elements.zoomMode.addEventListener("click", () => setInteractionMode("zoom"));
   elements.panMode.addEventListener("click", () => setInteractionMode("pan"));
-  elements.backTime.addEventListener("click", () => focusedEntry()?.manager.back());
+  elements.backTime.addEventListener("click", backFocusedTime);
   elements.zoomOut.addEventListener("click", () => focusedEntry()?.manager.zoom(1.5));
   elements.zoomIn.addEventListener("click", () => focusedEntry()?.manager.zoom(.67));
   elements.resetTime.addEventListener("click", () => focusedEntry()?.manager.reset());

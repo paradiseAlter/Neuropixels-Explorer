@@ -16,6 +16,13 @@ Ctrl-click to add it to the current view, or right-click for open, add, remove,
 and Probe-location actions. Clicking an open signal focuses the same Unit in
 the list, Probe view, and Inspector.
 
+Cursor, Zoom, and Pan are explicit plot modes. Zoom and Pan work across the
+whole signal canvas. In Zoom, the wheel scales around the pointer; in Pan,
+wheel-down moves toward later time and wheel-up toward earlier time. Wheel
+events outside a signal, and all wheel events in Cursor mode, keep their normal
+page-scrolling behavior. Linked time applies a navigation change to every open
+Unit; Independent time limits it to the focused signal.
+
 The current release is **v3.1.0**. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.

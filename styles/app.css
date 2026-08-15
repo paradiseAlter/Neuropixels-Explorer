@@ -378,9 +378,9 @@ input:focus-visible,
 .comparison-traces .trace-lane:last-child { border-bottom: 1px solid var(--line-soft); }
 .detail-frame { height: 224px; }
 .comparison-traces .detail-frame { height: 188px; }
-.detail-frame canvas { cursor: default; }
-.detail-frame[data-interaction-mode="zoom"][data-axis-hover="true"] canvas { cursor: crosshair; }
-.detail-frame[data-interaction-mode="pan"][data-axis-hover="true"] canvas { cursor: grab; }
+.detail-frame[data-interaction-mode="cursor"] canvas { cursor: crosshair; }
+.detail-frame[data-interaction-mode="zoom"] canvas { cursor: zoom-in; }
+.detail-frame[data-interaction-mode="pan"] canvas { cursor: grab; }
 .detail-frame.is-panning canvas { cursor: grabbing; }
 .plot-cursor {
   position: absolute;
@@ -407,8 +407,8 @@ input:focus-visible,
 .zoom-selection {
   position: absolute;
   z-index: 2;
-  top: 14px;
-  bottom: 25px;
+  top: 0;
+  bottom: 0;
   display: block;
   min-width: 1px;
   border: 1px solid rgba(159, 198, 241, .92);

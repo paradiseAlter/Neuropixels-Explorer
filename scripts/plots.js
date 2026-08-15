@@ -25,7 +25,6 @@
   const MIN_SPAN_SECONDS = .02;
   const DETAIL_MARGIN_LEFT = 47;
   const DETAIL_MARGIN_RIGHT = 13;
-  const TIME_AXIS_HIT_ZONE = 34;
 
   function normalizeWindow(start, span, duration, minimumSpan = MIN_SPAN_SECONDS) {
     const safeDuration = Math.max(0, Number(duration) || 0);
@@ -40,6 +39,22 @@
 
   function wheelZoomFactor(deltaY) {
     return Math.exp(clamp(Number(deltaY) || 0, -120, 120) * .00235);
+  }
+
+  function wheelPixels(value, deltaMode = 0) {
+    const scale = Number(deltaMode) === 1 ? 16 : Number(deltaMode) === 2 ? 120 : 1;
+    return (Number(value) || 0) * scale;
+  }
+
+  function wheelNavigationDelta(deltaX, deltaY, deltaMode = 0) {
+    const horizontal = wheelPixels(deltaX, deltaMode);
+    const vertical = wheelPixels(deltaY, deltaMode);
+    return Math.abs(horizontal) > Math.abs(vertical) ? horizontal : vertical;
+  }
+
+  function wheelPanOffset(deltaX, deltaY, deltaMode, span) {
+    const delta = wheelNavigationDelta(deltaX, deltaY, deltaMode);
+    return clamp(delta / 720, -.35, .35) * Math.max(0, Number(span) || 0);
   }
 
   function lowerBound(values, target) {
@@ -144,17 +159,19 @@
       if (!detail) return;
 
       detail.addEventListener("contextmenu", (event) => {
-        if (this.detailPosition(event).inTimeAxis) event.preventDefault();
+        if (this.data && this.mode === "zoom") event.preventDefault();
       });
       detail.addEventListener("dblclick", (event) => {
-        if (!this.data || !this.detailPosition(event).inTimeAxis) return;
+        if (!this.data || !["zoom", "pan"].includes(this.mode)) return;
         event.preventDefault();
         this.reset();
       });
       detail.addEventListener("wheel", (event) => {
         if (!this.data) return;
+        if (!["zoom", "pan"].includes(this.mode)) return;
+        const delta = wheelNavigationDelta(event.deltaX, event.deltaY, event.deltaMode);
+        if (!delta) return;
         const position = this.detailPosition(event);
-        if (!position.inTimeAxis) return;
         event.preventDefault();
         this.cancelAnimation();
         if (!this.wheelGestureActive) {
@@ -163,12 +180,14 @@
         }
         clearTimeout(this.wheelEndTimer);
         this.wheelEndTimer = setTimeout(() => { this.wheelGestureActive = false; }, 180);
-        let delta = event.deltaY;
-        if (event.deltaMode === 1) delta *= 16;
-        else if (event.deltaMode === 2) delta *= 120;
-        const nextSpan = this.span * wheelZoomFactor(delta);
-        const anchorTime = this.start + this.span * position.fraction;
-        this.setWindow(anchorTime - nextSpan * position.fraction, nextSpan);
+        if (this.mode === "pan") {
+          const offset = wheelPanOffset(event.deltaX, event.deltaY, event.deltaMode, this.span);
+          this.setWindow(this.start + offset, this.span);
+        } else {
+          const nextSpan = this.span * wheelZoomFactor(delta);
+          const anchorTime = this.start + this.span * position.fraction;
+          this.setWindow(anchorTime - nextSpan * position.fraction, nextSpan);
+        }
       }, { passive: false });
 
       detail.addEventListener("pointerdown", (event) => {
@@ -179,10 +198,9 @@
           detail.focus({ preventScroll: true });
           return;
         }
-        if (!position.inTimeAxis) return;
         detail.focus({ preventScroll: true });
         this.cancelAnimation();
-        if (event.button === 2 || (event.button === 0 && event.shiftKey)) {
+        if (this.mode === "zoom" && (event.button === 2 || (event.button === 0 && event.shiftKey))) {
           event.preventDefault();
           this.zoom(2, position.fraction);
           return;
@@ -211,7 +229,6 @@
 
       detail.addEventListener("pointermove", (event) => {
         const hoverPosition = this.detailPosition(event);
-        if (this.elements.detailFrame) this.elements.detailFrame.dataset.axisHover = String(hoverPosition.inTimeAxis);
         if (this.mode === "cursor" && this.data) this.showCursor(hoverPosition);
         if (!this.drag || !this.data) return;
         if (this.drag.kind === "detail-pan") {
@@ -233,7 +250,6 @@
         }
       });
       detail.addEventListener("pointerleave", () => {
-        if (!this.drag && this.elements.detailFrame) this.elements.detailFrame.dataset.axisHover = "false";
         this.hideCursor();
       });
 
@@ -301,12 +317,9 @@
       const rectangle = this.elements.detail.getBoundingClientRect();
       const plotWidth = Math.max(1, rectangle.width - DETAIL_MARGIN_LEFT - DETAIL_MARGIN_RIGHT);
       const x = clamp(event.clientX - rectangle.left, DETAIL_MARGIN_LEFT, DETAIL_MARGIN_LEFT + plotWidth);
-      const y = event.clientY - rectangle.top;
       return {
         x,
-        y,
-        fraction: clamp((x - DETAIL_MARGIN_LEFT) / plotWidth, 0, 1),
-        inTimeAxis: y >= rectangle.height - TIME_AXIS_HIT_ZONE && y <= rectangle.height
+        fraction: clamp((x - DETAIL_MARGIN_LEFT) / plotWidth, 0, 1)
       };
     }
 
@@ -343,6 +356,8 @@
 
     setMode(mode) {
       this.mode = ["cursor", "zoom", "pan"].includes(mode) ? mode : "cursor";
+      clearTimeout(this.wheelEndTimer);
+      this.wheelGestureActive = false;
       if (this.elements.detailFrame) this.elements.detailFrame.dataset.interactionMode = this.mode;
       this.hideSelection();
       if (this.mode !== "cursor") this.hideCursor();
@@ -742,5 +757,15 @@
     }
   }
 
-  return { PlotManager, formatSeconds, formatAxisTime, normalizeWindow, wheelZoomFactor, MIN_SPAN_SECONDS, TIME_AXIS_HIT_ZONE };
+  return {
+    PlotManager,
+    formatSeconds,
+    formatAxisTime,
+    normalizeWindow,
+    wheelZoomFactor,
+    wheelPixels,
+    wheelNavigationDelta,
+    wheelPanOffset,
+    MIN_SPAN_SECONDS
+  };
 });

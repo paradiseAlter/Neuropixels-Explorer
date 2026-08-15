@@ -12,6 +12,13 @@ Git tags rather than duplicated version directories on `main`.
 - Removed automatic Unit selection when a Recording is opened.
 - Linked signal focus back to the corresponding Recording, Unit-list row,
   Probe marker, and Inspector details.
+- Extended Zoom and Pan interactions from the time-axis strip to the complete
+  signal canvas.
+- Made Zoom-wheel motion pointer-anchored and Pan-wheel motion move through
+  time, including dominant-axis handling for touchpads.
+- Preserved normal page scrolling outside signal canvases and in Cursor mode.
+- Synchronized linked-view history so Back also restores Overview and plot
+  navigation after focus moves to another Unit.
 
 ## [3.1.0] - 2026-08-15
 

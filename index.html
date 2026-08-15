@@ -89,8 +89,8 @@
                   <button class="time-link-button active" id="time-link-button" type="button" aria-pressed="true" title="Linked: zoom and pan every open Unit together">TIME LINKED</button>
                   <span class="plot-control-divider" aria-hidden="true"></span>
                   <button class="interaction-mode active" id="cursor-mode-button" type="button" aria-pressed="true" title="Cursor mode: inspect time without changing the view">CURSOR</button>
-                  <button class="interaction-mode" id="zoom-mode-button" type="button" aria-pressed="false" title="Zoom mode: drag a time range on the bottom axis">ZOOM</button>
-                  <button class="interaction-mode" id="pan-mode-button" type="button" aria-pressed="false" title="Pan mode: drag the current time window">PAN</button>
+                  <button class="interaction-mode" id="zoom-mode-button" type="button" aria-pressed="false" title="Zoom mode: drag anywhere in a signal or use the wheel at the pointer">ZOOM</button>
+                  <button class="interaction-mode" id="pan-mode-button" type="button" aria-pressed="false" title="Pan mode: drag anywhere in a signal or use the wheel to move through time">PAN</button>
                   <button id="back-time-button" type="button" title="Return to the previous time view" disabled>BACK</button>
                   <span class="plot-control-divider" aria-hidden="true"></span>
                   <button id="zoom-out-button" type="button" aria-label="Zoom out">−</button>
@@ -116,7 +116,7 @@
               <div class="canvas-frame overview-frame" id="primary-overview-frame">
                 <canvas id="spike-overview-canvas" aria-label="Full recording spike density overview"></canvas>
               </div>
-              <footer class="interaction-hint"><strong>CURSOR</strong> inspect time · <strong>ZOOM / PAN</strong> operate only on the bottom time axis · <strong>WHEEL</strong> zoom at pointer · <strong>DOUBLE CLICK</strong> reset</footer>
+              <footer class="interaction-hint"><strong>CURSOR</strong> inspect time · <strong>ZOOM</strong> drag or wheel anywhere in a signal · <strong>PAN</strong> drag or wheel through time · <strong>DOUBLE CLICK</strong> reset</footer>
             </section>
 
             <div class="details-context" id="details-context"><i></i><strong>DETAILS FOR</strong><span id="details-focus-label">No Unit selected</span></div>
