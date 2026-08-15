@@ -7,6 +7,7 @@ const regionCore = require("../scripts/region-core.js");
 const plots = require("../scripts/plots.js");
 const probeView = require("../scripts/probe-view.js");
 
+const codeOnly = process.argv.includes("--code-only");
 const projectRoot = path.resolve(__dirname, "..", "..", "..");
 const kilosortRoot = path.join(projectRoot, "data", "raw", "kilosort");
 const legacyRoot = path.join(projectRoot, "data", "processed", "legacy_tables");
@@ -70,6 +71,11 @@ function buffer(directory, name) {
   assert(/interactionMode: "cursor"/.test(appSource), "Cursor mode should remain the default plot interaction");
   const pageSource = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
   assert(/Neuropixels Explorer 3\.1\.0/.test(pageSource), "The v3.1.0 page title is missing");
+
+  if (codeOnly) {
+    console.log(JSON.stringify({ status: "PASS", mode: "code-only", version: "3.1.0" }, null, 2));
+    return;
+  }
 
   const kilosortFiles = folderFiles(kilosortRoot, "kilosort");
   const groups = core.groupExperimentFiles(kilosortFiles);
