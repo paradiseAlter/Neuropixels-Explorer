@@ -6,10 +6,23 @@
 })(typeof globalThis !== "undefined" ? globalThis : window, () => {
   "use strict";
 
-  async function request(path) {
-    const response = await fetch(path, { headers: { Accept: "application/json" }, cache: "no-store" });
+  async function request(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: { Accept: "application/json", ...(options.headers || {}) },
+      cache: "no-store"
+    });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.message || `Data service returned ${response.status}`);
+    if (!response.ok) {
+      const details = Array.isArray(payload.details) && payload.details.length
+        ? ` · ${payload.details.map((item) => item.message || item.reason || item.filename).filter(Boolean).join(" | ")}`
+        : "";
+      const error = new Error(`${payload.message || `Data service returned ${response.status}`}${details}`);
+      error.code = payload.error || "request_failed";
+      error.details = payload.details || [];
+      error.status = response.status;
+      throw error;
+    }
     return payload;
   }
 
@@ -20,7 +33,7 @@
       quality: available.has("unit_metadata"),
       amplitude: available.has("spike_amplitudes"),
       position: available.has("spike_positions"),
-      template: available.has("templates"),
+      template: available.has("templates") && available.has("spike_templates"),
       geometry: available.has("channel_positions") || available.has("channel_geometry"),
       probeGrouping: available.has("channel_probe_groups") || available.has("channel_geometry"),
       video: available.has("video"),
@@ -50,7 +63,27 @@
   function normalizeCatalog(payload) {
     const regionMapping = new Map();
     const regionNames = new Set();
-    const recordings = (payload.recordings || []).map((item) => {
+    const recordings = (payload.recordings || []).map((item) => normalizeRecording(item, regionMapping, regionNames));
+    return {
+      dataset: payload.dataset,
+      ingest: payload.ingest,
+      summary: payload.summary,
+      recordings,
+      regionResult: {
+        valid: regionMapping.size > 0,
+        mapping: regionMapping,
+        files: ["neuropixel_catalog.sqlite"],
+        count: regionMapping.size,
+        regions: [...regionNames].sort(),
+        conflicts: 0,
+        probeTrack: payload.probeTrack?.valid ? payload.probeTrack : emptyProbeTrack()
+      },
+      videos: payload.videos || [],
+      serverTimingMs: Number(payload.serverTimingMs || 0)
+    };
+  }
+
+  function normalizeRecording(item, regionMapping = new Map(), regionNames = new Set()) {
       const units = item.units || [];
       const clusterLabels = units.map((unit) => ({ id: Number(unit.cluster_id), quality: unit.kilosort_label || "unknown" }));
       const unitSummaryMap = new Map(units.map((unit) => [Number(unit.cluster_id), {
@@ -69,6 +102,16 @@
           source: `SQLite · ${unit.region_annotation_status || "legacy_unverified"}`
         });
       });
+      const assets = (item.assets || []).map((asset) => ({
+        assetId: Number(asset.asset_id),
+        role: asset.asset_role,
+        filename: asset.filename,
+        byteSize: Number(asset.byte_size || 0),
+        checksumStatus: asset.checksum_status,
+        status: asset.availability_status,
+        source: asset.source_data_origin,
+        processingStage: asset.processing_stage
+      }));
       return {
         key: item.recording_id,
         databaseId: item.recording_id,
@@ -85,27 +128,10 @@
         fileCount: Number(item.asset_count || 0),
         usefulFileCount: Number(item.asset_count || 0),
         capabilities: capabilities(item.assetRoles, item.has_raw_signal),
+        assets,
         headers: {},
         units
       };
-    });
-    return {
-      dataset: payload.dataset,
-      ingest: payload.ingest,
-      summary: payload.summary,
-      recordings,
-      regionResult: {
-        valid: regionMapping.size > 0,
-        mapping: regionMapping,
-        files: ["neuropixel_catalog.sqlite"],
-        count: regionMapping.size,
-        regions: [...regionNames].sort(),
-        conflicts: 0,
-        probeTrack: payload.probeTrack?.valid ? payload.probeTrack : emptyProbeTrack()
-      },
-      videos: payload.videos || [],
-      serverTimingMs: Number(payload.serverTimingMs || 0)
-    };
   }
 
   function normalizeUnitReview(payload) {
@@ -132,5 +158,70 @@
     return normalizeUnitReview(await request(`/api/units/${encodeURIComponent(unit.unit_id)}/review`));
   }
 
-  return { request, emptyProbeTrack, normalizeCatalog, normalizeUnitReview, loadCatalog, loadUnitReview };
+  async function loadRecording(recordingId) {
+    const payload = await request(`/api/recordings/${encodeURIComponent(recordingId)}`);
+    return normalizeRecording(payload.recording);
+  }
+
+  function fileMetadata(file) {
+    return {
+      name: file.name,
+      relativePath: file.webkitRelativePath || file.relativePath || file.name,
+      size: Number(file.size || 0),
+      lastModified: Number(file.lastModified || 0)
+    };
+  }
+
+  async function ingestFiles(files, {
+    expectedRecordingId = null,
+    expectedRoles = [],
+    sourceKind = "files",
+    onProgress = null
+  } = {}) {
+    const selected = [...files];
+    let session = null;
+    try {
+      session = await request("/api/ingest/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceKind,
+          expectedRecordingId,
+          expectedRoles,
+          files: selected.map(fileMetadata)
+        })
+      });
+      const accepted = session.files || [];
+      for (let position = 0; position < accepted.length; position += 1) {
+        const item = accepted[position];
+        const file = selected[Number(item.clientIndex)];
+        if (!file) throw new Error(`The selected file at index ${item.clientIndex} is no longer available`);
+        onProgress?.({ phase: "upload", current: position + 1, total: accepted.length, filename: file.name });
+        await request(`/api/ingest/sessions/${session.sessionId}/files/${item.clientIndex}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file
+        });
+      }
+      onProgress?.({ phase: "commit", current: accepted.length, total: accepted.length });
+      return await request(`/api/ingest/sessions/${session.sessionId}/commit`, { method: "POST" });
+    } catch (error) {
+      if (session?.sessionId) {
+        await request(`/api/ingest/sessions/${session.sessionId}`, { method: "DELETE" }).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
+  return {
+    request,
+    emptyProbeTrack,
+    normalizeCatalog,
+    normalizeRecording,
+    normalizeUnitReview,
+    loadCatalog,
+    loadRecording,
+    loadUnitReview,
+    ingestFiles
+  };
 });

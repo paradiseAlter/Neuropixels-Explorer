@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuropixels-explorer"
+version = "3.3.0"
+description = "Local-first Neuropixels review UI and optional indexed data service"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.23"]
+
+[project.scripts]
+neuropixels-explorer = "neuropixels_explorer.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "server"}
+
+[tool.setuptools.packages.find]
+where = ["server"]
+
+[tool.setuptools.package-data]
+neuropixels_explorer = ["py.typed", "schema/*.sql"]
+
+[tool.unittest]
+start-directory = "tests/python"

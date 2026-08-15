@@ -53,4 +53,4 @@ For another dataset, request:
 5. for a 3D brain view, each Probe trajectory or per-channel Allen CCF coordinates plus registration provenance;
 6. for video, frame timestamps and neural/video synchronization events or a documented time mapping.
 
-The depth-level CSV supports the two-dimensional Probe review in v3.1.0. It is not equivalent to a registered 3D trajectory.
+The depth-level CSV supports the two-dimensional Probe review in v3.3.0. It is not equivalent to a registered 3D trajectory.

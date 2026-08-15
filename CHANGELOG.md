@@ -3,6 +3,70 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [Unreleased]
+
+## [3.3.0] - 2026-08-15
+
+- Moved the reusable indexed data service, SQLite migrations, and synthetic
+  contract tests into the Explorer product repository.
+- Added one portable CLI for schema initialization, validation, and local
+  Explorer/API serving with explicit runtime database and data-root paths.
+- Kept SQLite as a metadata catalog with project-relative asset references;
+  large neural arrays, future raw voltage, and video remain external payloads.
+- Added Git ignore rules and an automated repository-boundary test for private
+  data, generated databases and sidecars, analysis outputs, local config, and
+  known machine-specific absolute paths.
+- Added exact per-Recording missing-file details and `Add files` / `Add folder`
+  actions to Data Status.
+- Added automatic Recording and asset-role detection with rejection of wrong
+  experiments, duplicate candidates, conflicting assets, invalid NPY payloads,
+  and incompatible spike/channel dimensions.
+- Added transactional incremental-ingest audit tables and atomic managed-file
+  registration. Failed batches roll back both SQLite changes and file moves;
+  existing assets are never silently overwritten.
+- Kept large NPY, raw-voltage, and video payloads outside SQLite while storing
+  their relative paths, sizes, SHA-256 checksums, type, status, and provenance.
+- Invalidated and recomputed only changed Recordings. Open Units, focused Unit,
+  time windows, navigation history, panel sizes, and the current layout remain
+  stable after a successful supplement.
+- Added portable rollback, duplicate, conflict, wrong-Recording, shape, missing
+  template, and live browser supplement acceptance tests.
+
+## [3.2.0] - 2026-08-15
+
+- Replaced Primary/Comparison/Review-mode state with `openUnits` and one
+  `focusedUnit`.
+- Made plain click open one Unit, Ctrl-click add a Unit, and right-click expose
+  shared Unit actions in the list and Probe views.
+- Removed automatic Unit selection when a Recording is opened.
+- Linked signal focus back to the corresponding Recording, Unit-list row,
+  Probe marker, and Inspector details.
+- Extended Zoom and Pan interactions from the time-axis strip to the complete
+  signal canvas.
+- Made Zoom-wheel motion pointer-anchored and Pan-wheel motion move through
+  time, including dominant-axis handling for touchpads.
+- Preserved normal page scrolling outside signal canvases and in Cursor mode.
+- Synchronized linked-view history so Back also restores Overview and plot
+  navigation after focus moves to another Unit.
+- Added keyboard-accessible splitters for resizing the Units, signal, and Probe
+  Inspector columns, with double-click reset and device-local persistence.
+- Added collapsible side panels and compact-screen defaults that preserve the
+  central signal workspace.
+- Replaced the row of READY badges with one expandable data-status entry that
+  separates available, missing, invalid, optional, and future/video inputs.
+- Added persisted Dark, Light, High Contrast, and System themes shared by the
+  interface, signal plots, Overview selections, Probe rendering, and Unit
+  palettes.
+- Added one persisted translation system for English, Simplified Chinese, and
+  Spanish, including a professional neuroscience terminology glossary while
+  preserving KiloSort fields, file names, and brain-region abbreviations.
+- Added low-emphasis question-mark explanations with viewport-aware placement,
+  pointer hover, and keyboard-focus support. Explanations cover what a feature
+  is, how to read it, and when to use it.
+- Added three Markdown user guides and a language-aware Help drawer. Release
+  Help is precompiled into a checked-in local asset for direct `file://` use
+  without a CDN or online Markdown dependency.
+
 ## [3.1.0] - 2026-08-15
 
 - Added explicit Inspect and Compare review modes with linked multi-Unit plots.
