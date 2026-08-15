@@ -5,6 +5,16 @@ Git tags rather than duplicated version directories on `main`.
 
 ## [Unreleased]
 
+- Moved the reusable indexed data service, SQLite migrations, and synthetic
+  contract tests into the Explorer product repository.
+- Added one portable CLI for schema initialization, validation, and read-only
+  Explorer/API serving with explicit runtime database and data-root paths.
+- Kept SQLite as a metadata catalog with project-relative asset references;
+  large neural arrays, future raw voltage, and video remain external payloads.
+- Added Git ignore rules and an automated repository-boundary test for private
+  data, generated databases and sidecars, analysis outputs, local config, and
+  known machine-specific absolute paths.
+
 ## [3.2.0] - 2026-08-15
 
 - Replaced Primary/Comparison/Review-mode state with `openUnits` and one

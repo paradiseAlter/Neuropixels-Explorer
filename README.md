@@ -3,7 +3,9 @@
 Neuropixels Explorer is a local-first browser interface for reviewing KiloSort
 recordings, Units, signals, physical Probe positions, and optional brain-region
 metadata. The default workflow runs directly in Chrome: selected files remain
-on the local machine and no upload or localhost service is required.
+on the local machine and no upload or localhost service is required. An
+optional indexed service is included in the same product repository for larger
+managed collections.
 
 ## Quick start
 
@@ -54,15 +56,48 @@ tags instead of duplicated version directories.
   shared themes, language dictionaries, precompiled Help, plots, Probe
   rendering, region metadata, and the optional database client.
 - `styles/` - current application styling.
-- `tests/` - portable code checks and the local real-data integration test.
+- `server/` - reusable read-only SQLite/API service and command-line entry
+  point; no experiment-specific path or payload is embedded here.
+- `database/migrations/` - ordered SQLite schema migrations represented by the
+  same Git release as the Explorer UI.
+- `tests/` - portable browser checks, synthetic database/service tests, the
+  repository-boundary guard, and the opt-in local real-data integration test.
 - `docs/` - input contracts and interpretation boundaries.
+- `pyproject.toml` - Python package and service entry-point metadata.
 - `ARCHITECTURE.md` - runtime and module boundaries.
 - `CHANGELOG.md` - release-level changes.
 
 The repository intentionally excludes raw or processed neuroscience data,
 legacy analysis pipelines, analysis reports, generated figures/tables, SQLite
-databases, and the local database-service implementation. No scientific
-inference or biological result is shipped with this codebase.
+database files, SQLite sidecars, and machine-specific configuration. It does
+include the reusable service implementation, schema migrations, and synthetic
+contract tests. No scientific inference or biological result is shipped with
+this codebase.
+
+## Optional indexed service
+
+The browser-only path remains the default. To use an existing catalog for a
+larger local collection, install this checkout and provide every runtime path
+explicitly:
+
+```powershell
+python -m pip install -e .
+neuropixels-explorer validate-db --database <catalog.sqlite>
+neuropixels-explorer serve --database <catalog.sqlite> --data-root <data-root>
+```
+
+`--data-root` resolves the project-relative asset paths registered in the
+catalog. It is never written to a tracked configuration file. `init-db`
+creates or migrates an empty catalog for import adapters:
+
+```powershell
+neuropixels-explorer init-db --database <new-catalog.sqlite>
+```
+
+SQLite stores metadata and relative references only. KiloSort arrays, future
+raw voltage, and video payloads stay outside SQLite and outside Git. A
+data-source-specific importer may live with the research data, but its output
+must pass the migrations and validation shipped by this repository.
 
 ## Validation
 
@@ -73,6 +108,7 @@ node tests\validate-real-data.cjs --code-only
 node tests\validate-workspace-layout.cjs
 node tests\validate-i18n-help.cjs
 node scripts\build-help-content.cjs --check
+python -m unittest discover -s tests\python
 ```
 
 The full integration check uses KiloSort and brain-region fixtures from the
@@ -82,13 +118,15 @@ parent research workspace. Those inputs remain local and are not versioned:
 node tests\validate-real-data.cjs
 ```
 
-Set `NEUROPIXEL_PROJECT_ROOT` when those fixtures are not in the default parent
-workspace:
+Set `NEUROPIXEL_PROJECT_ROOT` when those fixtures are outside the default parent
+workspace. This value is runtime-only and must not be committed:
 
 ```powershell
-$env:NEUROPIXEL_PROJECT_ROOT = "D:\path\to\research-workspace"
+$env:NEUROPIXEL_PROJECT_ROOT = "<research-workspace>"
 node tests\validate-real-data.cjs
 ```
 
 See [the Probe-region mapping contract](docs/PROBE_REGION_MAPPING.md) for the
-optional CSV schema and its interpretation boundary.
+optional CSV schema and its interpretation boundary. See
+[the product repository boundary](docs/PRODUCT_REPOSITORY_BOUNDARY.md) for the
+release, data, and generated-file rules.

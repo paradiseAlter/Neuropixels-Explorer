@@ -4,3 +4,37 @@ Thumbs.db
 node_modules/
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Runtime configuration must be recreated locally.
+.env
+.env.*
+!.env.example
+/config/local.*
+/config/*.local.*
+
+# Private or generated data never belongs to the product repository.
+/data/
+/datasets/
+/recordings/
+/private/
+/reports/
+/artifacts/
+/runtime/
+
+# SQLite migrations are source; SQLite databases and sidecars are runtime state.
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal

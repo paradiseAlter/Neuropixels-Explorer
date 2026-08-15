@@ -1,0 +1,4 @@
+include README.md ARCHITECTURE.md CHANGELOG.md
+recursive-include database/migrations *.sql
+recursive-include docs *.md
+recursive-include server/neuropixels_explorer/schema *.sql
