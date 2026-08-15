@@ -16,7 +16,7 @@ and are not required by the standalone folder workflow.
 
 ## Module map
 
-- `index.html` defines the current v3.1.0 review interface.
+- `index.html` defines the current v3.2.0 review interface.
 - `scripts/app.js` owns application state, folder selection, review modes, and
   DOM coordination.
 - `scripts/kilosort-core.js` indexes KiloSort files, parses NPY arrays, and

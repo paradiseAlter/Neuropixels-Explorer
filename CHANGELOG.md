@@ -5,6 +5,8 @@ Git tags rather than duplicated version directories on `main`.
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-08-15
+
 - Replaced Primary/Comparison/Review-mode state with `openUnits` and one
   `focusedUnit`.
 - Made plain click open one Unit, Ctrl-click add a Unit, and right-click expose

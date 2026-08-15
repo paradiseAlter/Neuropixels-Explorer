@@ -43,7 +43,7 @@ the active language. Its three Markdown sources are precompiled into a local
 asset, so Help remains available when the Explorer is opened through
 `file://` without a CDN or online Markdown service.
 
-The current release is **v3.1.0**. The `main` branch contains only the current
+The current release is **v3.2.0**. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.
 
