@@ -37,6 +37,14 @@ outside the repository and are not required by the standalone folder workflow.
   `scripts/help-content.js` asset, keeping the Help drawer compatible with
   direct `file://` use and independent of online Markdown services.
 - `scripts/plots.js` renders signals and linked time-window interactions.
+- `scripts/video-sync.js` owns `VideoStream` playback, invertible `TimeMapping`,
+  deterministic validation frames, transport controls, and the shared neural
+  playhead. A local video file and a generated synthetic source use the same
+  controller.
+- `scripts/stream-contracts.js` exposes the versioned Raw Voltage provider
+  registry. A future provider must advertise supported `raw_voltage`, `ap`, or
+  `lfp` streams and return a reader with `readWindow(request)` and `close()`;
+  this release intentionally registers no provider.
 - `scripts/probe-view.js` renders physical Probe groups, Unit locations, and
   optional atlas-colored depth segments.
 - `scripts/database-client.js` adapts the optional local-service API to the
@@ -51,6 +59,9 @@ outside the repository and are not required by the standalone folder workflow.
 - `tests/validate-i18n-help.cjs` validates dictionary coverage, glossary terms,
   local Help parity, contextual explanations, and keyboard-accessibility
   contracts.
+- `tests/validate-video-sync.cjs` validates time-mapping round trips,
+  deterministic frames, shared-view wiring, and the Raw Voltage extension
+  contract.
 - `tests/python/` validates migrations, the frontend/API response contract,
   lazy file access, path containment, and repository exclusions using only
   generated synthetic fixtures.
@@ -65,8 +76,10 @@ registered three-dimensional atlas trajectory.
 SQLite is a metadata catalog, not a large-payload store. Asset rows use paths
 relative to a runtime `--data-root`. The service resolves and contains each
 path under that root, memory-maps active NPY arrays, and keeps only bounded
-Recording and Unit caches. Raw voltage and future video remain external assets
-with explicit stream and synchronization metadata.
+Recording and Unit caches. Video remains an external asset with explicit
+stream and synchronization metadata; the local service exposes it through
+path-contained HTTP range requests. Raw voltage remains an external future
+asset behind the provider contract and is not read or rendered in this release.
 
 Incremental ingest uses a two-phase boundary. Selected files first stream to a
 session-specific staging directory while role, Recording identity, checksum,

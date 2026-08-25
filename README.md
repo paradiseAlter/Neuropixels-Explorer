@@ -25,6 +25,13 @@ events outside a signal, and all wheel events in Cursor mode, keep their normal
 page-scrolling behavior. Linked time applies a navigation change to every open
 Unit; Independent time limits it to the focused signal.
 
+The center workspace places behavior video directly above the aligned Unit
+signals. A detected local video can be opened directly, or **Generate validation
+video** creates a deterministic mouse-arena stream whose frame clock exactly
+matches neural time. Play, seek, frame-step, playback speed, signal-follow, and
+manual offset controls all drive one shared neural-time playhead. Clicking a
+signal in Cursor mode seeks the video back to that neural time.
+
 The Units and Probe Inspector boundaries are adjustable. Drag either divider,
 use its Left/Right arrow keys for precise changes, or hold Shift for larger
 keyboard steps. Double-click a divider (or press Home) to restore the default
@@ -32,8 +39,11 @@ layout. The small chevron collapses or expands its side panel. Layout choices
 are saved on the current device and restored on the next visit.
 
 The compact Data status control summarizes complete and missing core inputs.
-Open it to inspect available, missing, invalid, optional, and future/video
-interfaces. Dark, Light, High Contrast, and System themes share one palette
+Open it to inspect available, missing, invalid, optional, and stream/extension
+interfaces. Raw voltage is deliberately not rendered: a versioned provider and
+window-reader contract is exposed for a future AP/LFP implementation, while the
+current UI reports that no provider is registered. Dark, Light, High Contrast,
+and System themes share one palette
 across the interface, signal canvases, Probe display, selections, and Unit
 colors. The theme preference is saved on the current device.
 
@@ -52,9 +62,10 @@ tags instead of duplicated version directories.
 ## Repository layout
 
 - `index.html` - current Explorer entry point.
-- `scripts/` - KiloSort parsing, application state, data-status classification,
-  shared themes, language dictionaries, precompiled Help, plots, Probe
-  rendering, region metadata, and the optional database client.
+- `scripts/` - KiloSort parsing, application state, video/time synchronization,
+  raw-voltage extension contracts, data-status classification, shared themes,
+  language dictionaries, precompiled Help, plots, Probe rendering, region
+  metadata, and the optional database client.
 - `styles/` - current application styling.
 - `server/` - reusable SQLite/API service, transactional supplement endpoint,
   and command-line entry point; no experiment-specific path is embedded here.
@@ -98,7 +109,9 @@ neuropixels-explorer init-db --database <new-catalog.sqlite>
 
 SQLite stores metadata and relative references only. KiloSort arrays, raw
 voltage, and video payloads stay outside SQLite and outside Git. In database
-mode, Data Status can supplement a missing file or Recording folder. The local
+mode, video media is streamed from its registered runtime asset using bounded
+HTTP byte-range requests; the browser never receives a machine-specific path.
+Data Status can supplement a missing file or Recording folder. The local
 service stages and validates the selection, records it in one transaction, and
 rolls back database rows and managed-file moves together on failure. Existing
 assets are not overwritten; duplicates remain one `data_assets` row.
@@ -111,6 +124,7 @@ Portable checks do not require private data:
 node tests\validate-real-data.cjs --code-only
 node tests\validate-incremental-ingest.cjs
 node tests\validate-workspace-layout.cjs
+node tests\validate-video-sync.cjs
 node tests\validate-i18n-help.cjs
 node scripts\build-help-content.cjs --check
 python -m unittest discover -s tests\python

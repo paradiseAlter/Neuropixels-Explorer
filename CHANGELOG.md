@@ -5,6 +5,19 @@ Git tags rather than duplicated version directories on `main`.
 
 ## [Unreleased]
 
+- Added a compact behavior-video track directly above the aligned Unit signals,
+  with play/pause, seek, frame-step, speed, follow, collapse, and manual-offset
+  controls on one shared neural-time playhead.
+- Added a deterministic synthetic mouse-arena video with exact frame numbers
+  and five-second sync pulses so video alignment can be accepted without access
+  to protected laboratory video.
+- Added two-way navigation: video playback updates every open Unit playhead,
+  while a Cursor-mode click in a neural plot seeks the video to that time.
+- Added invertible `TimeMapping` support and visible verified/unverified mapping
+  provenance. Indexed video assets now support contained HTTP byte-range reads.
+- Added a versioned Raw Voltage provider/reader extension contract and an honest
+  no-provider UI state; continuous AP/LFP reading remains unimplemented.
+
 ## [3.3.0] - 2026-08-15
 
 - Moved the reusable indexed data service, SQLite migrations, and synthetic

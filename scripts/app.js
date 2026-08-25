@@ -14,6 +14,7 @@
   const helpContent = window.NeuropixelsHelpContent;
   const databaseClient = window.NeuropixelDatabaseClient;
   const WorkspaceLayout = window.NeuropixelsWorkspaceLayout.WorkspaceLayout;
+  const VideoSyncController = window.NeuropixelsVideoSync.VideoSyncController;
   let themeSnapshot = themeController.snapshot();
   let languageSnapshot = languageController.snapshot();
   const t = (key, values) => languageController.t(key, values);
@@ -109,7 +110,32 @@
     probeStackList: document.getElementById("probe-stack-list"),
     probeTrackStatus: document.getElementById("probe-track-status"),
     unitContextMenu: document.getElementById("unit-context-menu"),
-    unitContextTitle: document.getElementById("unit-context-title")
+    unitContextTitle: document.getElementById("unit-context-title"),
+    videoPanel: document.getElementById("video-sync-panel"),
+    videoSource: document.getElementById("video-source-label"),
+    videoStatus: document.getElementById("video-sync-status"),
+    videoBody: document.getElementById("video-sync-body"),
+    video: document.getElementById("behavior-video"),
+    videoCanvas: document.getElementById("synthetic-video-canvas"),
+    videoEmpty: document.getElementById("video-empty"),
+    videoError: document.getElementById("video-error"),
+    videoGenerate: document.getElementById("generate-synthetic-video"),
+    videoChoose: document.getElementById("choose-local-video"),
+    videoFile: document.getElementById("video-file-input"),
+    videoTransport: document.getElementById("video-transport"),
+    videoMapping: document.getElementById("video-mapping"),
+    videoPlay: document.getElementById("video-play-button"),
+    videoPrevious: document.getElementById("video-previous-frame"),
+    videoNext: document.getElementById("video-next-frame"),
+    videoSeek: document.getElementById("video-seek"),
+    videoSpeed: document.getElementById("video-speed-select"),
+    videoFollow: document.getElementById("video-follow"),
+    videoCurrent: document.getElementById("video-current-time"),
+    videoDuration: document.getElementById("video-duration"),
+    videoFrame: document.getElementById("video-frame-number"),
+    videoNeural: document.getElementById("video-neural-time"),
+    videoOffset: document.getElementById("video-offset"),
+    videoCollapse: document.getElementById("video-collapse-button")
   };
 
   const state = {
@@ -138,7 +164,8 @@
     syncingTime: false,
     interactionMode: "cursor",
     pendingSupplement: null,
-    supplementBusy: false
+    supplementBusy: false,
+    playbackNeuralTime: null
   };
 
   let helpReturnFocus = null;
@@ -154,6 +181,8 @@
     probeToggle: document.getElementById("probe-panel-toggle")
   });
 
+  let videoController = null;
+
   const plots = new PlotManager({
     detail: document.getElementById("spike-detail-canvas"),
     overview: document.getElementById("spike-overview-canvas"),
@@ -162,6 +191,8 @@
     selectionLabel: document.getElementById("zoom-selection-label"),
     cursor: document.getElementById("primary-plot-cursor"),
     cursorLabel: document.getElementById("primary-plot-cursor-label"),
+    playhead: document.getElementById("primary-sync-playhead"),
+    onCursorCommit: (time) => videoController?.seekNeural(time),
     traceColor: themeSnapshot.palette.units.primary.trace,
     rateColor: themeSnapshot.palette.units.primary.rate,
     rateFill: themeSnapshot.palette.units.primary.fill,
@@ -198,6 +229,37 @@
     trackStatus: elements.probeTrackStatus
   }, (interaction) => handleProbeUnitInteraction(interaction), ({ probeId, depth, segment }) => {
     showToast(t("toast.probePosition", { probe: Number(probeId) + 1, region: segment?.region || t("units.unmapped"), depth: depth.toFixed(0) }));
+  });
+
+  videoController = new VideoSyncController({
+    panel: elements.videoPanel,
+    source: elements.videoSource,
+    status: elements.videoStatus,
+    body: elements.videoBody,
+    video: elements.video,
+    canvas: elements.videoCanvas,
+    empty: elements.videoEmpty,
+    error: elements.videoError,
+    synthetic: elements.videoGenerate,
+    choose: elements.videoChoose,
+    file: elements.videoFile,
+    controls: elements.videoTransport,
+    mapping: elements.videoMapping,
+    play: elements.videoPlay,
+    previous: elements.videoPrevious,
+    next: elements.videoNext,
+    seek: elements.videoSeek,
+    speed: elements.videoSpeed,
+    follow: elements.videoFollow,
+    current: elements.videoCurrent,
+    duration: elements.videoDuration,
+    frame: elements.videoFrame,
+    neural: elements.videoNeural,
+    offset: elements.videoOffset,
+    collapse: elements.videoCollapse
+  }, {
+    onNeuralTime: (time, context) => handleVideoNeuralTime(time, context),
+    translator: t
   });
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -301,6 +363,7 @@
     localizeHelpControls();
     probeViewer.setTranslator?.(t);
     workspaceLayout.setTranslator?.(t);
+    videoController?.setTranslator(t);
     if (!elements.helpDrawer.hidden) renderHelpContent();
     if (activeHelpControl) showContextHelp(activeHelpControl);
     if (state.recordings.length) {
@@ -394,6 +457,26 @@
     }
   }
 
+  function handleVideoNeuralTime(time, context = {}) {
+    state.playbackNeuralTime = Number.isFinite(Number(time)) ? Number(time) : null;
+    plotEntries().forEach((entry) => entry.manager.setPlaybackTime(state.playbackNeuralTime));
+    if (!context.follow || state.playbackNeuralTime == null) return;
+    const source = focusedEntry() || primaryOpenUnit();
+    if (!source?.manager.data) return;
+    const viewStart = source.manager.start;
+    const viewEnd = viewStart + source.manager.span;
+    const margin = source.manager.span * .08;
+    if (state.playbackNeuralTime >= viewStart + margin && state.playbackNeuralTime <= viewEnd - margin) return;
+    const nextStart = state.playbackNeuralTime - source.manager.span * .22;
+    state.syncingTime = true;
+    try {
+      if (state.timeLinked) plotEntries().forEach((entry) => entry.manager.setWindow(nextStart, entry.manager.span));
+      else source.manager.setWindow(nextStart, source.manager.span);
+    } finally {
+      state.syncingTime = false;
+    }
+  }
+
   function backFocusedTime() {
     const source = focusedEntry();
     if (!source?.manager.data || !source.manager.history.length) return;
@@ -436,6 +519,7 @@
     elements.unitSearch.value = "";
     elements.qualityFilter.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.dataset.quality === "all"));
     if (recordingChanged) renderRecordings();
+    if (recordingChanged) videoController?.setRecording(entry.recording, state.databaseCatalog?.videos || []);
     renderUnitList();
     requestAnimationFrame(() => {
       elements.unitList.querySelector(`[data-cluster-id="${Number(entry.clusterId)}"]`)?.scrollIntoView({ block: "nearest" });
@@ -780,8 +864,8 @@
     }
     if (item.key === "unitRegions") return { label: t("status.file.region"), detail: item.state === "available" ? t("status.file.regionAvailable", { count: number(item.count) }) : t("status.file.regionMissing") };
     if (item.key === "probeTrack") return { label: t("status.file.track"), detail: item.state === "available" ? t("status.file.trackAvailable", { count: number(item.count), probes: number(item.probes) }) : t("status.file.trackMissing") };
-    if (item.key === "video") return { label: t("status.file.video"), detail: t("status.file.videoDetail") };
-    if (item.key === "rawVoltage") return { label: t("status.file.rawVoltage"), detail: t("status.file.rawVoltageDetail") };
+    if (item.key === "video") return { label: t("status.file.video"), detail: t(item.state === "detected" ? "status.file.videoDetected" : "status.file.videoDetail") };
+    if (item.key === "rawVoltage") return { label: t("status.file.rawVoltage"), detail: t(item.state === "detected" ? "status.file.rawVoltageDetected" : "status.file.rawVoltageDetail") };
     return { label: t("status.file.invalid"), detail: item.detail };
   }
 
@@ -891,6 +975,7 @@
         <canvas tabindex="0" aria-label="${escapeHtml(unitTerm)} ${Number(clusterId)} · ${escapeHtml(i18nApi.GLOSSARY.spike[languageSnapshot.language])} · ${escapeHtml(i18nApi.GLOSSARY.firingRate[languageSnapshot.language])}"></canvas>
         <div class="zoom-selection" hidden><span></span></div>
         <div class="plot-cursor" hidden><span></span></div>
+        <div class="sync-playhead" hidden><span>${escapeHtml(t("video.playhead"))}</span></div>
         <div class="canvas-empty">${escapeHtml(t("units.loadingAria", { id: Number(clusterId) }))}</div>
       </div>`;
     elements.comparisonTraces.append(lane);
@@ -898,6 +983,7 @@
     const canvas = lane.querySelector("canvas");
     const selection = lane.querySelector(".zoom-selection");
     const cursor = lane.querySelector(".plot-cursor");
+    const playhead = lane.querySelector(".sync-playhead");
     const windowElement = lane.querySelector(".trace-window");
     const manager = new PlotManager({
       detail: canvas,
@@ -906,6 +992,8 @@
       selectionLabel: selection.querySelector("span"),
       cursor,
       cursorLabel: cursor.querySelector("span"),
+      playhead,
+      onCursorCommit: (time) => videoController?.seekNeural(time),
       detailEmpty: lane.querySelector(".canvas-empty"),
       traceColor: palette.trace,
       rateColor: palette.rate,
@@ -926,6 +1014,7 @@
     state.syncingTime = true;
     try {
       manager.setData({ ...result, sampleRate: recording.sampleRate });
+      manager.setPlaybackTime(state.playbackNeuralTime);
       manager.setMode(state.interactionMode);
       if (state.timeLinked && source?.manager.data) {
         manager.history = source.manager.history.map((view) => ({ ...view }));
@@ -1031,6 +1120,7 @@
     elements.primaryTraceTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId}`;
     elements.primaryTraceMeta.textContent = [recording.name, label.quality, region?.region || t("review.regionShortUnmapped"), `${number(result.spikeCount)} ${i18nApi.GLOSSARY.spike[languageSnapshot.language]}`].join(" · ");
     plots.setData({ ...result, sampleRate: recording.sampleRate });
+    plots.setPlaybackTime(state.playbackNeuralTime);
     if (initialWindow) plots.setWindow(initialWindow.start, initialWindow.span);
     if (focus) setFocusedUnit(key);
     else syncProbeView();
@@ -1092,6 +1182,7 @@
     elements.unitSearch.value = "";
     renderRecordings();
     renderUnitList();
+    videoController?.setRecording(recording, state.databaseCatalog?.videos || []);
   }
 
   function renderDialog() {
@@ -1613,6 +1704,7 @@
   window.addEventListener("beforeunload", () => {
     state.worker?.terminate();
     if (state.workerUrl) URL.revokeObjectURL(state.workerUrl);
+    videoController?.destroy();
   });
 
   function clamp(value, minimum, maximum) {

@@ -16,7 +16,7 @@ Use **Data status** after loading. It separates:
 - **Missing**: core inputs absent from at least one recording.
 - **Invalid**: candidate recordings that failed structural checks.
 - **Optional**: brain-region annotations and Probe-region tracks.
-- **Future / Video**: reserved interfaces not required in this release.
+- **Streams / Extensions**: synchronized video availability and the future Raw Voltage provider state.
 
 For every missing core input, Data status names the affected Recording and the
 exact expected filename. Choose **Add files** for one or more individual files,
@@ -66,6 +66,25 @@ Drag horizontally to move the time window. With the pointer inside a signal, whe
 ### Linked and independent time
 
 **Time linked** applies Zoom, Pan, Back, and Reset to every open Unit. **Time independent** changes only the focused Unit. Use linked time for direct temporal comparison and independent time when one signal needs another scale.
+
+### Synchronized behavior video
+
+The compact video track sits directly above the neural signals. If the selected
+Recording contains a supported video file, the Explorer opens it locally. Use
+**Attach local video** to choose another file, or **Generate validation video**
+when protected laboratory video is unavailable. The generated mouse-arena
+stream is deterministic: it exposes exact 30 Hz frame numbers and a visible
+sync pulse every five seconds.
+
+Play, pause, seek, change speed, or step one frame at a time. **Follow signal**
+keeps the current neural time inside the visible Unit window. The green Video
+playhead is drawn at the same neural time on every open Unit. Clicking a neural
+plot in Cursor mode performs the reverse operation and seeks the video.
+
+The mapping badge distinguishes a verified frame clock from an unverified
+manual offset. Changing **Offset (s)** intentionally changes the badge to
+**Unverified · Manual offset**. A real experiment should use frame timestamps,
+TTL events, or a documented clock fit before the mapping is called verified.
 
 ## 5. Interpret Unit details
 
@@ -129,5 +148,6 @@ The Help documentation is stored as Markdown in this repository and precompiled 
 - **No recordings found**: confirm each candidate contains `spike_times.npy`, `spike_clusters.npy`, and `params.py`.
 - **A plot is unavailable**: open Data status and check whether its source file is missing.
 - **Brain region is unmapped**: confirm a compatible Legacy Table or depth mapping was included and uses the correct Recording/Unit identifiers.
-- **Raw voltage is unavailable**: KiloSort output folders often reference an external `continuous.dat`; the Explorer does not label spike timing as raw voltage.
+- **Raw voltage is unavailable**: KiloSort output folders often reference an external `continuous.dat`; the Explorer exposes a versioned provider/reader extension port but registers no Raw Voltage implementation and never labels spike timing as voltage.
+- **No laboratory video is available**: use **Generate validation video** to test playback and exact alignment without creating or copying protected data.
 - **Navigation changes the wrong trace**: check whether time is Linked or Independent and which signal is focused.

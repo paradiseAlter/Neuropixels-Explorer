@@ -16,7 +16,7 @@ Use **Estado de datos** después de cargar. Separa:
 - **Faltante**: entradas principales ausentes en uno o más registros.
 - **No válido**: registros candidatos que no superaron las comprobaciones estructurales.
 - **Opcional**: anotaciones cerebrales y trayectos Sonda-región.
-- **Futuro / Vídeo**: interfaces reservadas que no son necesarias en esta versión.
+- **Flujos / Extensiones**: disponibilidad del vídeo sincronizado y estado del futuro proveedor de Raw Voltage.
 
 Para cada entrada principal faltante, **Estado de datos** identifica el Registro afectado y el nombre exacto del archivo esperado. Use **Añadir archivos** para uno o varios archivos individuales o **Añadir carpeta** para una carpeta de Registro. El Explorer rechaza archivos de otro Registro, reemplazos en conflicto, candidatos duplicados y arrays NPY con formas incompatibles. Si el suplemento falla, no deja un conjunto parcial ni en el catálogo ni en los archivos gestionados. Si termina correctamente, solo actualiza los Registros afectados y conserva las Unidades abiertas, la Unidad enfocada, las ventanas de tiempo, el historial de navegación y la disposición de tres columnas.
 
@@ -59,6 +59,26 @@ Arrastre horizontalmente para mover la ventana. Con el puntero dentro de una se�
 ### Tiempo vinculado e independiente
 
 **Tiempo vinculado** aplica Zoom, Pan, Atrás y Restablecer a todas las Unidades abiertas. **Tiempo independiente** modifica solo la Unidad enfocada. Vincule para comparar directamente y desvincule cuando una señal necesite otra escala.
+
+### Vídeo de conducta sincronizado
+
+La pista compacta de vídeo está justo encima de las señales neurales. Si el
+Registro contiene un vídeo compatible, el Explorer lo abre localmente. Use
+**Conectar vídeo local** para elegir otro archivo o **Generar vídeo de
+validación** cuando no esté disponible el vídeo protegido del laboratorio. El
+vídeo generado es determinista: muestra fotogramas exactos a 30 Hz y un pulso
+visible de sincronización cada cinco segundos.
+
+Puede reproducir, pausar, buscar, cambiar la velocidad o avanzar un fotograma.
+**Seguir señal** mantiene el tiempo neural actual dentro de la ventana visible.
+El cursor verde de Vídeo marca el mismo tiempo neural en todas las Unidades
+abiertas. Un clic en un gráfico neural en modo Cursor realiza la operación
+inversa y desplaza el vídeo a ese tiempo.
+
+La insignia distingue un reloj de fotogramas verificado de un desfase manual no
+verificado. Cambiar **Desfase (s)** muestra **No verificado · Desfase manual**.
+Un experimento real necesita marcas de fotograma, eventos TTL o un ajuste de
+reloj documentado antes de declararse verificado.
 
 ## 5. Interpretar los detalles de la Unidad
 
@@ -122,5 +142,6 @@ La Ayuda se conserva como Markdown y se precompila como contenido JavaScript loc
 - **No se encontraron registros**: confirme `spike_times.npy`, `spike_clusters.npy` y `params.py` en cada candidato.
 - **Un gráfico no está disponible**: abra Estado de datos y compruebe el archivo fuente.
 - **Región sin mapear**: confirme una Legacy Table o mapa de profundidad compatible y los identificadores correctos.
-- **Voltaje sin procesar no disponible**: KiloSort suele referirse a un `continuous.dat` externo; el Explorer no presenta los tiempos de potenciales como voltaje bruto.
+- **Voltaje sin procesar no disponible**: KiloSort suele referirse a un `continuous.dat` externo; el Explorer expone un puerto versionado de proveedor/lector, pero no registra una implementación de Raw Voltage ni presenta tiempos de potenciales como voltaje.
+- **No hay vídeo del laboratorio**: use **Generar vídeo de validación** para comprobar reproducción y alineación exacta sin crear ni copiar datos protegidos.
 - **La navegación cambia la señal equivocada**: compruebe Tiempo vinculado/independiente y qué señal está enfocada.

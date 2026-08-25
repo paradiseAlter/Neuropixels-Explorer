@@ -109,13 +109,13 @@
         key: "video",
         label: "Behavior video synchronization",
         state: recordings.some((recording) => recording?.capabilities?.video) ? "detected" : "future",
-        detail: recordings.some((recording) => recording?.capabilities?.video) ? "Video files detected; synchronized viewing is reserved for a later stage" : "Future interface · no video detected"
+        detail: recordings.some((recording) => recording?.capabilities?.video) ? "Video detected; synchronized viewing is available" : "Synchronized viewer ready · deterministic validation video available"
       },
       {
         key: "rawVoltage",
         label: "Raw voltage viewer",
         state: recordings.some((recording) => recording?.capabilities?.rawVoltage) ? "detected" : "future",
-        detail: recordings.some((recording) => recording?.capabilities?.rawVoltage) ? "Raw voltage detected; direct trace rendering is reserved for a later stage" : "Future interface · raw voltage not present"
+        detail: recordings.some((recording) => recording?.capabilities?.rawVoltage) ? "Raw voltage detected; no reader provider is registered" : "Extension contract ready · no raw-voltage provider registered"
       }
     ];
 

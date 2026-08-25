@@ -111,7 +111,7 @@
             <section class="plot-card primary-plot-card">
               <header class="plot-header">
                 <div class="plot-heading">
-                  <span class="heading-with-help"><strong data-i18n="review.manual">MANUAL SPIKE REVIEW</strong><button class="context-help" type="button" data-help-key="tips.manualReview" data-help-topic="review.manual">?</button></span>
+                  <span class="heading-with-help"><strong data-i18n="review.manual">BEHAVIOR + NEURAL REVIEW</strong><button class="context-help" type="button" data-help-key="tips.manualReview" data-help-topic="review.manual">?</button></span>
                   <span id="comparison-count-label">No Unit open · select a Unit from the left</span>
                 </div>
                 <div class="plot-controls" role="group" aria-label="Time view controls">
@@ -127,6 +127,51 @@
                   <button id="reset-time-button" type="button" data-i18n="controls.reset">RESET</button>
                 </div>
               </header>
+              <section class="video-sync-panel" id="video-sync-panel" aria-label="Synchronized behavior video" data-i18n-aria-label="video.aria">
+                <header class="video-sync-header">
+                  <div>
+                    <span class="video-sync-kicker" data-i18n="video.kicker">BEHAVIOR VIDEO · SHARED NEURAL TIME</span>
+                    <strong id="video-source-label" data-i18n="video.sourcePrompt">No video source attached</strong>
+                  </div>
+                  <div class="video-sync-header-actions">
+                    <span class="video-sync-status" id="video-sync-status" data-status="empty" data-i18n="video.noSource">NO SOURCE</span>
+                    <button class="video-collapse" id="video-collapse-button" type="button" aria-controls="video-sync-body" aria-expanded="true" title="Collapse video" data-i18n-title="video.collapse">−</button>
+                  </div>
+                </header>
+                <div class="video-sync-body" id="video-sync-body">
+                  <div class="video-stage" id="video-stage">
+                    <video id="behavior-video" playsinline muted preload="metadata" hidden></video>
+                    <canvas id="synthetic-video-canvas" aria-label="Deterministic synthetic mouse behavior video" data-i18n-aria-label="video.syntheticAria" hidden></canvas>
+                    <div class="video-empty" id="video-empty">
+                      <div class="video-empty-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+                      <strong data-i18n="video.emptyTitle">NO BEHAVIOR VIDEO AVAILABLE</strong>
+                      <p data-i18n="video.emptyDescription">Generate a deterministic validation stream or attach a local video. No laboratory video is required.</p>
+                      <div class="video-empty-actions">
+                        <button class="secondary-button" id="generate-synthetic-video" type="button" data-i18n="video.generate">GENERATE VALIDATION VIDEO</button>
+                        <button class="quiet-button" id="choose-local-video" type="button" data-i18n="video.choose">ATTACH LOCAL VIDEO</button>
+                      </div>
+                    </div>
+                    <div class="video-error" id="video-error" role="alert" hidden></div>
+                  </div>
+                  <div class="video-transport" id="video-transport" hidden>
+                    <div class="video-transport-buttons">
+                      <button id="video-previous-frame" type="button" aria-label="Previous frame" data-i18n-aria-label="video.previousFrame" title="Previous frame" data-i18n-title="video.previousFrame">│◀</button>
+                      <button class="video-play" id="video-play-button" type="button" aria-label="Play" data-i18n-aria-label="video.play" title="Play" data-i18n-title="video.play">▶</button>
+                      <button id="video-next-frame" type="button" aria-label="Next frame" data-i18n-aria-label="video.nextFrame" title="Next frame" data-i18n-title="video.nextFrame">▶│</button>
+                    </div>
+                    <div class="video-time-readout"><strong id="video-current-time">00:00:00.000</strong><span>/</span><span id="video-duration">00:00:00.000</span></div>
+                    <input class="video-seek" id="video-seek" type="range" min="0" max="1" step="0.033333" value="0" aria-label="Video time" data-i18n-aria-label="video.seekAria">
+                    <label class="video-speed"><span data-i18n="video.speed">SPEED</span><select id="video-speed-select" aria-label="Playback speed" data-i18n-aria-label="video.speedAria"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+                    <label class="video-follow"><input id="video-follow" type="checkbox" checked><span data-i18n="video.follow">FOLLOW SIGNAL</span></label>
+                  </div>
+                  <div class="video-mapping" id="video-mapping" hidden>
+                    <div><span data-i18n="video.frame">FRAME</span><strong id="video-frame-number">0000000</strong></div>
+                    <div><span data-i18n="video.neuralTime">NEURAL TIME</span><strong id="video-neural-time">0.000 s</strong></div>
+                    <label><span data-i18n="video.offset">OFFSET (S)</span><input id="video-offset" type="number" step="0.001" value="0" aria-label="Video to neural time offset in seconds" data-i18n-aria-label="video.offsetAria"></label>
+                    <div class="raw-voltage-port"><span data-i18n="raw.port">RAW VOLTAGE PORT</span><strong data-i18n="raw.notAttached">EXTENSION READY · NO PROVIDER</strong></div>
+                  </div>
+                </div>
+              </section>
               <div class="manual-review-empty" id="manual-review-empty" hidden data-i18n="review.empty">Select a Unit from the left to open its signal.</div>
               <article class="trace-lane active" id="primary-trace-lane" data-view-key="primary">
                 <header class="trace-lane-header">
@@ -137,6 +182,7 @@
                   <canvas id="spike-detail-canvas" tabindex="0" aria-label="Detailed spike raster and firing rate" data-i18n-aria-label="plots.detailAria"></canvas>
                   <div class="zoom-selection" id="zoom-selection" hidden><span id="zoom-selection-label"></span></div>
                   <div class="plot-cursor" id="primary-plot-cursor" hidden><span id="primary-plot-cursor-label"></span></div>
+                  <div class="sync-playhead" id="primary-sync-playhead" hidden><span data-i18n="video.playhead">VIDEO</span></div>
                   <div class="canvas-empty" id="spike-detail-empty" data-i18n="review.selectUnit">Select a Unit</div>
                 </div>
               </article>
@@ -214,6 +260,7 @@
     <input id="folder-input" type="file" webkitdirectory multiple hidden>
     <input id="supplement-file-input" type="file" multiple hidden>
     <input id="supplement-folder-input" type="file" webkitdirectory multiple hidden>
+    <input id="video-file-input" type="file" accept="video/*,.mkv" hidden>
 
     <div class="drop-overlay" id="drop-overlay" hidden>
       <strong data-i18n="drop.open">DROP TO OPEN FOLDER</strong>
@@ -250,6 +297,8 @@
   <script src="./scripts/region-core.js" defer></script>
   <script src="./scripts/help-content.js?v=3.3.0" defer></script>
   <script src="./scripts/data-status.js?v=3.3.0" defer></script>
+  <script src="./scripts/stream-contracts.js?v=3.3.0" defer></script>
+  <script src="./scripts/video-sync.js?v=3.3.0" defer></script>
   <script src="./scripts/plots.js" defer></script>
   <script src="./scripts/probe-view.js?v=3.3.0" defer></script>
   <script src="./scripts/database-client.js?v=3.3.0" defer></script>

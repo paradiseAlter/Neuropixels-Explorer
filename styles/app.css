@@ -605,6 +605,59 @@ input:focus-visible,
 .plot-controls .time-link-button.active { border-color: var(--open-border); background: var(--open-bg); color: var(--good); }
 .plot-control-divider { width: 1px; height: 18px; margin: 0 3px; background: var(--line); }
 
+.video-sync-panel { border-bottom: 1px solid var(--line-soft); background: var(--surface-low); }
+.video-sync-header { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px 6px 13px; border-bottom: 1px solid var(--line-soft); }
+.video-sync-header > div:first-child { display: grid; min-width: 0; gap: 4px; }
+.video-sync-kicker { color: var(--muted); font: 650 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .09em; }
+.video-sync-header strong { overflow: hidden; color: var(--text-soft); font: 620 10px/1.2 "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.video-sync-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; }
+.video-sync-status { padding: 5px 7px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font: 650 8px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .05em; }
+.video-sync-status[data-status="verified"] { border-color: #355143; background: color-mix(in srgb, var(--good) 7%, transparent); color: var(--good); }
+.video-sync-status[data-status="unverified"] { border-color: #61533d; background: color-mix(in srgb, var(--warn) 6%, transparent); color: var(--warn); }
+.video-collapse { width: 27px; height: 27px; padding: 0; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-control); color: var(--muted); cursor: pointer; font: 500 15px/1 "Cascadia Mono", Consolas, monospace; }
+.video-collapse:hover { border-color: var(--active-border); color: var(--text); }
+.video-sync-panel.is-collapsed .video-sync-body { display: none; }
+
+.video-stage { position: relative; display: grid; min-height: 190px; max-height: 250px; place-items: center; overflow: hidden; background: #080b0d; }
+.video-stage video,
+.video-stage canvas { display: block; width: 100%; height: clamp(190px, 20vw, 240px); object-fit: contain; background: #080b0d; }
+.video-stage video[hidden],
+.video-stage canvas[hidden] { display: none; }
+.video-empty { display: grid; max-width: 520px; justify-items: center; gap: 10px; padding: 30px 24px; color: var(--muted); text-align: center; }
+.video-empty[hidden] { display: none; }
+.video-empty strong { color: var(--text-soft); font-size: 11px; letter-spacing: .08em; }
+.video-empty p { margin: 0; font-size: 10px; line-height: 1.55; }
+.video-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-top: 3px; }
+.video-empty-actions button { height: 29px; }
+.video-empty-mark { display: flex; width: 66px; height: 42px; align-items: flex-end; justify-content: center; gap: 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); }
+.video-empty-mark i { width: 8px; border-radius: 1px 1px 0 0; background: var(--accent); opacity: .62; }
+.video-empty-mark i:nth-child(1) { height: 13px; }
+.video-empty-mark i:nth-child(2) { height: 28px; }
+.video-empty-mark i:nth-child(3) { height: 20px; }
+.video-error { position: absolute; right: 12px; bottom: 12px; left: 12px; padding: 9px 11px; border: 1px solid #5a3939; border-radius: 3px; background: #211516; color: var(--error); font-size: 10px; }
+
+.video-transport { display: grid; grid-template-columns: auto auto minmax(120px, 1fr) auto auto; min-height: 47px; align-items: center; gap: 9px; padding: 7px 10px; border-top: 1px solid var(--line-soft); background: var(--panel); }
+.video-transport-buttons { display: flex; gap: 3px; }
+.video-transport button { min-width: 32px; height: 29px; padding: 0 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-control); color: var(--text-soft); cursor: pointer; font: 600 9px/1 "Cascadia Mono", Consolas, monospace; }
+.video-transport button:hover { border-color: var(--active-border); color: var(--text); }
+.video-transport .video-play { min-width: 40px; color: var(--accent-strong); }
+.video-time-readout { display: flex; align-items: center; gap: 6px; color: var(--muted); font: 500 9px/1 "Cascadia Mono", Consolas, monospace; white-space: nowrap; }
+.video-time-readout strong { color: var(--text); font-weight: 620; }
+.video-seek { width: 100%; accent-color: var(--accent); cursor: pointer; }
+.video-speed { display: flex; align-items: center; gap: 5px; color: var(--muted); font: 650 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .06em; }
+.video-speed select { height: 28px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-control); color: var(--text-soft); font: 500 9px/1 "Cascadia Mono", Consolas, monospace; }
+.video-follow { display: flex; align-items: center; gap: 5px; color: var(--muted); font: 650 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .05em; white-space: nowrap; }
+.video-follow input { accent-color: var(--good); }
+
+.video-mapping { display: grid; grid-template-columns: minmax(112px, .7fr) minmax(130px, .8fr) minmax(125px, .7fr) minmax(220px, 1.6fr); border-top: 1px solid var(--line-soft); background: var(--surface); }
+.video-mapping > div,
+.video-mapping > label { display: grid; min-height: 45px; align-content: center; gap: 5px; padding: 0 10px; border-right: 1px solid var(--line-soft); }
+.video-mapping span { color: var(--muted); font: 650 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .07em; }
+.video-mapping strong { color: var(--text-soft); font: 600 10px/1 "Cascadia Mono", Consolas, monospace; }
+.video-mapping input { width: 92px; height: 23px; padding: 0 6px; border: 1px solid var(--line); border-radius: 2px; background: var(--field); color: var(--text); font: 500 9px/1 "Cascadia Mono", Consolas, monospace; }
+.video-mapping .raw-voltage-port { border-right: 0; border-left: 2px solid var(--line); }
+.video-mapping .raw-voltage-port strong { color: var(--muted); font-size: 8px; }
+
 .canvas-frame { position: relative; min-width: 0; }
 .canvas-frame canvas { display: block; width: 100%; height: 100%; }
 .trace-lane { --trace-color: var(--accent); position: relative; border-bottom: 1px solid var(--line-soft); background: var(--surface-trace); }
@@ -652,6 +705,18 @@ input:focus-visible,
   white-space: nowrap;
 }
 .plot-cursor.align-right span { right: 6px; left: auto; }
+.sync-playhead {
+  position: absolute;
+  z-index: 3;
+  top: 13px;
+  bottom: 25px;
+  width: 1px;
+  border-left: 1px solid var(--good);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--good) 45%, transparent);
+  pointer-events: none;
+}
+.sync-playhead span { position: absolute; top: 4px; left: 5px; padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--good) 55%, var(--line)); border-radius: 2px; background: var(--overlay); color: var(--good); font: 650 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .05em; }
+.sync-playhead.align-right span { right: 5px; left: auto; }
 .zoom-selection {
   position: absolute;
   z-index: 2;
@@ -937,6 +1002,12 @@ input:focus-visible,
   .plot-controls { width: 100%; overflow-x: auto; }
   .probe-card canvas { height: 340px; }
   .panel-collapse-button { opacity: .68; }
+  .video-transport { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .video-time-readout { display: none; }
+  .video-follow { grid-column: 3; }
+  .video-mapping { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .video-mapping > div:nth-child(2) { border-right: 0; }
+  .video-mapping .raw-voltage-port { border-top: 1px solid var(--line-soft); border-left: 0; }
 }
 
 @media (max-width: 1500px) {

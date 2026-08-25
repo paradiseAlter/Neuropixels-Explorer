@@ -62,6 +62,8 @@ def _write_fixture(root: Path, *, missing_roles: set[str] | None = None) -> tupl
     for filename, array in arrays.items():
         if roles[filename] not in missing_roles:
             np.save(recording_root / filename, array)
+    video_path = recording_root / "synthetic-validation.mp4"
+    video_path.write_bytes(bytes(range(256)) * 8)
 
     database = root / "runtime" / "catalog.sqlite"
     initialize_database(database)
@@ -182,6 +184,47 @@ def _write_fixture(root: Path, *, missing_roles: set[str] | None = None) -> tupl
                     "missing" if is_missing else "available",
                 ),
             )
+        video_relative = video_path.relative_to(data_root).as_posix()
+        cursor = connection.execute(
+            """
+            INSERT INTO data_assets(
+                dataset_id, recording_id, asset_role, media_type, storage_backend,
+                storage_uri, relative_path, filename, extension, byte_size,
+                checksum_status, availability_status, source_data_origin,
+                processing_stage, is_original
+            ) VALUES ('fixture', 'rec_01', 'video', 'video/mp4', 'project_file',
+                      ?, ?, 'synthetic-validation.mp4', '.mp4', ?, 'not_computed',
+                      'available', 'synthetic_test', 'test_fixture', 1)
+            """,
+            (f"project://{video_relative}", video_relative, video_path.stat().st_size),
+        )
+        video_asset_id = int(cursor.lastrowid)
+        connection.execute(
+            """
+            INSERT INTO video_streams(
+                video_stream_id, dataset_id, recording_id, source_asset_id,
+                video_name, duration_s, frame_rate_hz, frame_count,
+                width_px, height_px, codec, timestamp_source, availability_status,
+                metadata_json
+            ) VALUES ('rec_01:video:synthetic', 'fixture', 'rec_01', ?,
+                      'Synthetic validation', 4.0, 30.0, 120, 640, 360,
+                      'fixture-bytes', 'synthetic_frame_clock', 'available', '{}')
+            """,
+            (video_asset_id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO time_mappings(
+                time_mapping_id, dataset_id, source_type, source_id,
+                target_type, target_id, mapping_method, offset_s, scale,
+                drift_ppm, matched_event_count, residual_rms_ms,
+                verification_status, provenance_json
+            ) VALUES ('fixture:video-map', 'fixture', 'video_stream',
+                      'rec_01:video:synthetic', 'event_stream', 'rec_01:neural-clock',
+                      'frame_timestamps', 0, 1, 0, 120, 0,
+                      'verified', '{"source":"synthetic_fixture"}')
+            """
+        )
         connection.commit()
     return data_root, database
 
@@ -208,6 +251,9 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(len(catalog["recordings"]), 1)
         self.assertEqual(len(catalog["recordings"][0]["units"]), 2)
         self.assertTrue(catalog["probeTrack"]["valid"])
+        self.assertEqual(len(catalog["videos"]), 1)
+        self.assertEqual(catalog["videos"][0]["timeMapping"]["verification_status"], "verified")
+        self.assertTrue(catalog["videos"][0]["mediaUrl"].endswith("/media"))
 
         review = self.service.unit_review("rec_01_unit_0007")
         self.assertEqual(review["spikeCount"], 3)
@@ -229,6 +275,14 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(health["dataset"]["schema_version"], 3)
             with urllib.request.urlopen(f"{base}/api/catalog", timeout=10) as response:
                 self.assertEqual(json.load(response)["dataset"]["dataset_id"], "fixture")
+            request = urllib.request.Request(
+                f"{base}/api/videos/rec_01%3Avideo%3Asynthetic/media",
+                headers={"Range": "bytes=10-19"},
+            )
+            with urllib.request.urlopen(request, timeout=10) as response:
+                self.assertEqual(response.status, 206)
+                self.assertEqual(response.headers["Content-Range"], "bytes 10-19/2048")
+                self.assertEqual(response.read(), bytes(range(10, 20)))
             with urllib.request.urlopen(f"{base}/", timeout=10) as response:
                 html = response.read().decode("utf-8")
             self.assertIn("Neuropixels Explorer", html)

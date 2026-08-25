@@ -13,7 +13,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import numpy as np
 
@@ -246,9 +246,7 @@ class CatalogService:
                     "SELECT COUNT(*) AS mapping_count, COUNT(DISTINCT brain_region_id) AS region_count FROM unit_locations WHERE brain_region_id IS NOT NULL"
                 ).fetchone()
             )
-            videos = connection.execute(
-                "SELECT video_stream_id, recording_id, video_name, availability_status FROM video_streams ORDER BY video_stream_id"
-            ).fetchall()
+            videos = self._video_descriptors(connection)
             probe_track_rows = connection.execute(
                 """
                 SELECT pas.source_group_id AS probeId, pas.depth_um AS depthUm,
@@ -284,22 +282,89 @@ class CatalogService:
             "summary": {**(summary or {}), **(region_summary or {})},
             "recordings": recordings,
             "probeTrack": _probe_track([dict(row) for row in probe_track_rows]),
-            "videos": [dict(row) for row in videos],
+            "videos": videos,
             "serverTimingMs": round((time.perf_counter() - started) * 1000, 3),
         }
 
+    def _video_descriptors(self, connection: sqlite3.Connection) -> list[dict[str, Any]]:
+        rows = connection.execute(
+            """
+            SELECT vs.*, source.relative_path AS source_relative_path,
+                   proxy.relative_path AS proxy_relative_path,
+                   tm.mapping_method, tm.offset_s, tm.scale, tm.drift_ppm,
+                   tm.matched_event_count, tm.residual_rms_ms,
+                   tm.verification_status, tm.provenance_json
+            FROM video_streams vs
+            LEFT JOIN data_assets source ON source.asset_id = vs.source_asset_id
+            LEFT JOIN data_assets proxy ON proxy.asset_id = vs.proxy_asset_id
+            LEFT JOIN time_mappings tm
+              ON tm.time_mapping_id = (
+                   SELECT candidate.time_mapping_id
+                   FROM time_mappings candidate
+                   WHERE candidate.source_type = 'video_stream'
+                     AND candidate.source_id = vs.video_stream_id
+                   ORDER BY candidate.verification_status = 'verified' DESC,
+                            candidate.residual_rms_ms IS NULL,
+                            candidate.residual_rms_ms,
+                            candidate.time_mapping_id
+                   LIMIT 1
+              )
+            ORDER BY vs.video_stream_id
+            """
+        ).fetchall()
+        videos: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            has_media = bool(item.get("proxy_relative_path") or item.get("source_relative_path"))
+            item["mediaUrl"] = f"/api/videos/{quote(str(item['video_stream_id']), safe='')}/media" if has_media else None
+            if item.get("mapping_method"):
+                item["timeMapping"] = {
+                    "method": item.pop("mapping_method"),
+                    "offset_s": item.pop("offset_s"),
+                    "scale": item.pop("scale"),
+                    "drift_ppm": item.pop("drift_ppm"),
+                    "matched_event_count": item.pop("matched_event_count"),
+                    "residual_rms_ms": item.pop("residual_rms_ms"),
+                    "verification_status": item.pop("verification_status"),
+                    "provenance": json.loads(item.pop("provenance_json") or "{}"),
+                }
+            else:
+                for key in ("mapping_method", "offset_s", "scale", "drift_ppm", "matched_event_count", "residual_rms_ms", "verification_status", "provenance_json"):
+                    item.pop(key, None)
+                item["timeMapping"] = None
+            item.pop("source_relative_path", None)
+            item.pop("proxy_relative_path", None)
+            videos.append(item)
+        return videos
+
     def videos(self) -> dict[str, Any]:
         with self.connect() as connection:
-            rows = connection.execute(
+            videos = self._video_descriptors(connection)
+        return {"videos": videos}
+
+    def video_media(self, video_stream_id: str) -> tuple[Path, str]:
+        with self.connect() as connection:
+            row = connection.execute(
                 """
-                SELECT vs.*, source.storage_uri AS source_uri, proxy.storage_uri AS proxy_uri
+                SELECT COALESCE(proxy.relative_path, source.relative_path) AS relative_path,
+                       COALESCE(proxy.media_type, source.media_type) AS media_type,
+                       vs.availability_status
                 FROM video_streams vs
                 LEFT JOIN data_assets source ON source.asset_id = vs.source_asset_id
                 LEFT JOIN data_assets proxy ON proxy.asset_id = vs.proxy_asset_id
-                ORDER BY vs.video_stream_id
-                """
-            ).fetchall()
-        return {"videos": [dict(row) for row in rows]}
+                WHERE vs.video_stream_id = ?
+                """,
+                (video_stream_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown video stream: {video_stream_id}")
+        if row["availability_status"] != "available" or not row["relative_path"]:
+            raise FileNotFoundError(f"Video stream is not available: {video_stream_id}")
+        path = self.paths.resolve_asset(str(row["relative_path"]))
+        if not path.is_file():
+            raise FileNotFoundError(f"Video asset is missing: {video_stream_id}")
+        content_type = str(row["media_type"] or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+        return path, content_type
 
     def recording_snapshot(self, recording_id: str) -> dict[str, Any]:
         with self.connect() as connection:
@@ -751,6 +816,53 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _media(self, path: Path, content_type: str, *, head_only: bool = False) -> None:
+        size = path.stat().st_size
+        start = 0
+        end = max(0, size - 1)
+        status = HTTPStatus.OK
+        range_header = self.headers.get("Range")
+        if range_header:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip())
+            if not match or (not match.group(1) and not match.group(2)):
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+            if match.group(1):
+                start = int(match.group(1))
+                end = min(end, int(match.group(2))) if match.group(2) else end
+            else:
+                suffix = int(match.group(2))
+                start = max(0, size - suffix)
+            if start >= size or end < start:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+            status = HTTPStatus.PARTIAL_CONTENT
+        length = max(0, end - start + 1)
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "private, max-age=0")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if status == HTTPStatus.PARTIAL_CONTENT:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        if head_only or not length:
+            return
+        with path.open("rb") as handle:
+            handle.seek(start)
+            remaining = length
+            while remaining:
+                chunk = handle.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         try:
@@ -762,6 +874,9 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
                 self._json(self.server.service.cache_status())
             elif parsed.path == "/api/videos":
                 self._json(self.server.service.videos())
+            elif (match := re.fullmatch(r"/api/videos/([^/]+)/media", parsed.path)):
+                path, content_type = self.server.service.video_media(unquote(match.group(1)))
+                self._media(path, content_type)
             elif parsed.path.startswith("/api/recordings/"):
                 recording_id = unquote(parsed.path[len("/api/recordings/"):]).strip("/")
                 self._json(self.server.service.recording_snapshot(recording_id))
@@ -772,6 +887,19 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
                 self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
             else:
                 self._static(parsed.path)
+        except Exception as error:
+            self._ingest_error(error)
+
+    def do_HEAD(self) -> None:
+        parsed = urlparse(self.path)
+        try:
+            match = re.fullmatch(r"/api/videos/([^/]+)/media", parsed.path)
+            if not match:
+                self.send_response(HTTPStatus.NOT_FOUND)
+                self.end_headers()
+                return
+            path, content_type = self.server.service.video_media(unquote(match.group(1)))
+            self._media(path, content_type, head_only=True)
         except Exception as error:
             self._ingest_error(error)
 

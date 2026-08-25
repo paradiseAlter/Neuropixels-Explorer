@@ -157,6 +157,7 @@
       this.animationFrame = null;
       this.wheelGestureActive = false;
       this.wheelEndTimer = null;
+      this.playbackTime = null;
       this.resizeObserver = new ResizeObserver(() => this.render());
       Object.values(elements).filter((element) => element instanceof HTMLCanvasElement).forEach((canvas) => this.resizeObserver.observe(canvas));
       ACTIVE_MANAGERS.add(this);
@@ -205,7 +206,8 @@
         if (!this.data) return;
         const position = this.detailPosition(event);
         if (this.mode === "cursor") {
-          this.showCursor(position);
+          const time = this.showCursor(position);
+          this.elements.onCursorCommit?.(time);
           detail.focus({ preventScroll: true });
           return;
         }
@@ -352,13 +354,16 @@
     }
 
     showCursor(position) {
-      if (!this.elements.cursor || !this.data || this.mode !== "cursor") return;
+      if (!this.data || this.mode !== "cursor") return null;
       const rectangle = this.elements.detail.getBoundingClientRect();
       const time = this.start + this.span * position.fraction;
-      this.elements.cursor.hidden = false;
-      this.elements.cursor.style.left = `${position.x}px`;
-      this.elements.cursor.classList.toggle("align-right", position.x > rectangle.width * .72);
+      if (this.elements.cursor) {
+        this.elements.cursor.hidden = false;
+        this.elements.cursor.style.left = `${position.x}px`;
+        this.elements.cursor.classList.toggle("align-right", position.x > rectangle.width * .72);
+      }
       if (this.elements.cursorLabel) this.elements.cursorLabel.textContent = formatAxisTime(time, this.span);
+      return time;
     }
 
     hideCursor() {
@@ -391,11 +396,37 @@
       this.cancelAnimation();
       this.history = [];
       this.data = null;
+      this.playbackTime = null;
       this.hideSelection();
       this.hideCursor();
       this.setEmptyState();
       this.render();
       this.notifyState();
+    }
+
+    setPlaybackTime(time) {
+      this.playbackTime = Number.isFinite(Number(time)) ? Number(time) : null;
+      this.updatePlaybackTime();
+    }
+
+    updatePlaybackTime() {
+      const playhead = this.elements.playhead;
+      if (!playhead || !this.data || this.playbackTime == null) {
+        if (playhead) playhead.hidden = true;
+        return;
+      }
+      const end = this.start + this.span;
+      if (this.playbackTime < this.start || this.playbackTime > end) {
+        playhead.hidden = true;
+        return;
+      }
+      const rectangle = this.elements.detail.getBoundingClientRect();
+      const plotWidth = Math.max(1, rectangle.width - DETAIL_MARGIN_LEFT - DETAIL_MARGIN_RIGHT);
+      const fraction = clamp((this.playbackTime - this.start) / this.span, 0, 1);
+      const x = DETAIL_MARGIN_LEFT + fraction * plotWidth;
+      playhead.hidden = false;
+      playhead.style.left = `${x}px`;
+      playhead.classList.toggle("align-right", x > rectangle.width * .72);
     }
 
     destroy() {
@@ -447,6 +478,7 @@
       this.notifyWindow();
       this.drawDetail();
       this.drawOverview();
+      this.updatePlaybackTime();
     }
 
     animateTo(start, span, { recordHistory = false, duration = 145 } = {}) {
@@ -515,6 +547,7 @@
       this.drawAmplitude();
       this.drawAcg();
       this.drawTemplate();
+      this.updatePlaybackTime();
       if (this.data) this.notifyWindow();
     }
 
