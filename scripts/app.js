@@ -15,6 +15,7 @@
   const databaseClient = window.NeuropixelDatabaseClient;
   const WorkspaceLayout = window.NeuropixelsWorkspaceLayout.WorkspaceLayout;
   const VideoSyncController = window.NeuropixelsVideoSync.VideoSyncController;
+  const ActivityAnatomyCanvas = window.NeuropixelsActivityOverview.ActivityAnatomyCanvas;
   let themeSnapshot = themeController.snapshot();
   let languageSnapshot = languageController.snapshot();
   const t = (key, values) => languageController.t(key, values);
@@ -55,6 +56,22 @@
     recordingStrip: document.getElementById("recording-strip"),
     recordingPrevious: document.getElementById("recording-scroll-previous"),
     recordingNext: document.getElementById("recording-scroll-next"),
+    experimentWorkspace: document.getElementById("experiment-workspace"),
+    experimentRecordingName: document.getElementById("experiment-recording-name"),
+    experimentFacts: document.getElementById("experiment-facts"),
+    experimentTime: document.getElementById("experiment-time-readout"),
+    activityStatus: document.getElementById("activity-status"),
+    activityCanvas: document.getElementById("activity-anatomy-canvas"),
+    activityTooltip: document.getElementById("activity-tooltip"),
+    activityEmpty: document.getElementById("activity-empty"),
+    videoHost: document.getElementById("experiment-video-region"),
+    findUnitButton: document.getElementById("find-unit-button"),
+    findUnitPopover: document.getElementById("find-unit-popover"),
+    findUnitInput: document.getElementById("find-unit-input"),
+    findUnitResults: document.getElementById("find-unit-results"),
+    inspectUnitButton: document.getElementById("inspect-unit-button"),
+    closeUnitInspector: document.getElementById("close-unit-inspector"),
+    reviewLayout: document.getElementById("review-layout"),
     unitCount: document.getElementById("unit-count-label"),
     unitSearch: document.getElementById("unit-search"),
     qualityFilter: document.getElementById("quality-filter"),
@@ -142,6 +159,8 @@
     videoCollapse: document.getElementById("video-collapse-button")
   };
 
+  elements.videoHost?.append(elements.videoPanel);
+
   const state = {
     dataMode: "folder",
     databaseCatalog: null,
@@ -169,7 +188,20 @@
     interactionMode: "cursor",
     pendingSupplement: null,
     supplementBusy: false,
-    playbackNeuralTime: null
+    playbackNeuralTime: null,
+    overviewToken: 0,
+    activityOverviewCache: new Map(),
+    activeActivityOverview: null,
+    experimentView: {
+      visibleRange: { start: 0, end: 0 },
+      cursorTime: 0,
+      selectedInterval: null,
+      selectedGroupKey: null,
+      selectedUnitId: null,
+      selectedShank: null,
+      selectedRegion: null,
+      expandedUnitId: null
+    }
   };
 
   let helpReturnFocus = null;
@@ -265,7 +297,20 @@
     collapse: elements.videoCollapse
   }, {
     onNeuralTime: (time, context) => handleVideoNeuralTime(time, context),
+    onStateChange: () => renderExperimentHeader(),
     translator: t
+  });
+
+  const activityCanvas = new ActivityAnatomyCanvas({
+    canvas: elements.activityCanvas,
+    tooltip: elements.activityTooltip,
+    empty: elements.activityEmpty
+  }, {
+    onStateChange: (patch, snapshot) => handleExperimentViewChange(patch, snapshot),
+    onCursorCommit: (time) => videoController?.seekNeural(time),
+    onUnitSelect: (unitId) => selectActivityUnit(unitId),
+    onAggregateSelect: () => renderExperimentHeader(),
+    onAnatomySelect: () => renderExperimentHeader()
   });
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -295,6 +340,7 @@
     const focused = focusedEntry();
     elements.detailsContext.style.setProperty("--trace-color", focused?.traceColor || next.palette.probe.unopened);
     syncProbeView();
+    activityCanvas.render();
   }
 
   function localizeHelpControls() {
@@ -385,6 +431,8 @@
       }
       else clearFocusedDetails();
       renderDialog();
+      renderExperimentHeader();
+      renderFindUnitResults();
     } else {
       elements.datasetTitle.textContent = t("app.noFolder");
       clearFocusedDetails();
@@ -466,6 +514,7 @@
   function handleVideoNeuralTime(time, context = {}) {
     state.playbackNeuralTime = Number.isFinite(Number(time)) ? Number(time) : null;
     plotEntries().forEach((entry) => entry.manager.setPlaybackTime(state.playbackNeuralTime));
+    if (state.playbackNeuralTime != null) setExperimentView({ cursorTime: state.playbackNeuralTime });
     if (!context.follow || state.playbackNeuralTime == null) return;
     const source = focusedEntry() || primaryOpenUnit();
     if (!source?.manager.data) return;
@@ -676,6 +725,176 @@
     return experiment == null ? null : state.regionResult?.mapping?.get(`${experiment}::${Number(clusterId)}`) || null;
   }
 
+  function normalizeActivityOverview(result, recording) {
+    const ids = result?.unitIds || [];
+    const catalogById = new Map((recording?.units || []).map((unit) => [Number(unit.cluster_id), unit]));
+    const nullableNumber = (value) => value == null || value === "" ? null : Number.isFinite(Number(value)) ? Number(value) : null;
+    const units = Array.from(ids, (value, sourceIndex) => {
+      const id = Number(value);
+      const catalog = catalogById.get(id);
+      const region = regionFor(recording, id);
+      const rawDepth = nullableNumber(result.unitDepths?.[sourceIndex]);
+      const catalogDepth = nullableNumber(catalog?.probe_depth_um);
+      const rawShank = nullableNumber(result.unitShankIds?.[sourceIndex]);
+      const catalogShank = nullableNumber(catalog?.shank_id);
+      const label = labelFor(recording, id);
+      return {
+        sourceIndex,
+        id,
+        count: Number(result.unitCounts?.[sourceIndex] || 0),
+        rateHz: Number(result.unitRateHz?.[sourceIndex] || 0),
+        x: Number.isFinite(Number(result.unitX?.[sourceIndex])) ? Number(result.unitX[sourceIndex]) : null,
+        depthUm: catalogDepth ?? rawDepth,
+        shankId: catalogShank ?? (rawShank != null && rawShank >= 0 ? rawShank : null),
+        region: region?.region || catalog?.brain_region || t("units.unmapped"),
+        regionColor: region?.color || catalog?.atlas_color_hex || "",
+        regionSource: region?.source || catalog?.region_annotation_status || "",
+        quality: label.quality || "unknown"
+      };
+    });
+    return {
+      ...result,
+      duration: Number(result.duration || recording?.duration || 0),
+      binCount: Number(result.binCount || 512),
+      binSeconds: Number(result.binSeconds || (Number(result.duration || recording?.duration || 0) / Number(result.binCount || 512)) || 1),
+      normalizedActivity: result.normalizedActivity instanceof Uint8Array ? result.normalizedActivity : Uint8Array.from(result.normalizedActivity || []),
+      units
+    };
+  }
+
+  function renderExperimentHeader() {
+    const recording = state.activeRecording;
+    if (!recording) {
+      elements.experimentRecordingName.textContent = "—";
+      elements.experimentFacts.replaceChildren();
+      elements.experimentTime.textContent = "0.000 s";
+      return;
+    }
+    const overview = state.activeActivityOverview;
+    const units = overview?.units || recordingUnits(recording);
+    const mapped = overview?.units?.filter((unit) => unit.region && unit.region !== t("units.unmapped")).length || 0;
+    const shanks = new Set((overview?.units || []).map((unit) => unit.shankId).filter((value) => value != null && Number.isFinite(Number(value))));
+    const video = Boolean(videoController?.source);
+    elements.experimentRecordingName.textContent = recording.name;
+    const facts = [
+      [t("summary.units"), number(units.length)],
+      ["DURATION", `${Number(recording.duration || overview?.duration || 0).toFixed(1)} s`],
+      ["ANATOMY", mapped ? `${mapped} mapped · ${shanks.size || "—"} shanks` : t("units.unmapped")],
+      ["VIDEO", video ? "SYNCHRONIZED" : "NOT ATTACHED"]
+    ];
+    elements.experimentFacts.innerHTML = facts.map(([label, value]) => `<span>${escapeHtml(label)}<strong>${escapeHtml(value)}</strong></span>`).join("");
+    const interval = state.experimentView.selectedInterval;
+    elements.experimentTime.textContent = interval
+      ? `${Number(interval.start).toFixed(3)}–${Number(interval.end).toFixed(3)} s`
+      : `${Number(state.experimentView.cursorTime || 0).toFixed(3)} s`;
+    elements.inspectUnitButton.disabled = state.experimentView.selectedUnitId == null;
+  }
+
+  function handleExperimentViewChange(patch, snapshot = null) {
+    state.experimentView = { ...state.experimentView, ...(snapshot || patch || {}) };
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "cursorTime")) state.playbackNeuralTime = Number(patch.cursorTime);
+    renderExperimentHeader();
+  }
+
+  function setExperimentView(patch, { seekVideo = false } = {}) {
+    state.experimentView = { ...state.experimentView, ...(patch || {}) };
+    activityCanvas.setViewState(state.experimentView);
+    if (seekVideo && Number.isFinite(Number(patch?.cursorTime))) videoController?.seekNeural(Number(patch.cursorTime));
+    renderExperimentHeader();
+  }
+
+  function activityUnitMatches(unit, query) {
+    if (!query) return true;
+    const normalized = String(query).trim().toLowerCase();
+    const shank = unit.shankId != null && Number.isFinite(Number(unit.shankId)) ? `shank ${Number(unit.shankId) + 1}` : "";
+    return [unit.id, unit.region, unit.quality, shank].some((value) => String(value || "").toLowerCase().includes(normalized));
+  }
+
+  function renderFindUnitResults() {
+    const units = state.activeActivityOverview?.units || [];
+    const matches = units.filter((unit) => activityUnitMatches(unit, elements.findUnitInput.value)).slice(0, 30);
+    elements.findUnitResults.innerHTML = matches.length
+      ? matches.map((unit) => `<button class="find-unit-result" type="button" role="option" data-find-unit-id="${Number(unit.id)}"><span><strong>${escapeHtml(i18nApi.GLOSSARY.unit[languageSnapshot.language])} ${Number(unit.id)}</strong><small>${escapeHtml([unit.shankId != null && Number.isFinite(Number(unit.shankId)) ? `Shank ${Number(unit.shankId) + 1}` : "Shank —", unit.depthUm == null ? "depth —" : `${Math.round(unit.depthUm)} µm`, unit.region || t("units.unmapped"), unit.quality].join(" · "))}</small></span><b>${Number(unit.rateHz || 0).toFixed(Number(unit.rateHz || 0) < 10 ? 2 : 1)} Hz</b></button>`).join("")
+      : `<div class="find-unit-empty">${escapeHtml(t("units.none"))}</div>`;
+  }
+
+  function setFindUnitOpen(open) {
+    const next = Boolean(open);
+    elements.findUnitPopover.hidden = !next;
+    elements.findUnitButton.setAttribute("aria-expanded", String(next));
+    if (next) {
+      renderFindUnitResults();
+      requestAnimationFrame(() => elements.findUnitInput.focus({ preventScroll: true }));
+    }
+  }
+
+  async function selectActivityUnit(unitId) {
+    const recording = state.activeRecording;
+    const normalized = Number(unitId);
+    if (!recording || !Number.isFinite(normalized)) return;
+    const unit = state.activeActivityOverview?.units.find((item) => Number(item.id) === normalized);
+    if (!unit) return;
+    setFindUnitOpen(false);
+    setExperimentView({
+      selectedUnitId: normalized,
+      expandedUnitId: normalized,
+      selectedGroupKey: null,
+      selectedShank: unit.shankId,
+      selectedRegion: unit.region || t("units.unmapped")
+    });
+    elements.activityStatus.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${normalized} · reading exact spike times…`;
+    try {
+      await openUnitOnly(recording, normalized);
+      if (recording !== state.activeRecording || Number(state.experimentView.selectedUnitId) !== normalized) return;
+      const entry = state.openUnits.get(viewKey(recording, normalized));
+      if (entry?.result) activityCanvas.setSelectedUnitData(entry.result);
+      elements.activityStatus.textContent = `${number(state.activeActivityOverview.units.length)} Units · ${number(state.activeActivityOverview.binCount)} recording-wide bins · selected Unit expanded in place`;
+      renderExperimentHeader();
+    } catch (error) {
+      elements.activityStatus.textContent = `Unit ${normalized} · ${error.message}`;
+    }
+  }
+
+  async function refreshExperimentWorkspace(recording) {
+    const token = ++state.overviewToken;
+    state.activeActivityOverview = null;
+    state.experimentView = {
+      visibleRange: { start: 0, end: Number(recording?.duration || 0) },
+      cursorTime: 0,
+      selectedInterval: null,
+      selectedGroupKey: null,
+      selectedUnitId: null,
+      selectedShank: null,
+      selectedRegion: null,
+      expandedUnitId: null
+    };
+    elements.inspectUnitButton.disabled = true;
+    elements.activityStatus.textContent = t("workspace.activityLoading");
+    activityCanvas.setData(null);
+    renderExperimentHeader();
+    const started = performance.now();
+    try {
+      const raw = await loadRecordingActivityOverview(recording);
+      if (token !== state.overviewToken || recording !== state.activeRecording) return;
+      const overview = normalizeActivityOverview(raw, recording);
+      state.activeActivityOverview = overview;
+      state.experimentView.visibleRange = { start: 0, end: overview.duration };
+      recording.unitSummaryMap = new Map(overview.units.map((unit) => [Number(unit.id), { id: Number(unit.id), count: unit.count, rateHz: unit.rateHz }]));
+      activityCanvas.setData(overview);
+      activityCanvas.setViewState(state.experimentView);
+      const elapsed = performance.now() - started;
+      const providerMs = Number(raw.server?.computeMs);
+      elements.activityStatus.textContent = `${number(overview.units.length)} Units · ${number(overview.binCount)} recording-wide bins · prepared ${Number.isFinite(providerMs) ? `${providerMs.toFixed(1)} ms provider` : `${elapsed.toFixed(1)} ms`}`;
+      renderUnitList();
+      renderExperimentHeader();
+    } catch (error) {
+      if (token !== state.overviewToken || recording !== state.activeRecording) return;
+      elements.activityStatus.textContent = `Activity overview unavailable · ${error.message}`;
+      elements.activityEmpty.hidden = false;
+      renderExperimentHeader();
+    }
+  }
+
   function syncProbeView() {
     const items = plotEntries().filter((entry) => entry.result && entry.recording).map((entry) => ({
       key: entry.key,
@@ -744,6 +963,15 @@
       for (const [key, file] of Object.entries(message.files || {})) {
         if (file) buffers[key] = await file.arrayBuffer();
       }
+      if (message.type === "activity-overview") {
+        return {
+          type: "activity-overview-result",
+          ...core.buildActivityOverviewBuffers(buffers, message.sampleRate, message.binCount),
+          fallback: true,
+          residentExperiments: [],
+          residentBytes: 0
+        };
+      }
       return { type: "unit-result", ...core.analyzeUnitBuffers(buffers, message.sampleRate, message.clusterId), fallback: true, residentExperiments: [], residentBytes: 0 };
     }
     const requestId = `review-${++state.workerSequence}`;
@@ -781,6 +1009,29 @@
       sampleRate: recording.sampleRate,
       clusterId: Number(clusterId)
     });
+  }
+
+  async function loadRecordingActivityOverview(recording) {
+    const cacheKey = `${state.datasetToken}:${recording.key}:${Number(recording.dataVersion || 0)}`;
+    if (state.activityOverviewCache.has(cacheKey)) return state.activityOverviewCache.get(cacheKey);
+    const pending = state.dataMode === "database"
+      ? databaseClient.loadActivityOverview(recording)
+      : requestWorker({
+          type: "activity-overview",
+          experimentKey: cacheKey,
+          files: workerFiles(recording),
+          sampleRate: recording.sampleRate,
+          binCount: 512
+        });
+    state.activityOverviewCache.set(cacheKey, pending);
+    try {
+      const result = await pending;
+      state.activityOverviewCache.set(cacheKey, result);
+      return result;
+    } catch (error) {
+      state.activityOverviewCache.delete(cacheKey);
+      throw error;
+    }
   }
 
   function recordingUnits(recording) {
@@ -1193,12 +1444,16 @@
 
   function selectRecording(recording) {
     if (!recording) return;
+    state.selectionToken += 1;
+    clearOpenUnitViews({ render: false });
     state.activeRecording = recording;
     state.search = "";
     elements.unitSearch.value = "";
+    elements.reviewLayout.hidden = true;
     renderRecordings();
     renderUnitList();
     videoController?.setRecording(recording, state.databaseCatalog?.videos || []);
+    refreshExperimentWorkspace(recording);
   }
 
   function renderDialog() {
@@ -1558,6 +1813,35 @@
   elements.recordingStrip.addEventListener("scroll", updateRecordingScrollControls, { passive: true });
   window.addEventListener("resize", updateRecordingScrollControls, { passive: true });
 
+  elements.findUnitButton.addEventListener("click", () => setFindUnitOpen(elements.findUnitPopover.hidden));
+  elements.findUnitInput.addEventListener("input", renderFindUnitResults);
+  elements.findUnitInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const first = elements.findUnitResults.querySelector("[data-find-unit-id]");
+    if (first) {
+      event.preventDefault();
+      selectActivityUnit(Number(first.dataset.findUnitId));
+    }
+  });
+  elements.findUnitResults.addEventListener("click", (event) => {
+    const result = event.target.closest("[data-find-unit-id]");
+    if (result) selectActivityUnit(Number(result.dataset.findUnitId));
+  });
+  elements.inspectUnitButton.addEventListener("click", () => {
+    if (state.experimentView.selectedUnitId == null) return;
+    elements.reviewLayout.hidden = false;
+    requestAnimationFrame(() => {
+      plots.render();
+      detailPlots.render();
+      probeViewer.draw();
+      elements.closeUnitInspector.focus({ preventScroll: true });
+    });
+  });
+  elements.closeUnitInspector.addEventListener("click", () => {
+    elements.reviewLayout.hidden = true;
+    elements.inspectUnitButton.focus({ preventScroll: true });
+  });
+
   elements.unitList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-cluster-id]");
     if (!button) return;
@@ -1647,6 +1931,7 @@
   document.addEventListener("pointerdown", (event) => {
     if (!elements.unitContextMenu.hidden && !event.target.closest("#unit-context-menu")) hideUnitContextMenu();
     if (!elements.dataStatusPopover.hidden && !event.target.closest("#capability-row")) setDataStatusOpen(false);
+    if (!elements.findUnitPopover.hidden && !event.target.closest(".find-unit-control")) setFindUnitOpen(false);
   });
   document.addEventListener("pointerover", (event) => {
     const control = event.target.closest?.(".context-help[data-help-key]");
@@ -1682,6 +1967,14 @@
     if (event.key === "Escape" && !elements.dataStatusPopover.hidden) {
       setDataStatusOpen(false);
       elements.dataStatusButton.focus({ preventScroll: true });
+    }
+    if (event.key === "Escape" && !elements.findUnitPopover.hidden) {
+      setFindUnitOpen(false);
+      elements.findUnitButton.focus({ preventScroll: true });
+    }
+    if (event.key === "Escape" && !elements.reviewLayout.hidden) {
+      elements.reviewLayout.hidden = true;
+      elements.inspectUnitButton.focus({ preventScroll: true });
     }
   });
   document.addEventListener("scroll", hideUnitContextMenu, true);
@@ -1725,6 +2018,7 @@
     state.worker?.terminate();
     if (state.workerUrl) URL.revokeObjectURL(state.workerUrl);
     videoController?.destroy();
+    activityCanvas.destroy();
   });
 
   function clamp(value, minimum, maximum) {

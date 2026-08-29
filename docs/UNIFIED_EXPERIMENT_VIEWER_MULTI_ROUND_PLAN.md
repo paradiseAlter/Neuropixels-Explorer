@@ -51,8 +51,8 @@ Do not mark a visual round complete because the new layout merely renders.
 
 | Dialogue | Source scope | State | Exit gate |
 | --- | --- | --- | --- |
-| 1 | Rounds 0-2 | Not started | Checkpoint A mandatory stop |
-| 2 | Checkpoint A review/corrections | Waiting for Dialogue 1 | Explicit visual and interaction approval |
+| 1 | Rounds 0-2 | Complete; stopped at Checkpoint A | Checkpoint A mandatory stop |
+| 2 | Checkpoint A review/corrections | Ready for user review | Explicit visual and interaction approval |
 | 3 | Round 3 | Blocked on Checkpoint A approval | Cache semantics and mapping review |
 | 4 | Round 4 | Blocked on Round 3 | Progressive-focus and synchronization review |
 | 5 | Round 5 | Blocked on Round 4 | Diagnostic parity and accessibility review |
@@ -190,27 +190,27 @@ Then stop. Do not continue into Rounds 3-6.
 
 Checkpoint A is acceptable only when all items are demonstrated:
 
-- [ ] Opening an experiment produces an experiment-level overview rather than a
+- [x] Opening an experiment produces an experiment-level overview rather than a
       selected-Unit dashboard.
-- [ ] The default workspace has no permanent left Unit list.
-- [ ] The default workspace has no permanent tall Probe inspector.
-- [ ] The default workspace has no permanently visible waveform/template panel.
-- [ ] Neural activity and anatomy appear in one aligned canvas.
-- [ ] Time is horizontal and anatomical ordering is stable.
-- [ ] Shank, depth, and region are visually attached to their activity rows.
-- [ ] Aggregate rows are clearly distinguishable from individual Units.
-- [ ] A real Unit can be selected from the canvas or Find Unit action.
-- [ ] The selected Unit expands in place.
-- [ ] Selection makes the Unit's shank, depth, and region immediately
+- [x] The default workspace has no permanent left Unit list.
+- [x] The default workspace has no permanent tall Probe inspector.
+- [x] The default workspace has no permanently visible waveform/template panel.
+- [x] Neural activity and anatomy appear in one aligned canvas.
+- [x] Time is horizontal and anatomical ordering is stable.
+- [x] Shank, depth, and region are visually attached to their activity rows.
+- [x] Aggregate rows are clearly distinguishable from individual Units.
+- [x] A real Unit can be selected from the canvas or Find Unit action.
+- [x] The selected Unit expands in place.
+- [x] Selection makes the Unit's shank, depth, and region immediately
       understandable.
-- [ ] Video shares the same cursor or selected interval.
-- [ ] Missing video produces a compact state rather than a large empty panel.
-- [ ] Existing deep diagnostics remain reachable or preserved for later drawer
+- [x] Video shares the same cursor or selected interval.
+- [x] Missing video produces a compact state rather than a large empty panel.
+- [x] Existing deep diagnostics remain reachable or preserved for later drawer
       migration.
-- [ ] The UI uses real data rather than a static mockup.
-- [ ] The application runs and relevant tests pass.
-- [ ] Live screenshots demonstrate normal desktop and ultrawide layouts.
-- [ ] The implementation visibly supports `Represent relationships first and
+- [x] The UI uses real data rather than a static mockup.
+- [x] The application runs and relevant tests pass.
+- [x] Live screenshots demonstrate normal desktop and ultrawide layouts.
+- [x] The implementation visibly supports `Represent relationships first and
       analyses second.`
 
 ### Visual intent for the review

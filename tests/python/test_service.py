@@ -265,6 +265,15 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(review["server"]["unitCacheHit"])
         self.assertTrue(self.service.unit_review("rec_01_unit_0007")["server"]["unitCacheHit"])
 
+        overview = self.service.activity_overview("rec_01", 64)
+        self.assertEqual(overview["binCount"], 64)
+        self.assertEqual(overview["unitIds"], [7, 8])
+        self.assertEqual(len(overview["normalizedActivity"]), 128)
+        self.assertEqual(sum(1 for value in overview["normalizedActivity"] if value), 5)
+        self.assertFalse(overview["semantics"]["rawFiringRate"])
+        self.assertFalse(overview["server"]["overviewCacheHit"])
+        self.assertTrue(self.service.activity_overview("rec_01", 64)["server"]["overviewCacheHit"])
+
     def test_http_api_and_static_application_share_one_release(self) -> None:
         server = create_server(self.paths, port=0, quiet=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -277,6 +286,10 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(health["dataset"]["schema_version"], 3)
             with urllib.request.urlopen(f"{base}/api/catalog", timeout=10) as response:
                 self.assertEqual(json.load(response)["dataset"]["dataset_id"], "fixture")
+            with urllib.request.urlopen(f"{base}/api/recordings/rec_01/activity-overview", timeout=10) as response:
+                overview = json.load(response)
+            self.assertEqual(overview["unitIds"], [7, 8])
+            self.assertEqual(overview["binCount"], 512)
             request = urllib.request.Request(
                 f"{base}/api/videos/rec_01%3Avideo%3Asynthetic/media",
                 headers={"Range": "bytes=10-19"},

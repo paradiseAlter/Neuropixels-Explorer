@@ -26,6 +26,7 @@ from .paths import RuntimePaths
 SERVICE_VERSION = __version__
 MAX_RECORDING_CACHE = 2
 MAX_UNIT_CACHE = 64
+MAX_ACTIVITY_OVERVIEW_CACHE = 2
 
 
 def _row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -128,6 +129,7 @@ class CatalogService:
         self.database_path = paths.database_path
         self._recording_cache: OrderedDict[str, dict[str, np.ndarray]] = OrderedDict()
         self._unit_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._activity_overview_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._cache_lock = threading.RLock()
         with self.connect() as connection:
             validate_schema(connection)
@@ -178,6 +180,8 @@ class CatalogService:
                 "recordings": list(self._recording_cache.keys()),
                 "unitLimit": MAX_UNIT_CACHE,
                 "unitCount": len(self._unit_cache),
+                "activityOverviewLimit": MAX_ACTIVITY_OVERVIEW_CACHE,
+                "activityOverviews": list(self._activity_overview_cache.keys()),
             }
 
     def catalog(self) -> dict[str, Any]:
@@ -707,6 +711,133 @@ class CatalogService:
             },
         }
 
+    def activity_overview(self, recording_id: str, bin_count: int = 512) -> dict[str, Any]:
+        started = time.perf_counter()
+        normalized_bin_count = max(64, min(2048, int(bin_count or 512)))
+        cache_key = f"{recording_id}:{normalized_bin_count}"
+        with self._cache_lock:
+            cached = self._activity_overview_cache.get(cache_key)
+            if cached is not None:
+                self._activity_overview_cache.move_to_end(cache_key)
+                return {
+                    **cached,
+                    "server": {
+                        "overviewCacheHit": True,
+                        "recordingCacheHit": True,
+                        "computeMs": round((time.perf_counter() - started) * 1000, 3),
+                    },
+                }
+
+        arrays, recording_cache_hit = self._recording_arrays(recording_id)
+        with self.connect() as connection:
+            recording = connection.execute(
+                "SELECT sample_rate_hz FROM recordings WHERE recording_id = ?",
+                (recording_id,),
+            ).fetchone()
+            unit_rows = connection.execute(
+                """
+                SELECT u.cluster_id, u.spike_count, u.unit_firing_rate_hz,
+                       uc.probe_depth_um, uc.shank_id
+                FROM units u
+                LEFT JOIN unit_catalog uc USING (unit_id)
+                WHERE u.recording_id = ?
+                ORDER BY u.cluster_id
+                """,
+                (recording_id,),
+            ).fetchall()
+        if recording is None:
+            raise KeyError(f"Unknown Recording: {recording_id}")
+
+        sample_rate = float(recording["sample_rate_hz"])
+        times = np.asarray(arrays["spike_times"]).reshape(-1)
+        clusters = np.asarray(arrays["spike_clusters"], dtype=np.int64).reshape(-1)
+        if times.size != clusters.size:
+            raise ValueError("Spike-time and cluster arrays have different lengths")
+        unit_ids = np.asarray([int(row["cluster_id"]) for row in unit_rows], dtype=np.int64)
+        duration = float(times[-1] / sample_rate) if times.size else 0.0
+        bin_seconds = duration / normalized_bin_count if duration > 0 else 1.0
+        counts = np.zeros((unit_ids.size, normalized_bin_count), dtype=np.uint32)
+        if clusters.size and unit_ids.size:
+            row_indices = np.searchsorted(unit_ids, clusters)
+            valid = row_indices < unit_ids.size
+            valid &= unit_ids[np.minimum(row_indices, max(0, unit_ids.size - 1))] == clusters
+            time_bins = np.minimum(
+                normalized_bin_count - 1,
+                np.maximum(0, np.floor(np.asarray(times, dtype=np.float64) / sample_rate / bin_seconds).astype(np.int64)),
+            )
+            np.add.at(counts, (row_indices[valid], time_bins[valid]), 1)
+
+        normalized = np.zeros(counts.shape, dtype=np.uint8)
+        for row_index in range(counts.shape[0]):
+            positive = counts[row_index][counts[row_index] > 0]
+            robust_maximum = float(np.quantile(positive, .95, method="nearest")) if positive.size else 1.0
+            normalized[row_index] = np.rint(np.minimum(1.0, counts[row_index] / max(1.0, robust_maximum)) * 255).astype(np.uint8)
+
+        positions = arrays.get("spike_positions")
+        spike_templates = arrays.get("spike_templates")
+        templates = arrays.get("templates")
+        channel_positions = arrays.get("channel_positions")
+        channel_count = int(channel_positions.shape[0]) if channel_positions is not None and channel_positions.ndim == 2 else 0
+        channel_probe_ids = self._channel_probe_ids(recording_id, channel_count)
+        locations = {
+            int(location["id"]): location
+            for location in self._unit_locations(clusters, positions, spike_templates, templates, channel_probe_ids)
+        }
+
+        unit_x: list[float | None] = []
+        unit_depths: list[float | None] = []
+        unit_shanks: list[int] = []
+        for row in unit_rows:
+            location = locations.get(int(row["cluster_id"]), {})
+            unit_x.append(float(location["x"]) if location.get("x") is not None else None)
+            unit_depths.append(
+                float(location["y"])
+                if location.get("y") is not None
+                else float(row["probe_depth_um"])
+                if row["probe_depth_um"] is not None
+                else None
+            )
+            location_shank = location.get("shankId")
+            unit_shanks.append(
+                int(location_shank)
+                if location_shank is not None
+                else int(row["shank_id"])
+                if row["shank_id"] is not None
+                else -1
+            )
+
+        result = {
+            "recordingId": recording_id,
+            "duration": duration,
+            "binCount": normalized_bin_count,
+            "binSeconds": bin_seconds,
+            "totalSpikes": int(times.size),
+            "unitIds": unit_ids.astype(int).tolist(),
+            "unitCounts": [int(row["spike_count"] or 0) for row in unit_rows],
+            "unitRateHz": [float(row["unit_firing_rate_hz"] or 0) for row in unit_rows],
+            "unitX": unit_x,
+            "unitDepths": unit_depths,
+            "unitShankIds": unit_shanks,
+            "normalizedActivity": normalized.reshape(-1).astype(int).tolist(),
+            "semantics": {
+                "individual": "spike count per recording-wide bin divided by the Unit's non-empty-bin 95th percentile and clipped to [0, 1]",
+                "aggregate": "fraction of constituent Units with one or more spikes in the bin",
+                "rawFiringRate": False,
+            },
+        }
+        with self._cache_lock:
+            self._activity_overview_cache[cache_key] = result
+            while len(self._activity_overview_cache) > MAX_ACTIVITY_OVERVIEW_CACHE:
+                self._activity_overview_cache.popitem(last=False)
+        return {
+            **result,
+            "server": {
+                "overviewCacheHit": False,
+                "recordingCacheHit": recording_cache_hit,
+                "computeMs": round((time.perf_counter() - started) * 1000, 3),
+            },
+        }
+
     def invalidate_recordings(self, recording_ids: set[str]) -> None:
         affected = {str(recording_id) for recording_id in recording_ids}
         with self._cache_lock:
@@ -720,6 +851,9 @@ class CatalogService:
             for unit_id, result in list(self._unit_cache.items()):
                 if str(result.get("recordingId")) in affected:
                     self._unit_cache.pop(unit_id, None)
+            for cache_key in list(self._activity_overview_cache):
+                if any(cache_key.startswith(f"{recording_id}:") for recording_id in affected):
+                    self._activity_overview_cache.pop(cache_key, None)
 
     def close(self) -> None:
         """Release memory-mapped arrays so runtime roots can be moved or removed on Windows."""
@@ -880,6 +1014,9 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
             elif (match := re.fullmatch(r"/api/videos/([^/]+)/media", parsed.path)):
                 path, content_type = self.server.service.video_media(unquote(match.group(1)))
                 self._media(path, content_type)
+            elif (match := re.fullmatch(r"/api/recordings/([^/]+)/activity-overview", parsed.path)):
+                recording_id = unquote(match.group(1))
+                self._json(self.server.service.activity_overview(recording_id))
             elif parsed.path.startswith("/api/recordings/"):
                 recording_id = unquote(parsed.path[len("/api/recordings/"):]).strip("/")
                 self._json(self.server.service.recording_snapshot(recording_id))

@@ -217,6 +217,21 @@ function buffer(directory, name) {
     channelShanks: buffer(path.join(kilosortRoot, "ks4_exp1"), "channel_shanks.npy")
   }, 30000, 7).channelProbeIds);
   assert(exp1ShankIds.size === 4, `Expected four shanks on the single physical Probe in ks4_exp1, found ${exp1ShankIds.size}`);
+  const overviewStarted = performance.now();
+  const exp1Overview = core.buildActivityOverviewBuffers({
+    spikeTimes: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_times.npy"),
+    spikeClusters: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_clusters.npy"),
+    spikePositions: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_positions.npy"),
+    spikeTemplates: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_templates.npy"),
+    templates: buffer(path.join(kilosortRoot, "ks4_exp1"), "templates.npy"),
+    channelPositions: buffer(path.join(kilosortRoot, "ks4_exp1"), "channel_positions.npy"),
+    channelShanks: buffer(path.join(kilosortRoot, "ks4_exp1"), "channel_shanks.npy")
+  }, 30000, 512);
+  const overviewBuildMs = performance.now() - overviewStarted;
+  assert(exp1Overview.unitIds.length === 103, `Expected 103 Unit rows in the exp1 overview, found ${exp1Overview.unitIds.length}`);
+  assert(exp1Overview.normalizedActivity.length === exp1Overview.unitIds.length * 512, "The overview matrix does not map every Unit to every time bin");
+  assert(new Set(exp1Overview.unitShankIds).size === 4, "The overview did not retain all four shank IDs");
+  assert(Math.abs(exp1Overview.binSeconds * exp1Overview.binCount - exp1Overview.duration) < 1e-9, "Overview bins do not map back to the recording duration");
 
   const regionResult = await regionCore.scanFiles(folderFiles(legacyRoot, "legacy_tables"));
   assert(regionResult.valid, "Brain-region tables were not detected");
@@ -247,6 +262,7 @@ function buffer(directory, name) {
     probeRegionRows: regionResult.probeTrack.rowCount,
     shankTracks: regionResult.probeTrack.probeCount,
     trackSegments: regionResult.probeTrack.segments.length,
+    activityOverview: { units: exp1Overview.unitIds.length, bins: exp1Overview.binCount, buildMs: Number(overviewBuildMs.toFixed(3)) },
     dataStatus: dataStatus.summaryText(realDataStatus),
     reviewed
   }, null, 2));

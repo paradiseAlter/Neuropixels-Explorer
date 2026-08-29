@@ -373,6 +373,134 @@
     return total / values.length;
   }
 
+  function buildActivityOverviewBuffers(buffers, sampleRate, requestedBinCount = 512) {
+    const times = parseNpyArrayBuffer(buffers.spikeTimes);
+    const clusters = parseNpyArrayBuffer(buffers.spikeClusters);
+    if (times.header.shape.length !== 1 || clusters.header.shape.length !== 1) throw new Error("Spike arrays must be one-dimensional");
+    if (times.header.count !== clusters.header.count) throw new Error("Spike array lengths do not match");
+    const positions = buffers.spikePositions ? parseNpyArrayBuffer(buffers.spikePositions) : null;
+    const spikeTemplates = buffers.spikeTemplates ? parseNpyArrayBuffer(buffers.spikeTemplates) : null;
+    const templates = buffers.templates ? parseNpyArrayBuffer(buffers.templates) : null;
+    const channelPositions = buffers.channelPositions ? parseNpyArrayBuffer(buffers.channelPositions) : null;
+    const channelShanks = buffers.channelShanks ? parseNpyArrayBuffer(buffers.channelShanks) : null;
+    const duration = times.header.count ? Number(times.valueAt(times.header.count - 1)) / Number(sampleRate) : 0;
+    const binCount = Math.max(64, Math.min(2048, Math.round(Number(requestedBinCount) || 512)));
+    const binSeconds = duration > 0 ? duration / binCount : 1;
+    const countsByUnit = new Map();
+    const positionSums = new Map();
+    const templatesByUnit = new Map();
+
+    for (let index = 0; index < clusters.header.count; index += 1) {
+      const id = Number(clusters.valueAt(index));
+      countsByUnit.set(id, (countsByUnit.get(id) || 0) + 1);
+      if (positions?.header.shape.length === 2 && positions.header.shape[0] === clusters.header.count && positions.header.shape[1] >= 2) {
+        const columns = positions.header.shape[1];
+        const location = positionSums.get(id) || { x: 0, y: 0, count: 0 };
+        location.x += Number(positions.valueAt(index * columns));
+        location.y += Number(positions.valueAt(index * columns + 1));
+        location.count += 1;
+        positionSums.set(id, location);
+      }
+      if (spikeTemplates?.header.count === clusters.header.count) {
+        const templateId = Number(spikeTemplates.valueAt(index));
+        const candidates = templatesByUnit.get(id) || new Map();
+        candidates.set(templateId, (candidates.get(templateId) || 0) + 1);
+        templatesByUnit.set(id, candidates);
+      }
+    }
+
+    const sortedIds = [...countsByUnit.keys()].sort((left, right) => left - right);
+    const unitIndex = new Map(sortedIds.map((id, index) => [id, index]));
+    const unitIds = Int32Array.from(sortedIds);
+    const unitCounts = new Uint32Array(unitIds.length);
+    const unitRateHz = new Float32Array(unitIds.length);
+    const unitX = new Float32Array(unitIds.length);
+    const unitDepths = new Float32Array(unitIds.length);
+    const unitShankIds = new Int16Array(unitIds.length);
+    unitX.fill(Number.NaN);
+    unitDepths.fill(Number.NaN);
+    unitShankIds.fill(-1);
+    const binnedCounts = new Uint32Array(unitIds.length * binCount);
+
+    for (let index = 0; index < clusters.header.count; index += 1) {
+      const row = unitIndex.get(Number(clusters.valueAt(index)));
+      if (row == null) continue;
+      const seconds = Number(times.valueAt(index)) / Number(sampleRate);
+      const bin = Math.max(0, Math.min(binCount - 1, Math.floor(seconds / binSeconds)));
+      binnedCounts[row * binCount + bin] += 1;
+    }
+
+    const peakChannelCache = new Map();
+    const peakChannelForTemplate = (templateId) => {
+      const normalized = Number(templateId);
+      if (peakChannelCache.has(normalized)) return peakChannelCache.get(normalized);
+      if (!(templates?.header.shape.length === 3) || normalized < 0 || normalized >= templates.header.shape[0]) return null;
+      const timePoints = templates.header.shape[1];
+      const channels = templates.header.shape[2];
+      let bestChannel = null;
+      let bestRange = -Infinity;
+      for (let channel = 0; channel < channels; channel += 1) {
+        let minimum = Infinity;
+        let maximum = -Infinity;
+        for (let time = 0; time < timePoints; time += 1) {
+          const value = Number(templates.valueAt((normalized * timePoints + time) * channels + channel));
+          minimum = Math.min(minimum, value);
+          maximum = Math.max(maximum, value);
+        }
+        if (maximum - minimum > bestRange) {
+          bestRange = maximum - minimum;
+          bestChannel = channel;
+        }
+      }
+      peakChannelCache.set(normalized, bestChannel);
+      return bestChannel;
+    };
+
+    const normalizedActivity = new Uint8Array(unitIds.length * binCount);
+    unitIds.forEach((id, row) => {
+      const count = Number(countsByUnit.get(Number(id)) || 0);
+      unitCounts[row] = count;
+      unitRateHz[row] = duration > 0 ? count / duration : 0;
+      const location = positionSums.get(Number(id));
+      if (location?.count) {
+        unitX[row] = location.x / location.count;
+        unitDepths[row] = location.y / location.count;
+      }
+      const candidates = templatesByUnit.get(Number(id));
+      const dominantTemplate = candidates?.size
+        ? [...candidates.entries()].sort((left, right) => right[1] - left[1] || left[0] - right[0])[0][0]
+        : Number(id);
+      const peakChannel = peakChannelForTemplate(dominantTemplate);
+      if (peakChannel != null && channelShanks?.header.count > peakChannel) unitShankIds[row] = Number(channelShanks.valueAt(peakChannel));
+
+      const positive = [];
+      const offset = row * binCount;
+      for (let bin = 0; bin < binCount; bin += 1) {
+        const value = binnedCounts[offset + bin];
+        if (value > 0) positive.push(value);
+      }
+      positive.sort((left, right) => left - right);
+      const robustMaximum = positive.length ? positive[Math.min(positive.length - 1, Math.floor((positive.length - 1) * .95))] : 1;
+      for (let bin = 0; bin < binCount; bin += 1) {
+        normalizedActivity[offset + bin] = Math.round(Math.min(1, binnedCounts[offset + bin] / Math.max(1, robustMaximum)) * 255);
+      }
+    });
+
+    return {
+      duration,
+      binCount,
+      binSeconds,
+      totalSpikes: times.header.count,
+      unitIds,
+      unitCounts,
+      unitRateHz,
+      unitX,
+      unitDepths,
+      unitShankIds,
+      normalizedActivity
+    };
+  }
+
   function analyzeUnitBuffers(buffers, sampleRate, clusterId) {
     const times = parseNpyArrayBuffer(buffers.spikeTimes);
     const clusters = parseNpyArrayBuffer(buffers.spikeClusters);
@@ -595,6 +723,7 @@
       const typedData = ${typedData.toString()};
       const parseNpyArrayBuffer = ${parseNpyArrayBuffer.toString()};
       const mean = ${mean.toString()};
+      const buildActivityOverviewBuffers = ${buildActivityOverviewBuffers.toString()};
       const analyzeUnitBuffers = ${analyzeUnitBuffers.toString()};
       const cache = new Map();
       const MAX_RESIDENT = 2;
@@ -623,9 +752,17 @@
           self.postMessage({ type: "cleared", requestId: message.requestId });
           return;
         }
-        if (message.type !== "inspect-unit") return;
         try {
           const entry = await loadEntry(message);
+          if (message.type === "activity-overview") {
+            const result = buildActivityOverviewBuffers(entry.buffers, Number(message.sampleRate), Number(message.binCount || 512));
+            const residentExperiments = [...cache.keys()];
+            const residentBytes = [...cache.values()].reduce((total, item) => total + Object.values(item.buffers).reduce((sum, buffer) => sum + buffer.byteLength, 0), 0);
+            const transfer = [result.unitIds.buffer, result.unitCounts.buffer, result.unitRateHz.buffer, result.unitX.buffer, result.unitDepths.buffer, result.unitShankIds.buffer, result.normalizedActivity.buffer];
+            self.postMessage({ type: "activity-overview-result", requestId: message.requestId, ...result, residentExperiments, residentBytes }, transfer);
+            return;
+          }
+          if (message.type !== "inspect-unit") return;
           const result = analyzeUnitBuffers(entry.buffers, Number(message.sampleRate), Number(message.clusterId));
           const residentExperiments = [...cache.keys()];
           const residentBytes = [...cache.values()].reduce((total, item) => total + Object.values(item.buffers).reduce((sum, buffer) => sum + buffer.byteLength, 0), 0);
@@ -659,6 +796,7 @@
     indexExperiment,
     validateSupplementFile,
     mergeSupplementFiles,
+    buildActivityOverviewBuffers,
     analyzeUnitBuffers,
     createWorkerSource
   };

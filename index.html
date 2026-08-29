@@ -73,7 +73,51 @@
           </div>
         </section>
 
-        <div class="review-layout" id="review-layout">
+        <section class="experiment-workspace" id="experiment-workspace" aria-label="Experiment activity, anatomy, and behavior workspace" data-i18n-aria-label="workspace.aria">
+          <header class="experiment-orientation">
+            <div class="experiment-identity">
+              <span data-i18n="workspace.kicker">EXPERIMENT OVERVIEW</span>
+              <strong id="experiment-recording-name">—</strong>
+            </div>
+            <div class="experiment-facts" id="experiment-facts" aria-live="polite"></div>
+            <div class="experiment-actions">
+              <span class="workspace-time" id="experiment-time-readout">0.000 s</span>
+              <div class="find-unit-control">
+                <button class="quiet-button" id="find-unit-button" type="button" aria-expanded="false" aria-controls="find-unit-popover" data-i18n="workspace.findUnit">FIND UNIT</button>
+                <div class="find-unit-popover" id="find-unit-popover" role="dialog" aria-label="Find a Unit in this experiment" data-i18n-aria-label="workspace.findUnitAria" hidden>
+                  <label for="find-unit-input" data-i18n="workspace.findUnitLabel">UNIT ID, SHANK, REGION, OR KILOSORT LABEL</label>
+                  <input id="find-unit-input" type="search" autocomplete="off" placeholder="e.g. 7, Shank 1, VISp, good" data-i18n-placeholder="workspace.findUnitPlaceholder">
+                  <div class="find-unit-results" id="find-unit-results" role="listbox" aria-label="Matching Units" data-i18n-aria-label="workspace.findUnitResults"></div>
+                </div>
+              </div>
+              <button class="quiet-button" id="inspect-unit-button" type="button" disabled data-i18n="workspace.inspectUnit">INSPECT UNIT</button>
+            </div>
+          </header>
+          <div class="experiment-body">
+            <section class="activity-workspace" aria-label="Recording-wide neural activity aligned with anatomy" data-i18n-aria-label="workspace.activityAria">
+              <header class="activity-header">
+                <div>
+                  <strong data-i18n="workspace.activityTitle">ACTIVITY × ANATOMY</strong>
+                  <span id="activity-status" data-i18n="workspace.activityLoading">Preparing recording overview…</span>
+                </div>
+                <div class="activity-legend" aria-label="Activity display semantics" data-i18n-aria-label="workspace.legendAria">
+                  <span><i class="unit-texture"></i><b data-i18n="workspace.unitTexture">Unit · within-Unit normalized</b></span>
+                  <span><i class="aggregate-texture"></i><b data-i18n="workspace.aggregateTexture">Group · fraction active</b></span>
+                </div>
+              </header>
+              <div class="activity-canvas-frame" id="activity-canvas-frame">
+                <canvas id="activity-anatomy-canvas" tabindex="0" aria-label="Recording-wide Unit activity with aligned shank, depth, and brain region" data-i18n-aria-label="workspace.canvasAria"></canvas>
+                <div class="activity-tooltip" id="activity-tooltip" role="status" hidden></div>
+                <div class="activity-empty" id="activity-empty" data-i18n="workspace.activityEmpty">No activity overview is available.</div>
+              </div>
+              <footer class="activity-hint" data-i18n="workspace.hint">CLICK a Unit to expand · CLICK anatomy to emphasize · DRAG time to select · WHEEL to zoom · DOUBLE CLICK to reset</footer>
+            </section>
+            <aside class="experiment-video-region" id="experiment-video-region" aria-label="Synchronized behavior region" data-i18n-aria-label="workspace.videoRegionAria"></aside>
+          </div>
+        </section>
+
+        <div class="review-layout legacy-inspection" id="review-layout" hidden aria-label="On-demand deep Unit inspection">
+          <button class="legacy-inspection-close" id="close-unit-inspector" type="button" aria-label="Close Unit inspector" data-i18n-aria-label="workspace.closeInspector">×</button>
           <aside class="unit-panel" id="unit-panel" aria-label="Units" data-i18n-aria-label="units.aria">
             <header class="unit-panel-header">
               <div class="panel-heading-row">
@@ -301,6 +345,7 @@
   <script src="./scripts/data-status.js?v=3.3.0" defer></script>
   <script src="./scripts/stream-contracts.js?v=3.3.0" defer></script>
   <script src="./scripts/video-sync.js?v=3.3.0" defer></script>
+  <script src="./scripts/activity-overview.js?v=3.4.0-checkpoint-a" defer></script>
   <script src="./scripts/plots.js" defer></script>
   <script src="./scripts/probe-view.js?v=3.3.0-ui-preview-5" defer></script>
   <script src="./scripts/database-client.js?v=3.3.0" defer></script>

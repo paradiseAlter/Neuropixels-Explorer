@@ -641,10 +641,76 @@
     }
   };
 
+  const EXPERIMENT_WORKSPACE_COPY = {
+    en: {
+      "workspace.aria": "Experiment activity, anatomy, and behavior workspace",
+      "workspace.kicker": "EXPERIMENT OVERVIEW",
+      "workspace.findUnit": "FIND UNIT",
+      "workspace.findUnitAria": "Find a Unit in this experiment",
+      "workspace.findUnitLabel": "UNIT ID, SHANK, REGION, OR KILOSORT LABEL",
+      "workspace.findUnitPlaceholder": "e.g. 7, Shank 1, VISp, good",
+      "workspace.findUnitResults": "Matching Units",
+      "workspace.inspectUnit": "INSPECT UNIT",
+      "workspace.closeInspector": "Close Unit inspector",
+      "workspace.activityAria": "Recording-wide neural activity aligned with anatomy",
+      "workspace.activityTitle": "ACTIVITY × ANATOMY",
+      "workspace.activityLoading": "Preparing recording overview…",
+      "workspace.legendAria": "Activity display semantics",
+      "workspace.unitTexture": "Unit · within-Unit normalized",
+      "workspace.aggregateTexture": "Group · fraction active",
+      "workspace.canvasAria": "Recording-wide Unit activity with aligned shank, depth, and brain region",
+      "workspace.activityEmpty": "No activity overview is available.",
+      "workspace.hint": "CLICK a Unit to expand · CLICK anatomy to emphasize · DRAG time to select · WHEEL to zoom · DOUBLE CLICK to reset",
+      "workspace.videoRegionAria": "Synchronized behavior region"
+    },
+    "zh-CN": {
+      "workspace.aria": "实验活动、解剖与行为工作区",
+      "workspace.kicker": "实验总览",
+      "workspace.findUnit": "查找单元",
+      "workspace.findUnitAria": "在本实验中查找神经元单元",
+      "workspace.findUnitLabel": "单元 ID、SHANK、脑区或 KILOSORT 标签",
+      "workspace.findUnitPlaceholder": "例如 7、Shank 1、VISp、good",
+      "workspace.findUnitResults": "匹配的神经元单元",
+      "workspace.inspectUnit": "深入检查单元",
+      "workspace.closeInspector": "关闭神经元单元检查器",
+      "workspace.activityAria": "与解剖位置对齐的全记录神经活动",
+      "workspace.activityTitle": "神经活动 × 解剖位置",
+      "workspace.activityLoading": "正在准备记录总览…",
+      "workspace.legendAria": "活动显示语义",
+      "workspace.unitTexture": "单元 · 单元内归一化",
+      "workspace.aggregateTexture": "分组 · 活跃单元比例",
+      "workspace.canvasAria": "与 shank、深度及脑区对齐的全记录单元活动",
+      "workspace.activityEmpty": "没有可用的活动总览。",
+      "workspace.hint": "单击单元展开 · 单击解剖信息强调 · 拖动选择时间 · 滚轮缩放 · 双击复位",
+      "workspace.videoRegionAria": "同步行为视频区域"
+    },
+    es: {
+      "workspace.aria": "Área de actividad, anatomía y conducta del experimento",
+      "workspace.kicker": "VISTA GENERAL DEL EXPERIMENTO",
+      "workspace.findUnit": "BUSCAR UNIDAD",
+      "workspace.findUnitAria": "Buscar una Unidad en este experimento",
+      "workspace.findUnitLabel": "ID, SHANK, REGIÓN O ETIQUETA KILOSORT",
+      "workspace.findUnitPlaceholder": "p. ej. 7, Shank 1, VISp, good",
+      "workspace.findUnitResults": "Unidades coincidentes",
+      "workspace.inspectUnit": "INSPECCIONAR UNIDAD",
+      "workspace.closeInspector": "Cerrar inspector de Unidad",
+      "workspace.activityAria": "Actividad neural del registro alineada con la anatomía",
+      "workspace.activityTitle": "ACTIVIDAD × ANATOMÍA",
+      "workspace.activityLoading": "Preparando la vista general…",
+      "workspace.legendAria": "Semántica de actividad mostrada",
+      "workspace.unitTexture": "Unidad · normalizada dentro de la Unidad",
+      "workspace.aggregateTexture": "Grupo · fracción activa",
+      "workspace.canvasAria": "Actividad de Unidades alineada con shank, profundidad y región cerebral",
+      "workspace.activityEmpty": "No hay una vista general de actividad disponible.",
+      "workspace.hint": "CLIC en Unidad para expandir · CLIC en anatomía para resaltar · ARRASTRAR para intervalo · RUEDA para zoom · DOBLE CLIC para restablecer",
+      "workspace.videoRegionAria": "Región de vídeo conductual sincronizado"
+    }
+  };
+
   const DICTIONARY = Object.freeze({
-    en: Object.freeze({ ...EN, ...PROBE_LAYOUT_COPY.en }),
-    "zh-CN": Object.freeze({ ...EN, ...ZH, ...PROBE_LAYOUT_COPY["zh-CN"] }),
-    es: Object.freeze({ ...EN, ...ES, ...PROBE_LAYOUT_COPY.es })
+    en: Object.freeze({ ...EN, ...PROBE_LAYOUT_COPY.en, ...EXPERIMENT_WORKSPACE_COPY.en }),
+    "zh-CN": Object.freeze({ ...EN, ...ZH, ...PROBE_LAYOUT_COPY["zh-CN"], ...EXPERIMENT_WORKSPACE_COPY["zh-CN"] }),
+    es: Object.freeze({ ...EN, ...ES, ...PROBE_LAYOUT_COPY.es, ...EXPERIMENT_WORKSPACE_COPY.es })
   });
 
   function normalizeLanguage(value) {

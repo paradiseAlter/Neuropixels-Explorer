@@ -149,6 +149,20 @@
     };
   }
 
+  function normalizeActivityOverview(payload) {
+    const nullableFloat32 = (values) => Float32Array.from((values || []).map((value) => value == null ? Number.NaN : Number(value)));
+    return {
+      ...payload,
+      unitIds: Int32Array.from(payload.unitIds || []),
+      unitCounts: Uint32Array.from(payload.unitCounts || []),
+      unitRateHz: Float32Array.from(payload.unitRateHz || []),
+      unitX: nullableFloat32(payload.unitX),
+      unitDepths: nullableFloat32(payload.unitDepths),
+      unitShankIds: Int16Array.from(payload.unitShankIds || []),
+      normalizedActivity: Uint8Array.from(payload.normalizedActivity || [])
+    };
+  }
+
   async function loadCatalog() {
     return normalizeCatalog(await request("/api/catalog"));
   }
@@ -157,6 +171,11 @@
     const unit = recording.units?.find((item) => Number(item.cluster_id) === Number(clusterId));
     if (!unit?.unit_id) throw new Error(`Unit ${clusterId} is not registered in ${recording.name}`);
     return normalizeUnitReview(await request(`/api/units/${encodeURIComponent(unit.unit_id)}/review`));
+  }
+
+  async function loadActivityOverview(recording) {
+    if (!recording?.databaseId) throw new Error("The Recording is not registered in the local catalog");
+    return normalizeActivityOverview(await request(`/api/recordings/${encodeURIComponent(recording.databaseId)}/activity-overview`));
   }
 
   async function loadRecording(recordingId) {
@@ -220,9 +239,11 @@
     normalizeCatalog,
     normalizeRecording,
     normalizeUnitReview,
+    normalizeActivityOverview,
     loadCatalog,
     loadRecording,
     loadUnitReview,
+    loadActivityOverview,
     ingestFiles
   };
 });
