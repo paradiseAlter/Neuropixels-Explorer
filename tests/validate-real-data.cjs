@@ -219,7 +219,7 @@ function buffer(directory, name) {
   }, 30000, 7).channelProbeIds);
   assert(exp1ShankIds.size === 4, `Expected four shanks on the single physical Probe in ks4_exp1, found ${exp1ShankIds.size}`);
   const overviewStarted = performance.now();
-  const exp1Overview = core.buildActivityOverviewBuffers({
+  const exp1Pyramid = core.buildActivityPyramidBuffers({
     spikeTimes: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_times.npy"),
     spikeClusters: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_clusters.npy"),
     spikePositions: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_positions.npy"),
@@ -227,8 +227,15 @@ function buffer(directory, name) {
     templates: buffer(path.join(kilosortRoot, "ks4_exp1"), "templates.npy"),
     channelPositions: buffer(path.join(kilosortRoot, "ks4_exp1"), "channel_positions.npy"),
     channelShanks: buffer(path.join(kilosortRoot, "ks4_exp1"), "channel_shanks.npy")
-  }, 30000, 512);
+  }, 30000, "real-data-exp1-fixture");
+  const exp1Overview = core.selectActivityPyramidLevel(exp1Pyramid, 512);
   const overviewBuildMs = performance.now() - overviewStarted;
+  assert(JSON.stringify(exp1Pyramid.pyramid.availableBinCounts) === JSON.stringify([128, 256, 512, 1024, 2048]), "The real-data pyramid levels are incomplete");
+  for (const level of exp1Pyramid.levels) {
+    assert(level.normalizedActivity.length === exp1Overview.unitIds.length * level.binCount, `Normalized level ${level.binCount} has an invalid row/bin mapping`);
+    assert(level.unusualActivity.length === exp1Overview.unitIds.length * level.binCount, `Unusual level ${level.binCount} has an invalid row/bin mapping`);
+    assert(Math.abs(level.binSeconds * level.binCount - exp1Overview.duration) < 1e-9, `Level ${level.binCount} does not map back to the recording duration`);
+  }
   assert(exp1Overview.unitIds.length === 103, `Expected 103 Unit rows in the exp1 overview, found ${exp1Overview.unitIds.length}`);
   assert(exp1Overview.normalizedActivity.length === exp1Overview.unitIds.length * 512, "The overview matrix does not map every Unit to every time bin");
   assert(exp1Overview.unusualActivity.length === exp1Overview.unitIds.length * 512, "The relative-activity matrix does not map every Unit to every time bin");
@@ -307,7 +314,7 @@ function buffer(directory, name) {
     probeRegionRows: regionResult.probeTrack.rowCount,
     shankTracks: regionResult.probeTrack.probeCount,
     trackSegments: regionResult.probeTrack.segments.length,
-    activityOverview: { units: exp1Overview.unitIds.length, bins: exp1Overview.binCount, rowsAt760px: exp1Rows.length, buildMs: Number(overviewBuildMs.toFixed(3)), semanticsAudit, representativeCases },
+    activityOverview: { units: exp1Overview.unitIds.length, bins: exp1Overview.binCount, pyramidLevels: exp1Pyramid.pyramid.availableBinCounts, rowsAt760px: exp1Rows.length, buildMs: Number(overviewBuildMs.toFixed(3)), semanticsAudit, representativeCases },
     dataStatus: dataStatus.summaryText(realDataStatus),
     reviewed
   }, null, 2));

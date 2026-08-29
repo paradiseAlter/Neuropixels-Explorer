@@ -8,16 +8,29 @@ import sqlite3
 import statistics
 import threading
 import time
+import uuid
 from collections import OrderedDict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import numpy as np
 
 from . import __version__
+from .activity_cache import (
+    ACTIVITY_LEVELS,
+    ACTIVITY_PREPROCESSING_VERSION,
+    ActivityBuildCancelled,
+    ActivityPyramidStore,
+    activity_cache_identity,
+    activity_level_matrices,
+    activity_source_fingerprint,
+    build_count_pyramid,
+    normalize_level,
+    pyramid_metadata,
+)
 from .ingest import IncrementalIngestManager, IngestError
 from .migrations import SCHEMA_VERSION, validate_schema
 from .paths import RuntimePaths
@@ -130,7 +143,10 @@ class CatalogService:
         self._recording_cache: OrderedDict[str, dict[str, np.ndarray]] = OrderedDict()
         self._unit_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._activity_overview_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._activity_build_jobs: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._cache_lock = threading.RLock()
+        self._activity_build_lock = threading.Lock()
+        self._activity_store = ActivityPyramidStore(paths.cache_root)
         with self.connect() as connection:
             validate_schema(connection)
             dataset_versions = {
@@ -182,6 +198,17 @@ class CatalogService:
                 "unitCount": len(self._unit_cache),
                 "activityOverviewLimit": MAX_ACTIVITY_OVERVIEW_CACHE,
                 "activityOverviews": list(self._activity_overview_cache.keys()),
+                "activityPyramid": self._activity_store.status(),
+                "activityBuilds": [
+                    {
+                        "buildId": job["buildId"],
+                        "recordingId": job["recordingId"],
+                        "status": job["status"],
+                        "phase": job["phase"],
+                        "progress": job["progress"],
+                    }
+                    for job in self._activity_build_jobs.values()
+                ],
             }
 
     def catalog(self) -> dict[str, Any]:
@@ -711,30 +738,14 @@ class CatalogService:
             },
         }
 
-    def activity_overview(self, recording_id: str, bin_count: int = 512) -> dict[str, Any]:
-        started = time.perf_counter()
-        normalized_bin_count = max(64, min(2048, int(bin_count or 512)))
-        cache_key = f"{recording_id}:{normalized_bin_count}"
-        with self._cache_lock:
-            cached = self._activity_overview_cache.get(cache_key)
-            if cached is not None:
-                self._activity_overview_cache.move_to_end(cache_key)
-                return {
-                    **cached,
-                    "server": {
-                        "overviewCacheHit": True,
-                        "recordingCacheHit": True,
-                        "computeMs": round((time.perf_counter() - started) * 1000, 3),
-                    },
-                }
-
+    def _activity_context(self, recording_id: str) -> dict[str, Any]:
         arrays, recording_cache_hit = self._recording_arrays(recording_id)
         with self.connect() as connection:
             recording = connection.execute(
                 "SELECT sample_rate_hz FROM recordings WHERE recording_id = ?",
                 (recording_id,),
             ).fetchone()
-            unit_rows = connection.execute(
+            rows = connection.execute(
                 """
                 SELECT u.cluster_id, u.spike_count, u.unit_firing_rate_hz,
                        uc.probe_depth_um, uc.shank_id
@@ -747,37 +758,43 @@ class CatalogService:
             ).fetchall()
         if recording is None:
             raise KeyError(f"Unknown Recording: {recording_id}")
-
+        unit_rows = [dict(row) for row in rows]
         sample_rate = float(recording["sample_rate_hz"])
+        asset_paths = self._asset_paths(recording_id)
+        asset_paths["catalog_database"] = self.database_path
+        source_fingerprint = activity_source_fingerprint(
+            recording_id, sample_rate, asset_paths, unit_rows,
+        )
+        return {
+            "arrays": arrays,
+            "recordingCacheHit": recording_cache_hit,
+            "sampleRate": sample_rate,
+            "unitRows": unit_rows,
+            "sourceFingerprint": source_fingerprint,
+            "cacheIdentity": activity_cache_identity(source_fingerprint),
+        }
+
+    def _build_activity_pyramid(
+        self,
+        recording_id: str,
+        context: dict[str, Any],
+        *,
+        on_progress: Any = None,
+        is_cancelled: Any = None,
+    ) -> dict[str, Any]:
+        arrays = context["arrays"]
+        unit_rows = context["unitRows"]
+        unit_ids = np.asarray([int(row["cluster_id"]) for row in unit_rows], dtype=np.int64)
         times = np.asarray(arrays["spike_times"]).reshape(-1)
         clusters = np.asarray(arrays["spike_clusters"], dtype=np.int64).reshape(-1)
-        if times.size != clusters.size:
-            raise ValueError("Spike-time and cluster arrays have different lengths")
-        unit_ids = np.asarray([int(row["cluster_id"]) for row in unit_rows], dtype=np.int64)
-        duration = float(times[-1] / sample_rate) if times.size else 0.0
-        bin_seconds = duration / normalized_bin_count if duration > 0 else 1.0
-        counts = np.zeros((unit_ids.size, normalized_bin_count), dtype=np.uint32)
-        if clusters.size and unit_ids.size:
-            row_indices = np.searchsorted(unit_ids, clusters)
-            valid = row_indices < unit_ids.size
-            valid &= unit_ids[np.minimum(row_indices, max(0, unit_ids.size - 1))] == clusters
-            time_bins = np.minimum(
-                normalized_bin_count - 1,
-                np.maximum(0, np.floor(np.asarray(times, dtype=np.float64) / sample_rate / bin_seconds).astype(np.int64)),
-            )
-            np.add.at(counts, (row_indices[valid], time_bins[valid]), 1)
-
-        normalized = np.zeros(counts.shape, dtype=np.uint8)
-        unusual = np.zeros(counts.shape, dtype=np.uint8)
-        unusual_threshold_counts = np.zeros(counts.shape[0], dtype=np.uint32)
-        for row_index in range(counts.shape[0]):
-            positive = counts[row_index][counts[row_index] > 0]
-            robust_maximum = float(np.quantile(positive, .95, method="nearest")) if positive.size else 1.0
-            normalized[row_index] = np.rint(np.minimum(1.0, counts[row_index] / max(1.0, robust_maximum)) * 255).astype(np.uint8)
-            unusual_threshold = int(np.quantile(counts[row_index], .90, method="higher"))
-            unusual_threshold_counts[row_index] = unusual_threshold
-            unusual[row_index] = np.where(counts[row_index] > unusual_threshold, 255, 0).astype(np.uint8)
-
+        duration, count_levels = build_count_pyramid(
+            times,
+            clusters,
+            unit_ids,
+            float(context["sampleRate"]),
+            on_progress=on_progress,
+            is_cancelled=is_cancelled,
+        )
         positions = arrays.get("spike_positions")
         spike_templates = arrays.get("spike_templates")
         templates = arrays.get("templates")
@@ -788,19 +805,18 @@ class CatalogService:
             int(location["id"]): location
             for location in self._unit_locations(clusters, positions, spike_templates, templates, channel_probe_ids)
         }
-
-        unit_x: list[float | None] = []
-        unit_depths: list[float | None] = []
+        unit_x: list[float] = []
+        unit_depths: list[float] = []
         unit_shanks: list[int] = []
         for row in unit_rows:
             location = locations.get(int(row["cluster_id"]), {})
-            unit_x.append(float(location["x"]) if location.get("x") is not None else None)
+            unit_x.append(float(location["x"]) if location.get("x") is not None else np.nan)
             unit_depths.append(
                 float(location["y"])
                 if location.get("y") is not None
                 else float(row["probe_depth_um"])
                 if row["probe_depth_um"] is not None
-                else None
+                else np.nan
             )
             location_shank = location.get("shankId")
             unit_shanks.append(
@@ -810,29 +826,115 @@ class CatalogService:
                 if row["shank_id"] is not None
                 else -1
             )
+        cache_arrays: dict[str, np.ndarray] = {
+            "unitIds": unit_ids.astype(np.int32),
+            "unitCounts": np.asarray([int(row["spike_count"] or 0) for row in unit_rows], dtype=np.uint32),
+            "unitRateHz": np.asarray([float(row["unit_firing_rate_hz"] or 0) for row in unit_rows], dtype=np.float32),
+            "unitX": np.asarray(unit_x, dtype=np.float32),
+            "unitDepths": np.asarray(unit_depths, dtype=np.float32),
+            "unitShankIds": np.asarray(unit_shanks, dtype=np.int16),
+        }
+        for index, level in enumerate(ACTIVITY_LEVELS):
+            if is_cancelled and is_cancelled():
+                raise ActivityBuildCancelled("Activity overview build cancelled")
+            normalized, unusual, thresholds = activity_level_matrices(
+                count_levels[level], is_cancelled=is_cancelled,
+            )
+            cache_arrays[f"normalized_{level}"] = normalized
+            cache_arrays[f"unusual_{level}"] = unusual
+            cache_arrays[f"thresholds_{level}"] = thresholds
+            on_progress and on_progress("normalizing", 70.0 + (index + 1) / len(ACTIVITY_LEVELS) * 20.0)
+        metadata = pyramid_metadata(
+            recording_id,
+            context["sourceFingerprint"],
+            context["cacheIdentity"],
+            duration,
+            int(times.size),
+        )
+        on_progress and on_progress("writing", 92.0)
+        _, cache_bytes = self._activity_store.write(
+            recording_id,
+            context["cacheIdentity"],
+            metadata,
+            cache_arrays,
+        )
+        metadata["cacheBytes"] = cache_bytes
+        on_progress and on_progress("ready", 100.0)
+        return {"metadata": metadata, "arrays": cache_arrays}
 
-        result = {
-            "recordingId": recording_id,
+    @staticmethod
+    def _activity_level_result(pyramid: dict[str, Any], bin_count: int) -> dict[str, Any]:
+        metadata = pyramid["metadata"]
+        arrays = pyramid["arrays"]
+        level = normalize_level(bin_count)
+        duration = float(metadata["duration"])
+        nullable = lambda value: None if not np.isfinite(value) else float(value)
+        return {
+            "recordingId": metadata["recordingId"],
             "duration": duration,
-            "binCount": normalized_bin_count,
-            "binSeconds": bin_seconds,
-            "totalSpikes": int(times.size),
-            "unitIds": unit_ids.astype(int).tolist(),
-            "unitCounts": [int(row["spike_count"] or 0) for row in unit_rows],
-            "unitRateHz": [float(row["unit_firing_rate_hz"] or 0) for row in unit_rows],
-            "unitX": unit_x,
-            "unitDepths": unit_depths,
-            "unitShankIds": unit_shanks,
-            "normalizedActivity": normalized.reshape(-1).astype(int).tolist(),
-            "unusualActivity": unusual.reshape(-1).astype(int).tolist(),
-            "unusualThresholdCounts": unusual_threshold_counts.astype(int).tolist(),
-            "semantics": {
-                "individual": "spike count per recording-wide bin divided by the Unit's non-empty-bin 95th percentile and clipped to [0, 1]",
-                "aggregate": "fraction of constituent Units whose bin count is strictly above that Unit's recording-wide 90th-percentile bin count",
-                "unusualThreshold": "recording-wide 90th percentile across all bins for each Unit; sparse Units with a zero threshold are unusual in bins containing at least one spike",
-                "rawFiringRate": False,
+            "binCount": level,
+            "binSeconds": duration / level if duration > 0 else 1.0,
+            "totalSpikes": int(metadata["totalSpikes"]),
+            "unitIds": arrays["unitIds"].astype(int).tolist(),
+            "unitCounts": arrays["unitCounts"].astype(int).tolist(),
+            "unitRateHz": arrays["unitRateHz"].astype(float).tolist(),
+            "unitX": [nullable(value) for value in arrays["unitX"]],
+            "unitDepths": [nullable(value) for value in arrays["unitDepths"]],
+            "unitShankIds": arrays["unitShankIds"].astype(int).tolist(),
+            "normalizedActivity": arrays[f"normalized_{level}"].reshape(-1).astype(int).tolist(),
+            "unusualActivity": arrays[f"unusual_{level}"].reshape(-1).astype(int).tolist(),
+            "unusualThresholdCounts": arrays[f"thresholds_{level}"].astype(int).tolist(),
+            "semantics": metadata["semantics"],
+            "pyramid": {
+                "cacheFormat": metadata["cacheFormat"],
+                "preprocessingVersion": metadata["preprocessingVersion"],
+                "sourceFingerprint": metadata["sourceFingerprint"],
+                "cacheIdentity": metadata["cacheIdentity"],
+                "availableBinCounts": metadata["availableBinCounts"],
+                "selectedBinCount": level,
+                "mapping": metadata["mapping"],
             },
         }
+
+    def activity_overview(
+        self,
+        recording_id: str,
+        bin_count: int = 512,
+        *,
+        on_progress: Any = None,
+        is_cancelled: Any = None,
+    ) -> dict[str, Any]:
+        started = time.perf_counter()
+        level = normalize_level(bin_count)
+        context = self._activity_context(recording_id)
+        cache_key = f"{context['cacheIdentity']}:{level}"
+        with self._cache_lock:
+            cached = self._activity_overview_cache.get(cache_key)
+            if cached is not None:
+                self._activity_overview_cache.move_to_end(cache_key)
+                on_progress and on_progress("ready", 100.0)
+                return {
+                    **cached,
+                    "server": {
+                        "overviewCacheHit": True,
+                        "persistentCacheHit": True,
+                        "recordingCacheHit": True,
+                        "computeMs": round((time.perf_counter() - started) * 1000, 3),
+                    },
+                }
+        with self._activity_build_lock:
+            pyramid = self._activity_store.load(recording_id, context["cacheIdentity"])
+            persistent_hit = pyramid is not None
+            if pyramid is None:
+                pyramid = self._build_activity_pyramid(
+                    recording_id,
+                    context,
+                    on_progress=on_progress,
+                    is_cancelled=is_cancelled,
+                )
+            else:
+                on_progress and on_progress("persistent-cache", 100.0)
+        result = self._activity_level_result(pyramid, level)
         with self._cache_lock:
             self._activity_overview_cache[cache_key] = result
             while len(self._activity_overview_cache) > MAX_ACTIVITY_OVERVIEW_CACHE:
@@ -841,10 +943,99 @@ class CatalogService:
             **result,
             "server": {
                 "overviewCacheHit": False,
-                "recordingCacheHit": recording_cache_hit,
+                "persistentCacheHit": persistent_hit,
+                "recordingCacheHit": context["recordingCacheHit"],
                 "computeMs": round((time.perf_counter() - started) * 1000, 3),
             },
         }
+
+    def start_activity_overview_build(self, recording_id: str, bin_count: int = 512) -> dict[str, Any]:
+        build_id = uuid.uuid4().hex
+        job = {
+            "buildId": build_id,
+            "recordingId": str(recording_id),
+            "binCount": normalize_level(bin_count),
+            "status": "queued",
+            "phase": "queued",
+            "progress": 0.0,
+            "cancel": threading.Event(),
+            "result": None,
+            "error": None,
+            "startedAt": time.time(),
+        }
+        with self._cache_lock:
+            self._activity_build_jobs[build_id] = job
+            while len(self._activity_build_jobs) > 32:
+                oldest_id, oldest = next(iter(self._activity_build_jobs.items()))
+                if oldest["status"] in {"queued", "running"}:
+                    break
+                self._activity_build_jobs.pop(oldest_id, None)
+
+        def progress(phase: str, value: float) -> None:
+            with self._cache_lock:
+                job["phase"] = str(phase)
+                job["progress"] = max(job["progress"], min(100.0, float(value)))
+
+        def run() -> None:
+            with self._cache_lock:
+                job["status"] = "running"
+                job["phase"] = "fingerprint"
+                job["progress"] = 2.0
+            try:
+                result = self.activity_overview(
+                    recording_id,
+                    job["binCount"],
+                    on_progress=progress,
+                    is_cancelled=job["cancel"].is_set,
+                )
+                if job["cancel"].is_set():
+                    raise ActivityBuildCancelled("Activity overview build cancelled")
+                with self._cache_lock:
+                    job["result"] = result
+                    job["status"] = "complete"
+                    job["phase"] = "ready"
+                    job["progress"] = 100.0
+            except ActivityBuildCancelled:
+                with self._cache_lock:
+                    job["status"] = "cancelled"
+                    job["phase"] = "cancelled"
+            except Exception as error:
+                with self._cache_lock:
+                    job["status"] = "error"
+                    job["phase"] = "error"
+                    job["error"] = str(error)
+
+        threading.Thread(target=run, name=f"activity-overview-{build_id[:8]}", daemon=True).start()
+        return self.activity_overview_build(build_id, include_result=False)
+
+    def activity_overview_build(self, build_id: str, *, include_result: bool = True) -> dict[str, Any]:
+        with self._cache_lock:
+            job = self._activity_build_jobs.get(str(build_id))
+            if job is None:
+                raise KeyError(f"Unknown activity overview build: {build_id}")
+            payload = {
+                "buildId": job["buildId"],
+                "recordingId": job["recordingId"],
+                "binCount": job["binCount"],
+                "status": job["status"],
+                "phase": job["phase"],
+                "progress": round(float(job["progress"]), 1),
+                "error": job["error"],
+            }
+            if include_result and job["status"] == "complete":
+                payload["overview"] = job["result"]
+            return payload
+
+    def cancel_activity_overview_build(self, build_id: str) -> dict[str, Any]:
+        with self._cache_lock:
+            job = self._activity_build_jobs.get(str(build_id))
+            if job is None:
+                raise KeyError(f"Unknown activity overview build: {build_id}")
+            job["cancel"].set()
+            if job["status"] == "queued":
+                job["status"] = "cancelled"
+                job["phase"] = "cancelled"
+        return self.activity_overview_build(build_id, include_result=False)
 
     def invalidate_recordings(self, recording_ids: set[str]) -> None:
         affected = {str(recording_id) for recording_id in recording_ids}
@@ -860,8 +1051,11 @@ class CatalogService:
                 if str(result.get("recordingId")) in affected:
                     self._unit_cache.pop(unit_id, None)
             for cache_key in list(self._activity_overview_cache):
-                if any(cache_key.startswith(f"{recording_id}:") for recording_id in affected):
-                    self._activity_overview_cache.pop(cache_key, None)
+                self._activity_overview_cache.pop(cache_key, None)
+            for job in self._activity_build_jobs.values():
+                if str(job["recordingId"]) in affected and job["status"] in {"queued", "running"}:
+                    job["cancel"].set()
+        self._activity_store.invalidate(affected)
 
     def close(self) -> None:
         """Release memory-mapped arrays so runtime roots can be moved or removed on Windows."""
@@ -874,6 +1068,10 @@ class CatalogService:
                         memory_map.close()
             self._recording_cache.clear()
             self._unit_cache.clear()
+            self._activity_overview_cache.clear()
+            for job in self._activity_build_jobs.values():
+                if job["status"] in {"queued", "running"}:
+                    job["cancel"].set()
 
 
 class NeuropixelHTTPServer(ThreadingHTTPServer):
@@ -1019,12 +1217,15 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
                 self._json(self.server.service.cache_status())
             elif parsed.path == "/api/videos":
                 self._json(self.server.service.videos())
+            elif (match := re.fullmatch(r"/api/activity-overview-builds/([0-9a-f]+)", parsed.path)):
+                self._json(self.server.service.activity_overview_build(match.group(1)))
             elif (match := re.fullmatch(r"/api/videos/([^/]+)/media", parsed.path)):
                 path, content_type = self.server.service.video_media(unquote(match.group(1)))
                 self._media(path, content_type)
             elif (match := re.fullmatch(r"/api/recordings/([^/]+)/activity-overview", parsed.path)):
                 recording_id = unquote(match.group(1))
-                self._json(self.server.service.activity_overview(recording_id))
+                query = parse_qs(parsed.query)
+                self._json(self.server.service.activity_overview(recording_id, int(query.get("binCount", [512])[0])))
             elif parsed.path.startswith("/api/recordings/"):
                 recording_id = unquote(parsed.path[len("/api/recordings/"):]).strip("/")
                 self._json(self.server.service.recording_snapshot(recording_id))
@@ -1054,6 +1255,16 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         try:
+            match = re.fullmatch(r"/api/recordings/([^/]+)/activity-overview-builds", parsed.path)
+            if match:
+                payload = self._read_json()
+                self._json(
+                    self.server.service.start_activity_overview_build(
+                        unquote(match.group(1)), int(payload.get("binCount", 512)),
+                    ),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
             if parsed.path == "/api/ingest/sessions":
                 self._json(
                     self.server.service.incremental_ingest.create_session(self._read_json()),
@@ -1092,6 +1303,10 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
         try:
+            build_match = re.fullmatch(r"/api/activity-overview-builds/([0-9a-f]+)", parsed.path)
+            if build_match:
+                self._json(self.server.service.cancel_activity_overview_build(build_match.group(1)))
+                return
             match = re.fullmatch(r"/api/ingest/sessions/([0-9a-f]+)", parsed.path)
             if not match:
                 self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)

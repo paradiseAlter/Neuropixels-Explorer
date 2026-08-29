@@ -3,9 +3,10 @@
 ## Scope and status
 
 Dialogue 1 implemented Round 0 through Round 2 and stopped at Checkpoint A.
-The authorized Round 2.5 correction pass is complete and stopped at Checkpoint
-B. Rounds 3-6, behavior interpretation, candidate ranking, saliency, and
-persistent disk caching remain deferred pending explicit Checkpoint B approval.
+The Round 2.5 correction pass stopped at Checkpoint B. Checkpoint B was then
+explicitly approved and Round 3 is now complete, stopped for backend and
+mapping review. Rounds 4-6, behavior interpretation, candidate ranking, and
+saliency remain deferred pending explicit Round 3 approval.
 
 ## Verified current architecture
 
@@ -302,3 +303,87 @@ evidence directory.
   anatomy.
 - Focused groups may temporarily exceed the default 10-18 target because local
   replacement preserves the rest of the experiment while exposing detail.
+
+## Round 3 verified implementation result - backend and mapping review
+
+Round 3 is complete and stopped before Round 4.
+
+### Cache contract and invalidation
+
+- The display cache format is `neuropixels-display-activity-pyramid`; the
+  preprocessing version is `3.0.0`. Each recording stores 128, 256, 512, 1024,
+  and 2048-bin levels.
+- A source fingerprint covers recording ID, sample rate, relevant asset role,
+  filename, byte size, modification time, Unit IDs/count/rate/depth/shank
+  metadata, and the catalog database file. Cache identity hashes the format,
+  preprocessing version, and source fingerprint. Any of those changes selects
+  a new identity; tests verified invalidation after changing source metadata.
+- Indexed service mode stores compressed NPZ arrays and JSON metadata under an
+  application-owned cache root. `--cache-root` can set that location; otherwise
+  the current user's local application cache is used. Folder mode stores the
+  same versioned pyramid contract in browser IndexedDB. Neither path writes to
+  the KiloSort source directory or modifies validated source arrays.
+- A completed cache records exact row mapping (`unitIds[row]`) and half-open
+  bin mapping (`[bin * binSeconds, (bin + 1) * binSeconds)`). Every level was
+  tested for `Units x bins` matrix shape and exact return to recording duration.
+- Stale recording entries are pruned only inside their application-owned cache
+  directory. Incremental-ingest invalidation cancels affected builds and
+  removes the affected derived cache; unrelated source data is untouched.
+
+### Build, progress, cancellation, and navigation
+
+- Indexed mode starts an asynchronous build job, exposes phase/progress polling,
+  and supports explicit cancellation. Spike counting runs in bounded chunks
+  with cancellation checks; normalization checks cancellation between Unit
+  blocks; cache files are published atomically only after completion.
+- Folder mode builds off the UI thread in the existing Worker, reports cache,
+  read, build, and write phases, persists a structured-clone pyramid in
+  IndexedDB, and cancels an obsolete request by terminating and recreating the
+  Worker. The generated Worker source is syntax-tested.
+- Full-range desktop navigation retains the approved 512-bin view. Narrower
+  viewports may select 128/256; zoomed ranges select cached 1024/2048 levels.
+  Panning within a level and returning to a prior level do not scan spikes.
+- Switching levels uses a state-preserving Canvas data replacement. The real
+  browser retained Unit 7 expansion, local neighbors, all four shanks, anatomy
+  provenance, and the visible time range when moving from 512 to 2048 bins.
+
+### Measured evidence
+
+- Direct Node real-data build of all five `ks4_exp1` levels was 128.584 ms in
+  the final run (109.331 ms in an earlier run), versus the former single-level
+  build. The output kept 103 Units, 17 rows at 760 px, and all four shanks.
+- The indexed cold build, including fingerprinting, five levels, compression,
+  and atomic persistence, was 147.660 ms. Its compressed cache was 194,160
+  bytes. After a service restart, the 512-bin result loaded from disk in
+  29.736 ms; 1024 and 2048 level navigation loads were 33.400 and 21.870 ms.
+  These are one-machine observations, not general guarantees.
+- A cold `ks4_exp2` build was cancelled at 12%. Its terminal state was
+  `cancelled`, and persistent entry count/bytes stayed at one/194,160, proving
+  that no partial second cache was published.
+- Browser smoke testing confirmed 512 -> 1024 -> 2048 -> 512 navigation,
+  selection preservation, unchanged p90 aggregate labeling, and an empty
+  console.
+- Focused activity/pyramid, i18n/help, video sync, workspace layout,
+  incremental-ingest, safe real-data, and JavaScript syntax checks: PASS.
+  Python suite: 17/17 PASS.
+
+### Round 3 screenshots
+
+- `round3-default-persistent-pyramid-1920x1080.jpg`
+- `round3-zoom-2048-bin-level-1920x1080.jpg`
+- `round3-unit7-selection-preserved-2048-level-1920x1080.jpg`
+
+The files are stored outside the repository in the Codex desktop Round 3
+evidence directory.
+
+### Round 3 limitations
+
+- The live browser evidence used indexed service mode with real data. Folder
+  mode shares the tested pyramid builders and its generated Worker/IndexedDB
+  contract passed deterministic Node checks, but the native folder picker was
+  not exercised in the automated browser run.
+- Cache values are display summaries, not scientific measurements. Thresholds
+  are recomputed per Unit at each selected pyramid level and are never labeled
+  as raw firing rate.
+- Round 3 does not add smooth semantic zoom, behavior linkage, missing-frame
+  warnings, or new selection semantics. Those remain Round 4 scope.

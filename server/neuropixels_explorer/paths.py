@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .activity_cache import default_activity_cache_root
+
 
 def product_root() -> Path:
     """Return the checked-out product root without relying on the current directory."""
@@ -16,6 +18,7 @@ class RuntimePaths:
     data_root: Path
     database_path: Path
     static_root: Path
+    cache_root: Path
 
     @classmethod
     def from_arguments(
@@ -24,11 +27,13 @@ class RuntimePaths:
         data_root: Path,
         database_path: Path,
         static_root: Path | None = None,
+        cache_root: Path | None = None,
     ) -> "RuntimePaths":
         return cls(
             data_root=data_root.expanduser().resolve(),
             database_path=database_path.expanduser().resolve(),
             static_root=(static_root or product_root()).expanduser().resolve(),
+            cache_root=(cache_root or default_activity_cache_root()).expanduser().resolve(),
         )
 
     def validate(self) -> None:

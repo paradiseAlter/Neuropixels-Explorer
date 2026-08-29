@@ -32,6 +32,20 @@ precedence.
 - Do not push, merge, rebase, rewrite history, or modify unrelated files unless
   the user explicitly asks for that separate action.
 
+## Versioning and checkpoints
+
+- Every implementation change that creates a new usable or reviewable state
+  must be committed before the next round starts and assigned one unique,
+  annotated Semantic Versioning tag (`vMAJOR.MINOR.PATCH`). Do not leave a
+  reviewable version unnumbered.
+- Start from the highest reachable version tag. Increment `MAJOR` for breaking
+  product or data-contract changes, `MINOR` for backward-compatible feature or
+  review-checkpoint changes, and `PATCH` for backward-compatible fixes.
+- Never move, reuse, or overwrite an existing version tag. Record the version
+  meaning in the annotated tag message and keep each tagged state checkoutable.
+- A request to commit or number local versions does not authorize pushing
+  commits or tags; publish only when the user explicitly asks.
+
 ## Product north star
 
 Represent relationships first and analyses second:

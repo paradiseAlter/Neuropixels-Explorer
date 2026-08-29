@@ -4,6 +4,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const activity = require(path.join(root, "scripts", "activity-overview.js"));
+const kilosortCore = require(path.join(root, "scripts", "kilosort-core.js"));
 
 const binCount = 4;
 const units = Array.from({ length: 12 }, (_, index) => ({
@@ -67,6 +68,17 @@ assert.equal(activity.temporalDetailMode(330, 1500, 400), "recording density", "
 assert.equal(activity.temporalDetailMode(120, 1500, 400), "normalized rate envelope", "A medium span should use the normalized envelope");
 assert.equal(activity.temporalDetailMode(12, 1500, 80), "individual spikes", "A short sparse span should expose individual spikes");
 
+assert.deepEqual(kilosortCore.ACTIVITY_LEVELS, [128, 256, 512, 1024, 2048], "Round 3 must expose the versioned temporal pyramid");
+const countFixture = Uint32Array.from([0, 1, 2, 8, 0, 0, 1, 1]);
+const matrices = kilosortCore.activityMatricesFromCounts(countFixture, 2, 4);
+assert.equal(matrices.normalizedActivity.length, 8, "Every fixture row/bin must map to one normalized display cell");
+assert.equal(matrices.unusualThresholdCounts.length, 2, "Every fixture Unit must retain its selected-level p90 threshold");
+const fingerprintA = kilosortCore.activityFileFingerprint({ spikeTimes: { name: "spike_times.npy", size: 10, lastModified: 1 } }, 30000, 0);
+const fingerprintB = kilosortCore.activityFileFingerprint({ spikeTimes: { name: "spike_times.npy", size: 11, lastModified: 1 } }, 30000, 0);
+assert.notEqual(fingerprintA, fingerprintB, "Changing source metadata must invalidate the folder cache identity");
+assert.equal(kilosortCore.nearestActivityLevel(900), 1024, "Viewport requests must resolve to a stored pyramid level");
+assert.doesNotThrow(() => new Function(kilosortCore.createWorkerSource()), "The generated background-worker cache implementation must remain valid JavaScript");
+
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "scripts", "app.js"), "utf8");
 const core = fs.readFileSync(path.join(root, "scripts", "kilosort-core.js"), "utf8");
@@ -74,13 +86,16 @@ assert(html.includes('id="activity-anatomy-canvas"') && html.includes('id="exper
 assert(html.includes('id="video-region-splitter"'), "The behavior region must have one accessible resize separator");
 assert(/id="review-layout"[^>]+hidden/.test(html), "The legacy Unit/Probe dashboard must not be permanently visible");
 assert(app.includes("groupFocusPath") && app.includes("probeTrackSegmentFor"), "Shared app state must own progressive focus and Probe-track context");
+assert(app.includes("scheduleActivityLevelForRange") && app.includes("overviewAbortController"), "Navigation must select cached pyramid levels and expose cancellation state");
 assert(core.includes("unusualThresholdCounts") && core.includes("strictly above that Unit's recording-wide 90th-percentile"), "Folder preprocessing must expose the selected relative-activity semantics");
+assert(core.includes("persistentActivityGet") && core.includes("activity-overview-progress"), "Folder preprocessing must persist pyramids and report background progress");
 
 console.log(JSON.stringify({
-  feature: "activity-anatomy-canvas-round-2.5",
+  feature: "activity-anatomy-canvas-round-3",
   stableOrder: activity.stableUnitOrder(shuffled).map((unit) => unit.id),
   overviewRows: rows.map((row) => ({ count: row.count, shankId: row.shankId, region: row.region, unitIds: row.unitIds })),
   progressiveFocus: { baseRows: 1, localRows: local.length, constituentRows: constituent.length },
+  pyramid: { version: kilosortCore.ACTIVITY_PREPROCESSING_VERSION, levels: kilosortCore.ACTIVITY_LEVELS, invalidationVerified: fingerprintA !== fingerprintB },
   semantics: {
     individual: "within-Unit binned spike count normalized by the non-empty-bin 95th percentile",
     aggregate: "fraction of constituent Units whose bin count is strictly above their own recording-wide p90"

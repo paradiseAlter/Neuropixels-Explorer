@@ -180,6 +180,53 @@
     return normalizeActivityOverview(await request(`/api/recordings/${encodeURIComponent(recording.databaseId)}/activity-overview`));
   }
 
+  function abortableDelay(milliseconds, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException("Activity overview request cancelled", "AbortError"));
+        return;
+      }
+      const timer = setTimeout(resolve, milliseconds);
+      signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        reject(new DOMException("Activity overview request cancelled", "AbortError"));
+      }, { once: true });
+    });
+  }
+
+  async function buildActivityOverview(recording, {
+    binCount = 512,
+    signal = null,
+    onProgress = null
+  } = {}) {
+    if (!recording?.databaseId) throw new Error("The Recording is not registered in the local catalog");
+    let buildId = null;
+    const cancel = () => {
+      if (buildId) request(`/api/activity-overview-builds/${encodeURIComponent(buildId)}`, { method: "DELETE" }).catch(() => {});
+    };
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      let build = await request(`/api/recordings/${encodeURIComponent(recording.databaseId)}/activity-overview-builds`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ binCount: Number(binCount || 512) }),
+        signal
+      });
+      buildId = build.buildId;
+      while (["queued", "running"].includes(build.status)) {
+        onProgress?.({ phase: build.phase, progress: Number(build.progress || 0), status: build.status });
+        await abortableDelay(45, signal);
+        build = await request(`/api/activity-overview-builds/${encodeURIComponent(buildId)}`, { signal });
+      }
+      if (build.status === "cancelled") throw new DOMException("Activity overview request cancelled", "AbortError");
+      if (build.status !== "complete" || !build.overview) throw new Error(build.error || "Activity overview build failed");
+      onProgress?.({ phase: "ready", progress: 100, status: "complete" });
+      return normalizeActivityOverview(build.overview);
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+    }
+  }
+
   async function loadRecording(recordingId) {
     const payload = await request(`/api/recordings/${encodeURIComponent(recordingId)}`);
     return normalizeRecording(payload.recording);
@@ -246,6 +293,7 @@
     loadRecording,
     loadUnitReview,
     loadActivityOverview,
+    buildActivityOverview,
     ingestFiles
   };
 });

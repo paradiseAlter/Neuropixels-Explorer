@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 from pathlib import Path
@@ -238,6 +240,7 @@ class ServiceTests(unittest.TestCase):
             data_root=data_root,
             database_path=database,
             static_root=ROOT,
+            cache_root=self.root / "activity-cache",
         )
         self.service = CatalogService(self.paths)
 
@@ -265,17 +268,62 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(review["server"]["unitCacheHit"])
         self.assertTrue(self.service.unit_review("rec_01_unit_0007")["server"]["unitCacheHit"])
 
-        overview = self.service.activity_overview("rec_01", 64)
-        self.assertEqual(overview["binCount"], 64)
+        overview = self.service.activity_overview("rec_01", 128)
+        self.assertEqual(overview["binCount"], 128)
         self.assertEqual(overview["unitIds"], [7, 8])
-        self.assertEqual(len(overview["normalizedActivity"]), 128)
+        self.assertEqual(len(overview["normalizedActivity"]), 256)
         self.assertEqual(sum(1 for value in overview["normalizedActivity"] if value), 5)
-        self.assertEqual(len(overview["unusualActivity"]), 128)
+        self.assertEqual(len(overview["unusualActivity"]), 256)
         self.assertEqual(len(overview["unusualThresholdCounts"]), 2)
         self.assertIn("strictly above", overview["semantics"]["aggregate"])
         self.assertFalse(overview["semantics"]["rawFiringRate"])
+        self.assertEqual(overview["pyramid"]["availableBinCounts"], [128, 256, 512, 1024, 2048])
+        self.assertEqual(overview["pyramid"]["selectedBinCount"], 128)
+        self.assertIn("half-open interval", overview["pyramid"]["mapping"]["bins"])
         self.assertFalse(overview["server"]["overviewCacheHit"])
-        self.assertTrue(self.service.activity_overview("rec_01", 64)["server"]["overviewCacheHit"])
+        self.assertFalse(overview["server"]["persistentCacheHit"])
+        self.assertTrue(self.service.activity_overview("rec_01", 128)["server"]["overviewCacheHit"])
+
+    def test_activity_pyramid_persists_invalidates_and_maps_every_level(self) -> None:
+        first = self.service.activity_overview("rec_01", 512)
+        identity = first["pyramid"]["cacheIdentity"]
+        for level in first["pyramid"]["availableBinCounts"]:
+            result = self.service.activity_overview("rec_01", level)
+            self.assertEqual(result["binCount"], level)
+            self.assertEqual(len(result["normalizedActivity"]), len(result["unitIds"]) * level)
+            self.assertEqual(len(result["unusualActivity"]), len(result["unitIds"]) * level)
+            self.assertAlmostEqual(result["binSeconds"] * level, result["duration"], places=9)
+            self.assertEqual(result["pyramid"]["cacheIdentity"], identity)
+        self.service.close()
+        self.service = CatalogService(self.paths)
+        persisted = self.service.activity_overview("rec_01", 512)
+        self.assertTrue(persisted["server"]["persistentCacheHit"])
+        self.assertEqual(persisted["pyramid"]["cacheIdentity"], identity)
+        spike_times = self.paths.data_root / "recordings" / "rec_01" / "spike_times.npy"
+        stat = spike_times.stat()
+        os.utime(spike_times, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        self.service.close()
+        self.service = CatalogService(self.paths)
+        invalidated = self.service.activity_overview("rec_01", 512)
+        self.assertFalse(invalidated["server"]["persistentCacheHit"])
+        self.assertNotEqual(invalidated["pyramid"]["cacheIdentity"], identity)
+
+    def test_activity_build_reports_progress_and_can_be_cancelled(self) -> None:
+        self.service._activity_build_lock.acquire()
+        try:
+            build = self.service.start_activity_overview_build("rec_01", 1024)
+            self.assertIn(build["status"], {"queued", "running"})
+            cancelled = self.service.cancel_activity_overview_build(build["buildId"])
+            self.assertIn(cancelled["status"], {"running", "cancelled"})
+        finally:
+            self.service._activity_build_lock.release()
+        deadline = time.time() + 5
+        status = self.service.activity_overview_build(build["buildId"])
+        while status["status"] in {"queued", "running"} and time.time() < deadline:
+            time.sleep(.01)
+            status = self.service.activity_overview_build(build["buildId"])
+        self.assertEqual(status["status"], "cancelled")
+        self.assertEqual(status["phase"], "cancelled")
 
     def test_http_api_and_static_application_share_one_release(self) -> None:
         server = create_server(self.paths, port=0, quiet=True)
@@ -293,6 +341,22 @@ class ServiceTests(unittest.TestCase):
                 overview = json.load(response)
             self.assertEqual(overview["unitIds"], [7, 8])
             self.assertEqual(overview["binCount"], 512)
+            build_request = urllib.request.Request(
+                f"{base}/api/recordings/rec_01/activity-overview-builds",
+                data=json.dumps({"binCount": 1024}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(build_request, timeout=10) as response:
+                self.assertEqual(response.status, 202)
+                build = json.load(response)
+            deadline = time.time() + 5
+            while build["status"] in {"queued", "running"} and time.time() < deadline:
+                with urllib.request.urlopen(f"{base}/api/activity-overview-builds/{build['buildId']}", timeout=10) as response:
+                    build = json.load(response)
+                time.sleep(.01)
+            self.assertEqual(build["status"], "complete")
+            self.assertEqual(build["overview"]["binCount"], 1024)
             request = urllib.request.Request(
                 f"{base}/api/videos/rec_01%3Avideo%3Asynthetic/media",
                 headers={"Range": "bytes=10-19"},

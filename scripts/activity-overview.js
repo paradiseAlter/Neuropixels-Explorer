@@ -259,25 +259,27 @@
       this.resizeObserver?.disconnect();
     }
 
-    setData(data) {
+    setData(data, { preserveState = false } = {}) {
       this.data = data || null;
       this.units = stableUnitOrder((data?.units || []).map((unit, index) => ({ ...unit, sourceIndex: Number(unit.sourceIndex ?? index) })));
       const duration = Math.max(0, Number(data?.duration || 0));
-      this.state = {
-        ...this.state,
-        visibleRange: { start: 0, end: duration },
-        cursorTime: 0,
-        selectedInterval: null,
-        selectedUnitId: null,
-        expandedUnitId: null,
-        selectedGroupKey: null,
-        groupFocusPath: [],
-        selectedShank: null,
-        selectedRegion: null
-      };
-      this.selectedSpikeTimes = new Float64Array(0);
-      this.selectedRateBins = new Float32Array(0);
-      this.selectedDuration = 0;
+      if (!preserveState) {
+        this.state = {
+          ...this.state,
+          visibleRange: { start: 0, end: duration },
+          cursorTime: 0,
+          selectedInterval: null,
+          selectedUnitId: null,
+          expandedUnitId: null,
+          selectedGroupKey: null,
+          groupFocusPath: [],
+          selectedShank: null,
+          selectedRegion: null
+        };
+        this.selectedSpikeTimes = new Float64Array(0);
+        this.selectedRateBins = new Float32Array(0);
+        this.selectedDuration = 0;
+      }
       if (this.empty) this.empty.hidden = Boolean(data?.units?.length);
       this._prepareRows();
       this.render();

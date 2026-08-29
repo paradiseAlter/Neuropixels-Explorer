@@ -192,6 +192,10 @@
     supplementBusy: false,
     playbackNeuralTime: null,
     overviewToken: 0,
+    overviewAbortController: null,
+    activityLevelAbortController: null,
+    activityLevelToken: 0,
+    activityLevelTimer: null,
     activityOverviewCache: new Map(),
     activeActivityOverview: null,
     activityLayoutSummary: null,
@@ -891,6 +895,47 @@
     state.experimentView = { ...state.experimentView, ...(snapshot || patch || {}) };
     if (Object.prototype.hasOwnProperty.call(patch || {}, "cursorTime")) state.playbackNeuralTime = Number(patch.cursorTime);
     renderExperimentHeader();
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "visibleRange")) scheduleActivityLevelForRange(state.experimentView.visibleRange);
+  }
+
+  function activityLevelForRange(overview, range) {
+    const available = overview?.pyramid?.availableBinCounts || [512];
+    const duration = Math.max(.001, Number(overview?.duration || 0));
+    const span = Math.max(.001, Number(range?.end || duration) - Number(range?.start || 0));
+    const plotWidth = Math.max(1, Number(elements.activityCanvas?.clientWidth || 1200) - 276);
+    const base = plotWidth < 560 ? 128 : plotWidth < 950 ? 256 : 512;
+    const desired = base * duration / span;
+    return available.find((level) => Number(level) >= desired) || Number(available[available.length - 1]);
+  }
+
+  function scheduleActivityLevelForRange(range) {
+    const recording = state.activeRecording;
+    const current = state.activeActivityOverview;
+    if (!recording || !current?.pyramid?.availableBinCounts?.length) return;
+    const target = activityLevelForRange(current, range);
+    if (Number(current.binCount) === Number(target)) return;
+    if (state.activityLevelTimer) clearTimeout(state.activityLevelTimer);
+    const token = ++state.activityLevelToken;
+    state.activityLevelAbortController?.abort();
+    state.activityLevelAbortController = new AbortController();
+    state.activityLevelTimer = setTimeout(async () => {
+      try {
+        const raw = await loadRecordingActivityOverview(recording, target, {
+          signal: state.activityLevelAbortController.signal
+        });
+        if (token !== state.activityLevelToken || recording !== state.activeRecording) return;
+        const overview = normalizeActivityOverview(raw, recording);
+        state.activeActivityOverview = overview;
+        activityCanvas.setData(overview, { preserveState: true });
+        activityCanvas.setViewState(state.experimentView);
+        const selectedId = state.experimentView.selectedUnitId;
+        const selectedEntry = selectedId == null ? null : state.openUnits.get(viewKey(recording, selectedId));
+        if (selectedEntry?.result) activityCanvas.setSelectedUnitData(selectedEntry.result);
+        renderActivityStatus();
+      } catch (error) {
+        if (error?.name !== "AbortError") elements.activityStatus.textContent = `Activity resolution unavailable · ${error.message}`;
+      }
+    }, 140);
   }
 
   function setExperimentView(patch, { seekVideo = false } = {}) {
@@ -955,6 +1000,10 @@
 
   async function refreshExperimentWorkspace(recording) {
     const token = ++state.overviewToken;
+    state.overviewAbortController?.abort();
+    state.activityLevelAbortController?.abort();
+    state.overviewAbortController = new AbortController();
+    if (state.activityLevelTimer) clearTimeout(state.activityLevelTimer);
     state.activeActivityOverview = null;
     state.activityLayoutSummary = null;
     state.experimentView = {
@@ -974,7 +1023,13 @@
     renderExperimentHeader();
     const started = performance.now();
     try {
-      const raw = await loadRecordingActivityOverview(recording);
+      const raw = await loadRecordingActivityOverview(recording, 512, {
+        signal: state.overviewAbortController.signal,
+        onProgress: ({ phase, progress }) => {
+          if (token !== state.overviewToken || recording !== state.activeRecording) return;
+          elements.activityStatus.textContent = `Preparing activity pyramid · ${String(phase || "working")} · ${Math.round(Number(progress || 0))}%`;
+        }
+      });
       if (token !== state.overviewToken || recording !== state.activeRecording) return;
       const overview = normalizeActivityOverview(raw, recording);
       overview.providerComputeMs = Number(raw.server?.computeMs);
@@ -988,6 +1043,7 @@
       renderUnitList();
       renderExperimentHeader();
     } catch (error) {
+      if (error?.name === "AbortError") return;
       if (token !== state.overviewToken || recording !== state.activeRecording) return;
       elements.activityStatus.textContent = `Activity overview unavailable · ${error.message}`;
       elements.activityEmpty.hidden = false;
@@ -1044,18 +1100,43 @@
       const response = event.data || {};
       const pending = state.pending.get(response.requestId);
       if (!pending) return;
+      if (response.type === "activity-overview-progress") {
+        pending.onProgress?.({ phase: response.phase, progress: Number(response.progress || 0), status: "running" });
+        return;
+      }
       state.pending.delete(response.requestId);
+      pending.cleanup?.();
       if (response.type === "worker-error") pending.reject(new Error(response.message));
       else pending.resolve(response);
     });
     state.worker.addEventListener("error", (event) => {
-      state.pending.forEach((pending) => pending.reject(new Error(event.message || "Background data reader failed")));
+      state.pending.forEach((pending) => {
+        pending.cleanup?.();
+        pending.reject(new Error(event.message || "Background data reader failed"));
+      });
       state.pending.clear();
+      state.worker = null;
+      if (state.workerUrl) URL.revokeObjectURL(state.workerUrl);
+      state.workerUrl = null;
     });
     return state.worker;
   }
 
-  async function requestWorker(message) {
+  function terminateWorker(reason = "Background data reader cancelled") {
+    state.worker?.terminate();
+    if (state.workerUrl) URL.revokeObjectURL(state.workerUrl);
+    state.worker = null;
+    state.workerUrl = null;
+    const error = new DOMException(reason, "AbortError");
+    state.pending.forEach((pending) => {
+      pending.cleanup?.();
+      pending.reject(error);
+    });
+    state.pending.clear();
+  }
+
+  async function requestWorker(message, { signal = null, onProgress = null } = {}) {
+    if (signal?.aborted) throw new DOMException("Background data reader cancelled", "AbortError");
     const worker = ensureWorker();
     if (!worker) {
       if (message.type === "clear") return { type: "cleared" };
@@ -1064,9 +1145,13 @@
         if (file) buffers[key] = await file.arrayBuffer();
       }
       if (message.type === "activity-overview") {
+        onProgress?.({ phase: "reading", progress: 18, status: "running" });
+        const pyramid = core.buildActivityPyramidBuffers(buffers, message.sampleRate, message.sourceFingerprint);
+        if (signal?.aborted) throw new DOMException("Background data reader cancelled", "AbortError");
+        onProgress?.({ phase: "ready", progress: 100, status: "complete" });
         return {
           type: "activity-overview-result",
-          ...core.buildActivityOverviewBuffers(buffers, message.sampleRate, message.binCount),
+          ...core.selectActivityPyramidLevel(pyramid, message.binCount),
           fallback: true,
           residentExperiments: [],
           residentBytes: 0
@@ -1076,7 +1161,10 @@
     }
     const requestId = `review-${++state.workerSequence}`;
     return new Promise((resolve, reject) => {
-      state.pending.set(requestId, { resolve, reject });
+      const abort = () => terminateWorker("Activity overview build cancelled");
+      const cleanup = () => signal?.removeEventListener("abort", abort);
+      signal?.addEventListener("abort", abort, { once: true });
+      state.pending.set(requestId, { resolve, reject, onProgress, cleanup });
       worker.postMessage({ ...message, requestId });
     });
   }
@@ -1109,29 +1197,6 @@
       sampleRate: recording.sampleRate,
       clusterId: Number(clusterId)
     });
-  }
-
-  async function loadRecordingActivityOverview(recording) {
-    const cacheKey = `${state.datasetToken}:${recording.key}:${Number(recording.dataVersion || 0)}`;
-    if (state.activityOverviewCache.has(cacheKey)) return state.activityOverviewCache.get(cacheKey);
-    const pending = state.dataMode === "database"
-      ? databaseClient.loadActivityOverview(recording)
-      : requestWorker({
-          type: "activity-overview",
-          experimentKey: cacheKey,
-          files: workerFiles(recording),
-          sampleRate: recording.sampleRate,
-          binCount: 512
-        });
-    state.activityOverviewCache.set(cacheKey, pending);
-    try {
-      const result = await pending;
-      state.activityOverviewCache.set(cacheKey, result);
-      return result;
-    } catch (error) {
-      state.activityOverviewCache.delete(cacheKey);
-      throw error;
-    }
   }
 
   function recordingUnits(recording) {
@@ -1188,6 +1253,34 @@
       elements.recordingStrip.querySelector(".recording-button.active")?.scrollIntoView({ block: "nearest", inline: "center" });
       updateRecordingScrollControls();
     });
+  }
+
+  async function loadRecordingActivityOverview(recording, binCount = 512, options = {}) {
+    const level = core.nearestActivityLevel(binCount);
+    const cacheKey = `${state.datasetToken}:${recording.key}:${Number(recording.dataVersion || 0)}:${level}`;
+    if (state.activityOverviewCache.has(cacheKey)) return state.activityOverviewCache.get(cacheKey);
+    const pending = state.dataMode === "database"
+      ? databaseClient.buildActivityOverview(recording, { binCount: level, ...options })
+      : (() => {
+          const files = workerFiles(recording);
+          return requestWorker({
+          type: "activity-overview",
+          experimentKey: cacheKey,
+          files,
+          sampleRate: recording.sampleRate,
+          binCount: level,
+          sourceFingerprint: core.activityFileFingerprint(files, recording.sampleRate, recording.dataVersion)
+          }, options);
+        })();
+    state.activityOverviewCache.set(cacheKey, pending);
+    try {
+      const result = await pending;
+      state.activityOverviewCache.set(cacheKey, result);
+      return result;
+    } catch (error) {
+      state.activityOverviewCache.delete(cacheKey);
+      throw error;
+    }
   }
 
   function updateRecordingScrollControls() {

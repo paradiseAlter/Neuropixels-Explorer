@@ -373,7 +373,55 @@
     return total / values.length;
   }
 
-  function buildActivityOverviewBuffers(buffers, sampleRate, requestedBinCount = 512) {
+  const ACTIVITY_PREPROCESSING_VERSION = "3.0.0";
+  const ACTIVITY_LEVELS = Object.freeze([128, 256, 512, 1024, 2048]);
+
+  function activityFileFingerprint(files, sampleRate, dataVersion = 0) {
+    const metadata = Object.entries(files || {})
+      .filter(([, file]) => Boolean(file))
+      .map(([role, file]) => [role, file.name || "", Number(file.size || 0), Number(file.lastModified || 0)])
+      .sort((left, right) => left[0].localeCompare(right[0]));
+    const text = JSON.stringify({ version: ACTIVITY_PREPROCESSING_VERSION, sampleRate: Number(sampleRate), dataVersion: Number(dataVersion || 0), files: metadata });
+    let first = 2166136261;
+    let second = 2246822519;
+    for (let index = 0; index < text.length; index += 1) {
+      const code = text.charCodeAt(index);
+      first = Math.imul(first ^ code, 16777619) >>> 0;
+      second = Math.imul(second ^ code, 3266489917) >>> 0;
+    }
+    return `${ACTIVITY_PREPROCESSING_VERSION}:${first.toString(16).padStart(8, "0")}${second.toString(16).padStart(8, "0")}`;
+  }
+
+  function nearestActivityLevel(requestedBinCount = 512) {
+    const requested = Number(requestedBinCount || 512);
+    return ACTIVITY_LEVELS.reduce((best, level) => Math.abs(level - requested) < Math.abs(best - requested) ? level : best, ACTIVITY_LEVELS[0]);
+  }
+
+  function activityMatricesFromCounts(binnedCounts, unitCount, binCount) {
+    const normalizedActivity = new Uint8Array(unitCount * binCount);
+    const unusualActivity = new Uint8Array(unitCount * binCount);
+    const unusualThresholdCounts = new Uint32Array(unitCount);
+    for (let row = 0; row < unitCount; row += 1) {
+      const positive = [];
+      const offset = row * binCount;
+      for (let bin = 0; bin < binCount; bin += 1) {
+        const value = binnedCounts[offset + bin];
+        if (value > 0) positive.push(value);
+      }
+      positive.sort((left, right) => left - right);
+      const robustMaximum = positive.length ? positive[Math.min(positive.length - 1, Math.floor((positive.length - 1) * .95))] : 1;
+      const recordingCounts = Array.from(binnedCounts.subarray(offset, offset + binCount)).sort((left, right) => left - right);
+      const unusualThreshold = recordingCounts[Math.min(recordingCounts.length - 1, Math.ceil((recordingCounts.length - 1) * .90))] || 0;
+      unusualThresholdCounts[row] = unusualThreshold;
+      for (let bin = 0; bin < binCount; bin += 1) {
+        normalizedActivity[offset + bin] = Math.round(Math.min(1, binnedCounts[offset + bin] / Math.max(1, robustMaximum)) * 255);
+        unusualActivity[offset + bin] = binnedCounts[offset + bin] > unusualThreshold ? 255 : 0;
+      }
+    }
+    return { normalizedActivity, unusualActivity, unusualThresholdCounts };
+  }
+
+  function buildActivityOverviewBuffers(buffers, sampleRate, requestedBinCount = 512, options = {}) {
     const times = parseNpyArrayBuffer(buffers.spikeTimes);
     const clusters = parseNpyArrayBuffer(buffers.spikeClusters);
     if (times.header.shape.length !== 1 || clusters.header.shape.length !== 1) throw new Error("Spike arrays must be one-dimensional");
@@ -456,9 +504,6 @@
       return bestChannel;
     };
 
-    const normalizedActivity = new Uint8Array(unitIds.length * binCount);
-    const unusualActivity = new Uint8Array(unitIds.length * binCount);
-    const unusualThresholdCounts = new Uint32Array(unitIds.length);
     unitIds.forEach((id, row) => {
       const count = Number(countsByUnit.get(Number(id)) || 0);
       unitCounts[row] = count;
@@ -475,24 +520,11 @@
       const peakChannel = peakChannelForTemplate(dominantTemplate);
       if (peakChannel != null && channelShanks?.header.count > peakChannel) unitShankIds[row] = Number(channelShanks.valueAt(peakChannel));
 
-      const positive = [];
-      const offset = row * binCount;
-      for (let bin = 0; bin < binCount; bin += 1) {
-        const value = binnedCounts[offset + bin];
-        if (value > 0) positive.push(value);
-      }
-      positive.sort((left, right) => left - right);
-      const robustMaximum = positive.length ? positive[Math.min(positive.length - 1, Math.floor((positive.length - 1) * .95))] : 1;
-      const recordingCounts = Array.from(binnedCounts.subarray(offset, offset + binCount)).sort((left, right) => left - right);
-      const unusualThreshold = recordingCounts[Math.min(recordingCounts.length - 1, Math.ceil((recordingCounts.length - 1) * .90))] || 0;
-      unusualThresholdCounts[row] = unusualThreshold;
-      for (let bin = 0; bin < binCount; bin += 1) {
-        normalizedActivity[offset + bin] = Math.round(Math.min(1, binnedCounts[offset + bin] / Math.max(1, robustMaximum)) * 255);
-        unusualActivity[offset + bin] = binnedCounts[offset + bin] > unusualThreshold ? 255 : 0;
-      }
     });
 
-    return {
+    const matrices = activityMatricesFromCounts(binnedCounts, unitIds.length, binCount);
+
+    const result = {
       duration,
       binCount,
       binSeconds,
@@ -503,15 +535,77 @@
       unitX,
       unitDepths,
       unitShankIds,
-      normalizedActivity,
-      unusualActivity,
-      unusualThresholdCounts,
+      ...matrices,
       semantics: {
         individual: "spike count per recording-wide bin divided by the Unit's non-empty-bin 95th percentile and clipped to [0, 1]",
-        aggregate: "fraction of constituent Units whose bin count is strictly above that Unit's recording-wide 90th-percentile bin count",
-        unusualThreshold: "recording-wide 90th percentile across all bins for each Unit; sparse Units with a zero threshold are unusual in bins containing at least one spike",
+        aggregate: "fraction of constituent Units whose bin count is strictly above that Unit's recording-wide 90th-percentile bin count at the selected pyramid level",
+        unusualThreshold: "recording-wide 90th percentile across all bins at the selected pyramid level for each Unit; sparse Units with a zero threshold are unusual in bins containing at least one spike",
         rawFiringRate: false
       }
+    };
+    if (options.includeCounts) result.binnedCounts = binnedCounts;
+    return result;
+  }
+
+  function buildActivityPyramidBuffers(buffers, sampleRate, sourceFingerprint = "") {
+    const finest = buildActivityOverviewBuffers(buffers, sampleRate, ACTIVITY_LEVELS[ACTIVITY_LEVELS.length - 1], { includeCounts: true });
+    const levels = [];
+    for (const binCount of ACTIVITY_LEVELS) {
+      let matrices;
+      if (binCount === finest.binCount) {
+        matrices = {
+          normalizedActivity: finest.normalizedActivity,
+          unusualActivity: finest.unusualActivity,
+          unusualThresholdCounts: finest.unusualThresholdCounts
+        };
+      } else {
+        const factor = finest.binCount / binCount;
+        const counts = new Uint32Array(finest.unitIds.length * binCount);
+        for (let row = 0; row < finest.unitIds.length; row += 1) {
+          for (let bin = 0; bin < binCount; bin += 1) {
+            let total = 0;
+            const sourceOffset = row * finest.binCount + bin * factor;
+            for (let part = 0; part < factor; part += 1) total += finest.binnedCounts[sourceOffset + part];
+            counts[row * binCount + bin] = total;
+          }
+        }
+        matrices = activityMatricesFromCounts(counts, finest.unitIds.length, binCount);
+      }
+      levels.push({ binCount, binSeconds: finest.duration > 0 ? finest.duration / binCount : 1, ...matrices });
+    }
+    delete finest.binnedCounts;
+    delete finest.normalizedActivity;
+    delete finest.unusualActivity;
+    delete finest.unusualThresholdCounts;
+    return {
+      ...finest,
+      pyramid: {
+        cacheFormat: "neuropixels-display-activity-pyramid",
+        preprocessingVersion: ACTIVITY_PREPROCESSING_VERSION,
+        sourceFingerprint,
+        cacheIdentity: `${ACTIVITY_PREPROCESSING_VERSION}:${sourceFingerprint}`,
+        availableBinCounts: [...ACTIVITY_LEVELS],
+        mapping: {
+          rows: "row index maps to unitIds[row]",
+          bins: "bin maps to the half-open interval [bin * binSeconds, (bin + 1) * binSeconds)"
+        }
+      },
+      levels
+    };
+  }
+
+  function selectActivityPyramidLevel(pyramid, requestedBinCount = 512) {
+    const selectedBinCount = nearestActivityLevel(requestedBinCount);
+    const level = pyramid.levels.find((item) => Number(item.binCount) === selectedBinCount) || pyramid.levels[0];
+    return {
+      ...pyramid,
+      levels: undefined,
+      binCount: level.binCount,
+      binSeconds: level.binSeconds,
+      normalizedActivity: level.normalizedActivity,
+      unusualActivity: level.unusualActivity,
+      unusualThresholdCounts: level.unusualThresholdCounts,
+      pyramid: { ...pyramid.pyramid, selectedBinCount: level.binCount }
     };
   }
 
@@ -737,10 +831,55 @@
       const typedData = ${typedData.toString()};
       const parseNpyArrayBuffer = ${parseNpyArrayBuffer.toString()};
       const mean = ${mean.toString()};
+      const ACTIVITY_PREPROCESSING_VERSION = ${JSON.stringify(ACTIVITY_PREPROCESSING_VERSION)};
+      const ACTIVITY_LEVELS = ${JSON.stringify(ACTIVITY_LEVELS)};
+      const nearestActivityLevel = ${nearestActivityLevel.toString()};
+      const activityMatricesFromCounts = ${activityMatricesFromCounts.toString()};
       const buildActivityOverviewBuffers = ${buildActivityOverviewBuffers.toString()};
+      const buildActivityPyramidBuffers = ${buildActivityPyramidBuffers.toString()};
+      const selectActivityPyramidLevel = ${selectActivityPyramidLevel.toString()};
       const analyzeUnitBuffers = ${analyzeUnitBuffers.toString()};
       const cache = new Map();
       const MAX_RESIDENT = 2;
+
+      function openActivityCache() {
+        return new Promise((resolve, reject) => {
+          if (!self.indexedDB) { resolve(null); return; }
+          const request = self.indexedDB.open("neuropixels-explorer-display-cache", 1);
+          request.onupgradeneeded = () => request.result.createObjectStore("activity-pyramids");
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      async function persistentActivityGet(key) {
+        try {
+          const database = await openActivityCache();
+          if (!database) return null;
+          return await new Promise((resolve, reject) => {
+            const transaction = database.transaction("activity-pyramids", "readonly");
+            const request = transaction.objectStore("activity-pyramids").get(key);
+            request.onsuccess = () => resolve(request.result || null);
+            request.onerror = () => reject(request.error);
+            transaction.oncomplete = () => database.close();
+          });
+        } catch { return null; }
+      }
+
+      async function persistentActivityPut(key, value) {
+        try {
+          const database = await openActivityCache();
+          if (!database) return false;
+          await new Promise((resolve, reject) => {
+            const transaction = database.transaction("activity-pyramids", "readwrite");
+            transaction.objectStore("activity-pyramids").put(value, key);
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+          });
+          database.close();
+          return true;
+        } catch { return false; }
+      }
 
       async function loadEntry(message) {
         if (cache.has(message.experimentKey)) {
@@ -767,15 +906,27 @@
           return;
         }
         try {
-          const entry = await loadEntry(message);
           if (message.type === "activity-overview") {
-            const result = buildActivityOverviewBuffers(entry.buffers, Number(message.sampleRate), Number(message.binCount || 512));
+            const persistentKey = ACTIVITY_PREPROCESSING_VERSION + ":" + String(message.sourceFingerprint || message.experimentKey || "");
+            self.postMessage({ type: "activity-overview-progress", requestId: message.requestId, phase: "persistent-cache", progress: 5 });
+            let pyramid = await persistentActivityGet(persistentKey);
+            const persistentCacheHit = Boolean(pyramid);
+            if (!pyramid) {
+              self.postMessage({ type: "activity-overview-progress", requestId: message.requestId, phase: "reading", progress: 18 });
+              const entry = await loadEntry(message);
+              self.postMessage({ type: "activity-overview-progress", requestId: message.requestId, phase: "building-pyramid", progress: 38 });
+              pyramid = buildActivityPyramidBuffers(entry.buffers, Number(message.sampleRate), String(message.sourceFingerprint || ""));
+              self.postMessage({ type: "activity-overview-progress", requestId: message.requestId, phase: "writing", progress: 88 });
+              await persistentActivityPut(persistentKey, pyramid);
+            }
+            const result = selectActivityPyramidLevel(pyramid, Number(message.binCount || 512));
             const residentExperiments = [...cache.keys()];
             const residentBytes = [...cache.values()].reduce((total, item) => total + Object.values(item.buffers).reduce((sum, buffer) => sum + buffer.byteLength, 0), 0);
-            const transfer = [result.unitIds.buffer, result.unitCounts.buffer, result.unitRateHz.buffer, result.unitX.buffer, result.unitDepths.buffer, result.unitShankIds.buffer, result.normalizedActivity.buffer];
-            self.postMessage({ type: "activity-overview-result", requestId: message.requestId, ...result, residentExperiments, residentBytes }, transfer);
+            const transfer = [result.unitIds.buffer, result.unitCounts.buffer, result.unitRateHz.buffer, result.unitX.buffer, result.unitDepths.buffer, result.unitShankIds.buffer, result.normalizedActivity.buffer, result.unusualActivity.buffer, result.unusualThresholdCounts.buffer];
+            self.postMessage({ type: "activity-overview-result", requestId: message.requestId, ...result, persistentCacheHit, residentExperiments, residentBytes }, transfer);
             return;
           }
+          const entry = await loadEntry(message);
           if (message.type !== "inspect-unit") return;
           const result = analyzeUnitBuffers(entry.buffers, Number(message.sampleRate), Number(message.clusterId));
           const residentExperiments = [...cache.keys()];
@@ -810,7 +961,14 @@
     indexExperiment,
     validateSupplementFile,
     mergeSupplementFiles,
+    ACTIVITY_PREPROCESSING_VERSION,
+    ACTIVITY_LEVELS,
+    activityFileFingerprint,
+    nearestActivityLevel,
+    activityMatricesFromCounts,
     buildActivityOverviewBuffers,
+    buildActivityPyramidBuffers,
+    selectActivityPyramidLevel,
     analyzeUnitBuffers,
     createWorkerSource
   };

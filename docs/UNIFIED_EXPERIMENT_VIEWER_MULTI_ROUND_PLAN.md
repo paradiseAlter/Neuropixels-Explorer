@@ -62,8 +62,8 @@ Do not mark a visual round complete because the new layout merely renders.
 | --- | --- | --- | --- |
 | 1 | Rounds 0-2 | Complete; stopped at Checkpoint A | Checkpoint A mandatory stop |
 | 2 | Round 2.5 Checkpoint A corrections | Complete; stopped at Checkpoint B | Checkpoint B mandatory stop |
-| 3 | Round 3 | Blocked on Checkpoint B approval | Cache semantics and mapping review |
-| 4 | Round 4 | Blocked on Round 3 | Progressive-focus and synchronization review |
+| 3 | Round 3 | Complete; stopped for backend and mapping review | Round 3 review |
+| 4 | Round 4 | Blocked on explicit Round 3 approval | Progressive-focus and synchronization review |
 | 5 | Round 5 | Blocked on Round 4 | Diagnostic parity and accessibility review |
 | 6 | Round 6 | Blocked on Round 5 | Final validation and performance acceptance |
 
@@ -331,7 +331,7 @@ Round 4.
 
 ### Ready-to-send prompt for Dialogue 3
 
-> Checkpoint A is approved. Execute Round 3 only: implement the versioned,
+> Checkpoint B is approved. Execute Round 3 only: implement the versioned,
 > cancellable, multi-resolution display-summary backend with explicit
 > fingerprint invalidation, off-UI-thread computation, and row/bin mapping
 > tests. Preserve the approved UI and scientific boundaries. Report measured

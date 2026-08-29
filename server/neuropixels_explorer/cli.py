@@ -56,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=product_root(),
         help="Explorer web root; defaults to this checkout.",
     )
+    serve.add_argument(
+        "--cache-root",
+        type=Path,
+        default=None,
+        help="Application-owned activity-summary cache; defaults to the current user's local app cache.",
+    )
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", default=8765, type=int)
     serve.add_argument("--open-browser", action="store_true")
@@ -94,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         data_root=args.data_root,
         database_path=args.database,
         static_root=args.static_root,
+        cache_root=args.cache_root,
     )
     server = create_server(paths, host=args.host, port=args.port, quiet=args.quiet)
     host_for_url = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
