@@ -540,17 +540,19 @@
         ? [...candidates.entries()].sort((left, right) => right[1] - left[1])[0][0]
         : summary.id;
       const unitPeakChannel = peakChannelForTemplate(dominantTemplate);
+      const shankId = unitPeakChannel != null && unitPeakChannel < channelProbeIds.length && channelProbeIds[unitPeakChannel] >= 0
+        ? Number(channelProbeIds[unitPeakChannel])
+        : null;
       return {
         id: Number(summary.id),
         x: position?.count ? position.x / position.count : null,
         y: position?.count ? position.y / position.count : null,
         peakChannel: unitPeakChannel,
-        physicalProbeId: unitPeakChannel != null && unitPeakChannel < channelProbeIds.length && channelProbeIds[unitPeakChannel] >= 0
-          ? Number(channelProbeIds[unitPeakChannel])
-          : null
+        shankId,
+        physicalProbeId: shankId
       };
     });
-    const physicalProbeId = peakChannel != null && peakChannel < channelProbeIds.length && channelProbeIds[peakChannel] >= 0
+    const shankId = peakChannel != null && peakChannel < channelProbeIds.length && channelProbeIds[peakChannel] >= 0
       ? Number(channelProbeIds[peakChannel])
       : null;
 
@@ -576,9 +578,11 @@
       templateWaveform,
       peakChannel,
       peakChannelPosition,
-      physicalProbeId,
+      shankId,
+      physicalProbeId: shankId,
       unitLocations,
       channelGeometry,
+      channelShankIds: channelProbeIds,
       channelProbeIds
     };
   }

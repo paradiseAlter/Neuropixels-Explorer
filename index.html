@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="A local-first interactive explorer for Neuropixels units, signals, physical probes, and brain regions.">
   <title>Neuropixels Explorer 3.3.0</title>
-  <script src="./scripts/i18n.js?v=3.3.0"></script>
+  <script src="./scripts/i18n.js?v=3.3.0-ui-preview-5"></script>
   <script src="./scripts/theme.js?v=3.3.0"></script>
   <script>
     window.neuropixelsLanguageController = new window.NeuropixelsI18n.LanguageController({
@@ -20,7 +20,7 @@
       matchMedia: window.matchMedia.bind(window)
     });
   </script>
-  <link rel="stylesheet" href="./styles/app.css?v=3.3.0">
+  <link rel="stylesheet" href="./styles/app.css?v=3.3.0-ui-preview-5">
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -57,6 +57,11 @@
 
       <section class="explorer-view" id="explorer-view" hidden>
         <section class="dataset-summary" aria-label="Loaded data summary" data-i18n-aria-label="summary.aria">
+          <div class="recording-carousel">
+            <button class="recording-scroll" id="recording-scroll-previous" type="button" aria-label="Previous recordings" data-i18n-aria-label="recordings.previous">‹</button>
+            <nav class="recording-strip" id="recording-strip" aria-label="Detected recordings" data-i18n-aria-label="recordings.aria"></nav>
+            <button class="recording-scroll" id="recording-scroll-next" type="button" aria-label="Next recordings" data-i18n-aria-label="recordings.next">›</button>
+          </div>
           <div class="summary-numbers" id="summary-numbers"></div>
           <div class="data-status" id="capability-row">
             <button class="context-help" type="button" data-help-key="tips.dataStatus" data-help-topic="status.summary">?</button>
@@ -67,8 +72,6 @@
             </div>
           </div>
         </section>
-
-        <nav class="recording-strip" id="recording-strip" aria-label="Detected recordings" data-i18n-aria-label="recordings.aria"></nav>
 
         <div class="review-layout" id="review-layout">
           <aside class="unit-panel" id="unit-panel" aria-label="Units" data-i18n-aria-label="units.aria">
@@ -98,15 +101,13 @@
 
           <section class="unit-review" aria-label="Selected Unit review" data-i18n-aria-label="review.aria">
             <header class="review-header">
-              <div>
-                <div class="review-kicker" id="review-kicker" data-i18n="review.focused">FOCUSED UNIT</div>
+              <div class="review-summary-line">
                 <h1 id="review-title">—</h1>
                 <p id="review-subtitle" data-i18n="review.select">Select a Unit to inspect its spike data.</p>
+                <div class="metric-row" id="metric-row"></div>
               </div>
               <div class="review-state" id="review-state" data-i18n="review.idle">IDLE</div>
             </header>
-
-            <div class="metric-row" id="metric-row"></div>
 
             <section class="plot-card primary-plot-card">
               <header class="plot-header">
@@ -194,45 +195,45 @@
               <footer class="interaction-hint" data-i18n="review.interactionHint">CURSOR inspect time · ZOOM drag or wheel anywhere in a signal · PAN drag or wheel through time · DOUBLE CLICK reset</footer>
             </section>
 
-            <div class="details-context" id="details-context"><i></i><strong data-i18n="review.detailsFor">DETAILS FOR</strong><span id="details-focus-label" data-i18n="review.noSelected">No Unit selected</span></div>
-            <div class="secondary-plots">
-              <section class="plot-card">
-                <header class="plot-header"><div><span class="heading-with-help"><strong data-i18n="plots.amplitude">AMPLITUDE STABILITY</strong><button class="context-help" type="button" data-help-key="tips.amplitude" data-help-topic="plots.amplitude">?</button></span><span data-i18n="plots.amplitudeSubtitle">Relative amplitude across the recording</span></div></header>
-                <div class="canvas-frame small-frame"><canvas id="amplitude-canvas" aria-label="Spike amplitude over time" data-i18n-aria-label="plots.amplitudeAria"></canvas><div class="canvas-empty" id="amplitude-empty" data-i18n="plots.notAvailable">Not available</div></div>
-              </section>
-              <section class="plot-card">
-                <header class="plot-header"><div><span class="heading-with-help"><strong data-i18n="plots.acg">AUTOCORRELOGRAM</strong><button class="context-help" type="button" data-help-key="tips.autocorrelogram" data-help-topic="plots.acg">?</button></span><span data-i18n="plots.acgSubtitle">±100 ms · 2 ms bins</span></div></header>
-                <div class="canvas-frame small-frame"><canvas id="acg-canvas" aria-label="Unit autocorrelogram" data-i18n-aria-label="plots.acgAria"></canvas><div class="canvas-empty" id="acg-empty" data-i18n="plots.notAvailable">Not available</div></div>
-              </section>
-              <section class="plot-card">
-                <header class="plot-header"><div><span class="heading-with-help"><strong data-i18n="plots.template">KILOSORT TEMPLATE</strong><button class="context-help" type="button" data-help-key="tips.template" data-help-topic="plots.template">?</button></span><span id="template-label" data-i18n="review.templateDefault">Peak channel · arbitrary units</span></div></header>
-                <div class="canvas-frame small-frame"><canvas id="template-canvas" aria-label="KiloSort template waveform" data-i18n-aria-label="plots.templateAria"></canvas><div class="canvas-empty" id="template-empty" data-i18n="plots.notAvailable">Not available</div></div>
-              </section>
-            </div>
+            <section class="plot-card template-panel">
+              <header class="template-panel-header">
+                <div class="details-context" id="details-context"><i></i><strong data-i18n="plots.template">KILOSORT TEMPLATE</strong><span id="details-focus-label" data-i18n="review.noSelected">No Unit selected</span></div>
+                <span class="template-caption" id="template-label" data-i18n="review.templateDefault">Peak channel · arbitrary units</span>
+                <button class="context-help" type="button" data-help-key="tips.template" data-help-topic="plots.template">?</button>
+              </header>
+              <div class="canvas-frame template-frame"><canvas id="template-canvas" aria-label="KiloSort template waveform" data-i18n-aria-label="plots.templateAria"></canvas><div class="canvas-empty" id="template-empty" data-i18n="plots.notAvailable">Not available</div></div>
+            </section>
           </section>
 
-          <div class="workspace-splitter" id="probe-panel-splitter" role="separator" aria-label="Resize signal workspace and Probe Inspector" data-i18n-aria-label="layout.probeSplitter" aria-orientation="vertical" aria-controls="spatial-panel" tabindex="0">
+          <div class="workspace-splitter probe-collapse-rail" id="probe-panel-splitter" aria-label="Collapse or expand the Probe Inspector" data-i18n-aria-label="layout.probeSplitter" aria-controls="spatial-panel">
             <button class="panel-collapse-button" id="probe-panel-toggle" type="button" aria-controls="spatial-panel">›</button>
           </div>
 
           <aside class="spatial-panel" id="spatial-panel" aria-label="Physical Probes and brain-region location" data-i18n-aria-label="probe.panelAria">
             <header class="spatial-panel-header">
-              <div><span class="heading-with-help"><strong data-i18n="probe.title">PHYSICAL PROBES</strong><button class="context-help" type="button" data-help-key="tips.probe" data-help-topic="probe.title">?</button></span><span id="probe-count" data-i18n="probe.noData">No Probe data</span></div>
+              <div><span class="heading-with-help"><strong data-i18n="probe.title">PROBE INSPECTOR</strong><button class="context-help" type="button" data-help-key="tips.probe" data-help-topic="probe.title">?</button></span><span id="probe-count" data-i18n="probe.noData">No Probe data</span></div>
               <span class="region-badge" id="probe-region" data-i18n="probe.unmapped">UNMAPPED</span>
             </header>
-            <section class="probe-card">
-              <strong id="probe-unit" data-i18n="review.noSelected">No Unit selected</strong>
-              <div class="probe-canvas-wrap">
-                <canvas id="probe-canvas" tabindex="0" aria-label="Physical Probe overview, brain-region track, and Unit positions" data-i18n-aria-label="probe.canvasAria"></canvas>
-                <div class="probe-tooltip" id="probe-tooltip" hidden></div>
-                <div class="probe-stack-menu" id="probe-stack-menu" role="menu" aria-label="Overlapping Units at this Probe depth" data-i18n-aria-label="probe.overlapAria" hidden>
-                  <header><strong id="probe-stack-title" data-i18n="probe.unitsAtDepth">UNITS AT THIS DEPTH</strong><span data-i18n="probe.overlapHint">Click to open · Ctrl-click to add</span></header>
-                  <div id="probe-stack-list"></div>
+            <details class="probe-group" id="probe-group" open>
+              <summary>
+                <span><strong id="probe-group-label" data-i18n="probe.probeOne">PROBE 1</strong><em id="probe-group-meta" data-i18n="probe.groupUnavailable">Shank data unavailable</em></span>
+                <i aria-hidden="true"></i>
+              </summary>
+              <div class="probe-height-splitter" id="probe-height-splitter" role="separator" aria-label="Adjust Probe diagram height" data-i18n-aria-label="layout.probeHeightSplitter" aria-orientation="horizontal" aria-controls="probe-canvas" tabindex="0"><span data-i18n="layout.probeHeightHandle">DRAG TO ADJUST HEIGHT</span></div>
+              <section class="probe-card">
+                <strong id="probe-unit" data-i18n="review.noSelected">No Unit selected</strong>
+                <div class="probe-canvas-wrap">
+                  <canvas id="probe-canvas" tabindex="0" aria-label="One physical Probe with four shanks, brain-region tracks, and Unit positions" data-i18n-aria-label="probe.canvasAria"></canvas>
+                  <div class="probe-tooltip" id="probe-tooltip" hidden></div>
+                  <div class="probe-stack-menu" id="probe-stack-menu" role="menu" aria-label="Overlapping Units at this Probe depth" data-i18n-aria-label="probe.overlapAria" hidden>
+                    <header><strong id="probe-stack-title" data-i18n="probe.unitsAtDepth">UNITS AT THIS DEPTH</strong><span data-i18n="probe.overlapHint">Click to open · Ctrl-click to add</span></header>
+                    <div id="probe-stack-list"></div>
+                  </div>
                 </div>
-              </div>
-              <div class="probe-layer-key" aria-label="Probe display layers" data-i18n-aria-label="probe.layersAria"><span class="regions" data-i18n="probe.regions">BRAIN REGIONS</span><span class="channels" data-i18n="probe.channels">CHANNEL TICKS</span><span class="units" data-i18n="probe.units">UNITS</span></div>
-              <div class="probe-legend" id="probe-legend" aria-label="Units shown on the Probe" data-i18n-aria-label="probe.legendAria"></div>
-            </section>
+                <div class="probe-layer-key" aria-label="Probe display layers" data-i18n-aria-label="probe.layersAria"><span class="regions" data-i18n="probe.regions">BRAIN REGIONS</span><span class="channels" data-i18n="probe.channels">CHANNEL TICKS</span><span class="units" data-i18n="probe.units">UNITS</span></div>
+                <div class="probe-legend" id="probe-legend" aria-label="Units shown on the Probe" data-i18n-aria-label="probe.legendAria"></div>
+              </section>
+            </details>
             <section class="position-readout">
               <div><span data-i18n="probe.physical">PHYSICAL PROBE</span><strong id="probe-physical">—</strong></div>
               <div><span data-i18n="probe.peakChannel">PEAK CHANNEL</span><strong id="probe-channel">—</strong></div>
@@ -245,13 +246,14 @@
               <header><span class="heading-with-help"><strong data-i18n="probe.nearby">NEARBY UNITS</strong><button class="context-help" type="button" data-help-key="tips.nearbyUnits" data-help-topic="probe.nearby">?</button></span><span id="nearby-context" data-i18n="probe.clickPosition">Click a Probe position</span></header>
               <div id="nearby-unit-list"></div>
             </section>
-            <section class="mapping-status">
-              <span class="heading-with-help"><strong data-i18n="probe.positionContract">POSITION CONTRACT</strong><button class="context-help" type="button" data-help-key="tips.positionContract" data-help-topic="probe.positionContract">?</button></span>
-              <p><span class="status-ready" data-i18n="probe.ready">READY</span> <span data-i18n="probe.groupSource">Physical Probe groups from</span> <code>channel_shanks.npy</code></p>
+            <details class="mapping-status">
+              <summary><span class="heading-with-help"><strong data-i18n="probe.positionContract">POSITION CONTRACT</strong><button class="context-help" type="button" data-help-key="tips.positionContract" data-help-topic="probe.positionContract">?</button></span><span class="mapping-contract-state missing" id="probe-track-status" data-i18n="probe.noTrack">No compatible Probe-region mapping</span></summary>
+              <div class="mapping-status-body">
+              <p><span class="status-ready" data-i18n="probe.ready">READY</span> <span data-i18n="probe.groupSource">Shank groups from</span> <code>channel_shanks.npy</code></p>
               <p><span class="status-ready" data-i18n="probe.ready">READY</span> <span data-i18n="probe.regionSourceLegacy">Unit region from the loaded Legacy Table</span></p>
-              <p><span class="status-ready" data-i18n="probe.track">TRACK</span> <span class="mapping-contract-state missing" id="probe-track-status" data-i18n="probe.noTrack">No compatible Probe-region mapping</span></p>
               <p class="mapping-contract-help"><span data-i18n="probe.requiredColumns">Required CSV columns:</span> <code>probe/shank</code>, <code>depth_um</code>, <code>region</code>. <span data-i18n="probe.recommendedColumns">Recommended:</span> <code>electrode</code>, <code>atlas_id</code>, <code>color</code>, and <code>recording_id</code> <span data-i18n="probe.sessionTracks">for session-specific tracks.</span></p>
-            </section>
+              </div>
+            </details>
           </aside>
         </div>
       </section>
@@ -295,14 +297,14 @@
 
   <script src="./scripts/kilosort-core.js" defer></script>
   <script src="./scripts/region-core.js" defer></script>
-  <script src="./scripts/help-content.js?v=3.3.0" defer></script>
+  <script src="./scripts/help-content.js?v=3.3.0-ui-preview-5" defer></script>
   <script src="./scripts/data-status.js?v=3.3.0" defer></script>
   <script src="./scripts/stream-contracts.js?v=3.3.0" defer></script>
   <script src="./scripts/video-sync.js?v=3.3.0" defer></script>
   <script src="./scripts/plots.js" defer></script>
-  <script src="./scripts/probe-view.js?v=3.3.0" defer></script>
+  <script src="./scripts/probe-view.js?v=3.3.0-ui-preview-5" defer></script>
   <script src="./scripts/database-client.js?v=3.3.0" defer></script>
-  <script src="./scripts/workspace-layout.js?v=3.3.0" defer></script>
-  <script src="./scripts/app.js?v=3.3.0" defer></script>
+  <script src="./scripts/workspace-layout.js?v=3.3.0-ui-preview-5" defer></script>
+  <script src="./scripts/app.js?v=3.3.0-ui-preview-5" defer></script>
 </body>
 </html>

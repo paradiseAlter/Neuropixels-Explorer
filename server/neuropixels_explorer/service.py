@@ -569,6 +569,7 @@ class CatalogService:
                     "x": float(mean_x[index]) if np.isfinite(mean_x[index]) else None,
                     "y": float(mean_y[index]) if np.isfinite(mean_y[index]) else None,
                     "peakChannel": peak_channel,
+                    "shankId": physical_probe_id,
                     "physicalProbeId": physical_probe_id,
                 }
             )
@@ -686,9 +687,11 @@ class CatalogService:
             "templateWaveform": template_waveform.astype(float).tolist(),
             "peakChannel": peak_channel,
             "peakChannelPosition": peak_position,
+            "shankId": physical_probe_id,
             "physicalProbeId": physical_probe_id,
             "unitLocations": unit_locations,
             "channelGeometry": geometry.astype(float).tolist(),
+            "channelShankIds": channel_probe_ids.astype(int).tolist(),
             "channelProbeIds": channel_probe_ids.astype(int).tolist(),
         }
         with self._cache_lock:

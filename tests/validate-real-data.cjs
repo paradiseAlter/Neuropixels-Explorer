@@ -107,12 +107,12 @@ function buffer(directory, name) {
   assert(completeStatus.optional.length === 2 && completeStatus.future.length === 2, "Optional and future data status groups are incomplete");
   const partialStatus = dataStatus.buildDataStatus([{ capabilities: { spikes: true } }], null, ["candidate unreadable"]);
   assert(partialStatus.counts.missing === 6 && partialStatus.counts.invalid === 1, "Missing and invalid data status counts changed");
-  const normalizedLayout = workspaceLayout.normalizeLayout({ unitWidth: 9999, probeWidth: 1, unitCollapsed: true });
+  const normalizedLayout = workspaceLayout.normalizeLayout({ unitWidth: 9999, probeWidth: 1, probeHeight: 9999, unitCollapsed: true });
   assert(normalizedLayout.unitWidth === workspaceLayout.LAYOUT_LIMITS.unit.maximum, "Units panel width should clamp to its maximum");
-  assert(normalizedLayout.probeWidth === workspaceLayout.LAYOUT_LIMITS.probe.minimum, "Probe panel width should clamp to its minimum");
+  assert(normalizedLayout.probeWidth === workspaceLayout.DEFAULT_LAYOUT.probeWidth, "Probe panel width should remain fixed");
+  assert(normalizedLayout.probeHeight === workspaceLayout.LAYOUT_LIMITS.probeHeight.maximum, "Probe diagram height should clamp to its maximum");
   assert(normalizedLayout.unitCollapsed && !normalizedLayout.probeCollapsed, "Panel collapse state normalization changed");
   assert(workspaceLayout.keyboardWidthDelta("unit", "ArrowRight") > 0, "Right arrow should widen the Units panel");
-  assert(workspaceLayout.keyboardWidthDelta("probe", "ArrowLeft") > 0, "Left arrow should widen the Probe panel");
   const appSource = fs.readFileSync(path.resolve(__dirname, "..", "scripts", "app.js"), "utf8");
   assert(/const MAX_OPEN_UNITS = 10;/.test(appSource), "The multi-Unit display limit should remain 10");
   assert(/openUnits: new Map\(\)/.test(appSource) && /focusedUnit: null/.test(appSource), "Unit selection should use openUnits plus focusedUnit");
@@ -132,7 +132,7 @@ function buffer(directory, name) {
   assert(!missingAppIds.length, `app.js references missing page IDs: ${missingAppIds.join(", ")}`);
   assert(!/inspect-review-mode|compare-review-mode/.test(pageSource), "Explicit Inspect/Compare mode controls should be removed");
   assert(!/operate only on the bottom time axis/i.test(pageSource), "Plot instructions still describe the removed time-axis restriction");
-  for (const id of ["review-layout", "unit-panel-splitter", "probe-panel-splitter", "unit-panel-toggle", "probe-panel-toggle"]) {
+  for (const id of ["review-layout", "unit-panel-splitter", "probe-panel-splitter", "probe-height-splitter", "unit-panel-toggle", "probe-panel-toggle", "probe-group", "probe-group-meta"]) {
     assert(pageIds.has(id), `Resizable workspace control ${id} is missing`);
   }
   for (const id of ["probe-stack-menu", "probe-stack-title", "probe-stack-list"]) {
@@ -141,18 +141,22 @@ function buffer(directory, name) {
   for (const id of ["theme-select", "data-status-button", "data-status-summary", "data-status-popover", "data-status-groups"]) {
     assert(pageIds.has(id), `Status or theme control ${id} is missing`);
   }
-  assert(/role="separator"[^>]+aria-orientation="vertical"/.test(pageSource), "Workspace splitters should expose vertical separator semantics");
+  assert(/id="unit-panel-splitter"[^>]+role="separator"[^>]+aria-orientation="vertical"/.test(pageSource), "The Units splitter should expose vertical separator semantics");
+  assert(/id="probe-height-splitter"[^>]+role="separator"[^>]+aria-orientation="horizontal"/.test(pageSource), "The Probe height splitter should expose horizontal separator semantics");
+  assert(!/id="probe-panel-splitter"[^>]+role="separator"/.test(pageSource), "The fixed-width Probe rail must not claim horizontal resize semantics");
   assert(/workspace-layout\.js\?v=3\.3\.0/.test(pageSource), "Workspace layout module is not loaded");
   assert(/theme\.js\?v=3\.3\.0/.test(pageSource) && /data-status\.js\?v=3\.3\.0/.test(pageSource), "Theme or data-status module is not loaded");
   const styleSource = fs.readFileSync(path.resolve(__dirname, "..", "styles", "app.css"), "utf8");
-  assert(/--unit-panel-width: 272px/.test(styleSource) && /--probe-panel-width: 328px/.test(styleSource), "Default workspace widths are missing");
-  assert(/grid-template-columns: var\(--unit-panel-width\)[^;]+var\(--probe-panel-width\)/.test(styleSource), "The resizable five-column workspace grid is missing");
+  assert(/--unit-panel-width: 272px/.test(styleSource) && /--probe-panel-width: 352px/.test(styleSource), "Default workspace widths are missing");
+  assert(/grid-template-columns: var\(--unit-panel-width\)[^;]+var\(--probe-panel-width\)/.test(styleSource), "The five-column workspace grid is missing");
+  assert(/height: var\(--probe-canvas-height, 640px\)/.test(styleSource) && /cursor: row-resize/.test(styleSource), "The vertical Probe resize control is missing");
   assert(/\.probe-layer-key/.test(styleSource) && /\.probe-stack-menu/.test(styleSource), "Probe layer key or overlap list styling is missing");
   assert(/:root\[data-theme="light"\]/.test(styleSource) && /:root\[data-theme="contrast"\]/.test(styleSource), "Light or High Contrast theme tokens are missing");
   assert(/\.data-status-popover/.test(styleSource), "Expandable data status styling is missing");
   assert(/setPlotTheme/.test(plotSource), "Signal canvases are not connected to the shared theme");
   const probeSource = fs.readFileSync(path.resolve(__dirname, "..", "scripts", "probe-view.js"), "utf8");
   assert(/function setProbeTheme/.test(probeSource) && /PROBE_THEME\.background/.test(probeSource), "Probe Canvas is not connected to the shared theme");
+  assert(/probe\.shankShort/.test(probeSource) && !/fillText\(`PROBE /.test(probeSource), "Shank columns must not be labeled as separate physical Probes");
   for (const action of ["open-only", "add", "remove", "locate"]) {
     assert(pageSource.includes(`data-unit-action="${action}"`), `Unit context action ${action} is missing`);
   }
@@ -198,12 +202,12 @@ function buffer(directory, name) {
     assert(result.acg.length === 101, `${name} ACG shape mismatch`);
     assert(result.channelGeometry.length > 0 && result.channelGeometry.length % 2 === 0, `${name} probe geometry was not returned`);
     assert(result.peakChannelPosition && Number.isFinite(result.peakChannelPosition.x) && Number.isFinite(result.peakChannelPosition.y), `${name} peak-channel position is unavailable`);
-    assert(result.channelProbeIds.length === result.channelGeometry.length / 2, `${name} physical Probe mapping is unavailable`);
+    assert(result.channelProbeIds.length === result.channelGeometry.length / 2, `${name} shank mapping is unavailable`);
     assert(result.unitLocations.length === recordings.find((recording) => recording.name === name).clusterLabels.length, `${name} Unit location catalog mismatch`);
     assert(result.unitSummaries.length === recordings.find((recording) => recording.name === name).clusterLabels.length, `${name} Unit summary count mismatch`);
     reviewed.push({ recording: name, unit: item.clusterId, spikes: result.spikeCount, rateHz: result.rateHz, isiUnder2msPercent: result.isiViolationPercent, presence: result.presenceRatio, peakChannel: result.peakChannel });
   }
-  const exp1ProbeIds = new Set(core.analyzeUnitBuffers({
+  const exp1ShankIds = new Set(core.analyzeUnitBuffers({
     spikeTimes: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_times.npy"),
     spikeClusters: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_clusters.npy"),
     spikePositions: buffer(path.join(kilosortRoot, "ks4_exp1"), "spike_positions.npy"),
@@ -212,7 +216,7 @@ function buffer(directory, name) {
     channelPositions: buffer(path.join(kilosortRoot, "ks4_exp1"), "channel_positions.npy"),
     channelShanks: buffer(path.join(kilosortRoot, "ks4_exp1"), "channel_shanks.npy")
   }, 30000, 7).channelProbeIds);
-  assert(exp1ProbeIds.size === 4, `Expected four independent physical Probe groups in ks4_exp1, found ${exp1ProbeIds.size}`);
+  assert(exp1ShankIds.size === 4, `Expected four shanks on the single physical Probe in ks4_exp1, found ${exp1ShankIds.size}`);
 
   const regionResult = await regionCore.scanFiles(folderFiles(legacyRoot, "legacy_tables"));
   assert(regionResult.valid, "Brain-region tables were not detected");
@@ -223,13 +227,13 @@ function buffer(directory, name) {
   assert(regionResult.probeTrack.valid, "The electrode-level Probe-region mapping was not detected");
   assert(regionResult.probeTrack.source === "pinpoint_parsed.csv", `Unexpected Probe-region source: ${regionResult.probeTrack.source}`);
   assert(regionResult.probeTrack.rowCount === 5120, `Expected 5,120 electrode-region rows, found ${regionResult.probeTrack.rowCount}`);
-  assert(regionResult.probeTrack.probeCount === 4, `Expected four physical Probe tracks, found ${regionResult.probeTrack.probeCount}`);
-  assert(regionResult.probeTrack.profiles.length === 4, `Expected four Probe track profiles, found ${regionResult.probeTrack.profiles.length}`);
+  assert(regionResult.probeTrack.probeCount === 4, `Expected four shank tracks, found ${regionResult.probeTrack.probeCount}`);
+  assert(regionResult.probeTrack.profiles.length === 4, `Expected four shank track profiles, found ${regionResult.probeTrack.profiles.length}`);
   const realDataStatus = dataStatus.buildDataStatus(recordings, regionResult, []);
   assert(realDataStatus.counts.available === 7 && realDataStatus.counts.missing === 0, `Expected all seven core data capabilities, found ${dataStatus.summaryText(realDataStatus)}`);
   assert(realDataStatus.optional.every((item) => item.state === "available"), "Real Unit- and Probe-region inputs should appear as available optional data");
   const exp1Unit7Track = regionResult.probeTrack.segments.find((segment) => segment.probeId === 0 && segment.startDepthUm <= 240 && segment.endDepthUm >= 240);
-  assert(exp1Unit7Track?.region === "MPN", `Probe 1 at 240 µm should map to MPN, found ${exp1Unit7Track?.region}`);
+  assert(exp1Unit7Track?.region === "MPN", `Shank 1 at 240 µm should map to MPN, found ${exp1Unit7Track?.region}`);
 
   console.log(JSON.stringify({
     status: "PASS",
@@ -241,7 +245,7 @@ function buffer(directory, name) {
     regionMappings: regionResult.count,
     regions: regionResult.regions.length,
     probeRegionRows: regionResult.probeTrack.rowCount,
-    physicalProbeTracks: regionResult.probeTrack.probeCount,
+    shankTracks: regionResult.probeTrack.probeCount,
     trackSegments: regionResult.probeTrack.segments.length,
     dataStatus: dataStatus.summaryText(realDataStatus),
     reviewed

@@ -41,6 +41,7 @@
   const UNIT_GROUP_DISTANCE = 9;
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
   const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+  const shankIdOf = (value) => finite(value?.shankId ?? value?.physicalProbeId);
 
   function setProbeTheme(theme = {}) {
     const probes = Array.isArray(theme?.probes) && theme.probes.length ? [...theme.probes] : [...DEFAULT_PROBE_THEME.probes];
@@ -117,7 +118,9 @@
       this.t = (key, values = {}) => ({
         "probe.noData": "No Probe data", "probe.noTrack": "No compatible Probe-region mapping", "review.noSelected": "No Unit selected",
         "probe.unmapped": "UNMAPPED", "probe.selectNote": "Select a Unit or click a Probe marker to inspect the linked signal.",
-        "probe.clickPosition": "Click a Probe position", "probe.noNearby": "No nearby Unit selected", "units.unmapped": "unmapped"
+        "probe.clickPosition": "Click a Probe position", "probe.noNearby": "No nearby Unit selected", "units.unmapped": "unmapped",
+        "probe.groupUnavailable": "Shank data unavailable", "probe.probeShank": `Probe ${values.probe} · Shank ${values.shank}`,
+        "probe.shankShort": `SHANK ${values.shank}`, "probe.unitCountShort": `${values.count} UNITS`
       }[key] || String(key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? ""));
       this.onUnitSelect = onUnitSelect;
       this.onRegionSelect = onRegionSelect;
@@ -126,8 +129,8 @@
       this.locations = [];
       this.recording = null;
       this.geometry = new Float32Array(0);
-      this.channelProbeIds = new Int16Array(0);
-      this.probeIds = [];
+      this.channelShankIds = new Int16Array(0);
+      this.shankIds = [];
       this.regionTrack = null;
       this.visibleSegments = [];
       this.hitTargets = [];
@@ -194,18 +197,18 @@
       const recordingKey = recordingIdentity(this.recording);
       this.items = this.items.filter((item) => recordingIdentity(item.recording) === recordingKey);
       this.geometry = focused?.result?.channelGeometry || new Float32Array(0);
-      this.channelProbeIds = focused?.result?.channelProbeIds || new Int16Array(0);
-      const probeIds = new Set();
-      for (let index = 0; index < this.channelProbeIds.length; index += 1) {
-        if (this.channelProbeIds[index] >= 0) probeIds.add(Number(this.channelProbeIds[index]));
+      this.channelShankIds = focused?.result?.channelShankIds || focused?.result?.channelProbeIds || new Int16Array(0);
+      const shankIds = new Set();
+      for (let index = 0; index < this.channelShankIds.length; index += 1) {
+        if (this.channelShankIds[index] >= 0) shankIds.add(Number(this.channelShankIds[index]));
       }
-      this.probeIds = [...probeIds].sort((left, right) => left - right);
-      if (!this.probeIds.length && this.geometry.length) this.probeIds = [0];
+      this.shankIds = [...shankIds].sort((left, right) => left - right);
+      if (!this.shankIds.length && this.geometry.length) this.shankIds = [0];
       const rawLocations = focused?.result?.unitLocations || [];
       this.locations = rawLocations.map((location) => ({
         ...location,
         id: Number(location.id),
-        physicalProbeId: finite(location.physicalProbeId) ?? this.probeIds[0] ?? 0,
+        shankId: shankIdOf(location) ?? this.shankIds[0] ?? 0,
         region: focused.locationRegion?.(Number(location.id)) || null,
         label: focused.locationLabel?.(Number(location.id)) || null
       })).filter((location) => finite(location.y) != null);
@@ -213,7 +216,7 @@
       const experiment = experimentOf(this.recording);
       this.visibleSegments = (this.regionTrack?.segments || []).filter((segment) => {
         const experimentMatches = segment.experiment == null || experiment == null || Number(segment.experiment) === Number(experiment);
-        return experimentMatches && this.probeIds.includes(Number(segment.probeId));
+        return experimentMatches && this.shankIds.includes(Number(segment.probeId));
       });
       if (this.recording && this.lockedRecordingKey && this.lockedRecordingKey !== recordingIdentity(this.recording)) this.clearLockedSelection({ draw: false });
       if (this.recording && this.lockedUnitId != null && !this.locations.some((location) => Number(location.id) === Number(this.lockedUnitId))) this.clearLockedSelection({ draw: false });
@@ -222,9 +225,12 @@
       this.hoveredTargetKey = null;
       this.hideStackMenu();
       this.updateTrackStatus();
-      this.elements.count.textContent = this.probeIds.length
-        ? this.t("probe.count", { count: this.probeIds.length, status: this.visibleSegments.length ? this.t("probe.trackReady") : this.t("probe.openUnits", { count: this.items.length }) })
+      this.elements.count.textContent = this.shankIds.length
+        ? this.t("probe.count", { shanks: this.shankIds.length, status: this.visibleSegments.length ? this.t("probe.trackReady") : this.t("probe.openUnits", { count: this.items.length }) })
         : this.t("probe.groupingUnavailable");
+      if (this.elements.groupMeta) this.elements.groupMeta.textContent = this.shankIds.length
+        ? this.t("probe.groupSummary", { shanks: this.shankIds.length, units: this.locations.length })
+        : this.t("probe.groupUnavailable");
       this.renderLegend();
       this.renderNearby([], null, null);
       if (!focused) {
@@ -250,20 +256,20 @@
     renderReadout(focused) {
       const { result, recording, clusterId, region } = focused;
       const position = result.peakChannelPosition || { x: finite(result.meanX), y: finite(result.meanDepth) };
-      const physicalProbeId = finite(result.physicalProbeId);
-      const trackRegion = physicalProbeId == null || finite(position?.y) == null ? null : this.regionAt(physicalProbeId, finite(position.y));
+      const shankId = shankIdOf(result);
+      const trackRegion = shankId == null || finite(position?.y) == null ? null : this.regionAt(shankId, finite(position.y));
       const resolvedRegion = region?.region ? region : trackRegion ? { region: trackRegion.region, color: trackRegion.color, source: this.regionTrack?.source } : null;
       this.elements.unit.textContent = this.t("probe.selected", { id: clusterId, recording: recording.name });
       this.elements.region.textContent = resolvedRegion?.region || this.t("probe.unmapped");
       this.elements.region.style.setProperty("--region-color", regionColor(resolvedRegion?.color || focused.color, "#59616a"));
-      this.elements.physical.textContent = physicalProbeId == null ? this.t("probe.unavailable") : `${this.t("probe.singular")} ${physicalProbeId + 1}`;
+      this.elements.physical.textContent = shankId == null ? this.t("probe.unavailable") : this.t("probe.probeShank", { probe: 1, shank: shankId + 1 });
       this.elements.channel.textContent = result.peakChannel == null ? this.t("probe.unavailable") : String(result.peakChannel);
       this.elements.x.textContent = finite(position?.x) == null ? this.t("probe.unavailable") : `${finite(position.x).toFixed(1)} \u00b5m`;
       this.elements.depth.textContent = finite(position?.y) == null ? this.t("probe.unavailable") : `${finite(position.y).toFixed(1)} \u00b5m`;
       this.elements.source.textContent = resolvedRegion?.source || this.t("probe.noRegionRow");
       this.elements.note.textContent = this.regionTrack
         ? this.t("probe.bandSource", { source: this.regionTrack.source })
-        : this.t("probe.addTrackNote", { count: this.probeIds.length || 0 });
+        : this.t("probe.addTrackNote", { count: this.shankIds.length || 0 });
     }
 
     clearReadout() {
@@ -291,7 +297,7 @@
         const title = document.createElement("strong");
         const description = document.createElement("span");
         title.textContent = this.t("probe.unitLabel", { id: item.clusterId });
-        description.textContent = `${this.t("probe.singular")} ${Number(item.result.physicalProbeId ?? 0) + 1} · ${item.region?.region || this.t("units.unmapped")}`;
+        description.textContent = `${this.t("probe.probeShank", { probe: 1, shank: (shankIdOf(item.result) ?? 0) + 1 })} · ${item.region?.region || this.t("units.unmapped")}`;
         row.append(dot, title, description);
         return row;
       }));
@@ -320,8 +326,8 @@
       this.focusedKey = null;
       this.recording = null;
       this.geometry = new Float32Array(0);
-      this.channelProbeIds = new Int16Array(0);
-      this.probeIds = [];
+      this.channelShankIds = new Int16Array(0);
+      this.shankIds = [];
       this.regionTrack = null;
       this.visibleSegments = [];
       this.hitTargets = [];
@@ -332,6 +338,7 @@
       this.lockedUnitId = null;
       this.lockedRecordingKey = null;
       this.elements.count.textContent = this.t("probe.noData");
+      if (this.elements.groupMeta) this.elements.groupMeta.textContent = this.t("probe.groupUnavailable");
       this.elements.legend.replaceChildren();
       this.updateTrackStatus();
       this.clearReadout();
@@ -383,7 +390,7 @@
     }
 
     regionForLocation(location) {
-      return location?.region?.region ? location.region : this.regionAt(location?.physicalProbeId, location?.y);
+      return location?.region?.region ? location.region : this.regionAt(location?.shankId, location?.y);
     }
 
     focusedItem() {
@@ -410,7 +417,7 @@
     unitDescription(location) {
       const region = this.regionForLocation(location)?.region || this.t("units.unmapped");
       const channel = finite(location?.peakChannel);
-      return `${this.t("probe.unitLabel", { id: Number(location.id) })} · ${this.t("probe.singular")} ${Number(location.physicalProbeId) + 1} · ${Number(location.y).toFixed(0)} \u00b5m · ${region} · ${channel == null ? this.t("probe.channelUnavailable") : `ch ${channel}`}`;
+      return `${this.t("probe.unitLabel", { id: Number(location.id) })} · ${this.t("probe.probeShank", { probe: 1, shank: Number(location.shankId) + 1 })} · ${Number(location.y).toFixed(0)} \u00b5m · ${region} · ${channel == null ? this.t("probe.channelUnavailable") : `ch ${channel}`}`;
     }
 
     targetDescription(target) {
@@ -419,7 +426,7 @@
       const depths = target.markers.map((marker) => Number(marker.location.y));
       const minimum = Math.min(...depths).toFixed(0);
       const maximum = Math.max(...depths).toFixed(0);
-      return this.t("probe.overlapDescription", { count: target.markers.length, probe: Number(target.probeId) + 1, minimum, maximum });
+      return this.t("probe.overlapDescription", { count: target.markers.length, shank: Number(target.probeId) + 1, minimum, maximum });
     }
 
     handleCanvasMove(event) {
@@ -457,7 +464,7 @@
         if (panel) {
           const ratio = clamp((pointerY - this.layout.top) / Math.max(1, this.layout.bottom - this.layout.top), 0, 1);
           const depth = this.layout.maximumY - ratio * (this.layout.maximumY - this.layout.minimumY);
-          this.showTooltip(pointerX, pointerY, `${this.t("probe.singular")} ${Number(panel.probeId) + 1} · ${this.hoveredSegment.region} · ${depth.toFixed(0)} \u00b5m`, false);
+          this.showTooltip(pointerX, pointerY, `${this.t("probe.probeShank", { probe: 1, shank: Number(panel.probeId) + 1 })} · ${this.hoveredSegment.region} · ${depth.toFixed(0)} \u00b5m`, false);
           return;
         }
       }
@@ -499,7 +506,7 @@
         const rightOpen = right.open ? 1 : 0;
         return rightFocused - leftFocused || rightOpen - leftOpen || Number(left.location.id) - Number(right.location.id);
       });
-      if (this.elements.stackTitle) this.elements.stackTitle.textContent = this.t("probe.stackTitle", { count: sorted.length, probe: Number(target.probeId) + 1 });
+      if (this.elements.stackTitle) this.elements.stackTitle.textContent = this.t("probe.stackTitle", { count: sorted.length, shank: Number(target.probeId) + 1 });
       list.replaceChildren(...sorted.map((marker) => {
         const button = document.createElement("button");
         button.type = "button";
@@ -544,7 +551,7 @@
     }
 
     handleCanvasClick(event) {
-      if (!this.layout || !this.probeIds.length) return;
+      if (!this.layout || !this.shankIds.length) return;
       this.elements.canvas.focus({ preventScroll: true });
       const { x, y } = this.canvasPosition(event);
       const target = this.targetAt(x, y);
@@ -570,15 +577,15 @@
       const depth = this.layout.maximumY - ratio * (this.layout.maximumY - this.layout.minimumY);
       const segment = this.regionAt(panel.probeId, depth);
       this.selectedSegment = segment;
-      const nearby = this.locations.filter((location) => Number(location.physicalProbeId) === Number(panel.probeId))
+      const nearby = this.locations.filter((location) => Number(location.shankId) === Number(panel.probeId))
         .sort((left, right) => Math.abs(left.y - depth) - Math.abs(right.y - depth)).slice(0, 5);
       this.renderNearby(nearby, depth, segment);
-      this.onRegionSelect?.({ recording: this.recording, probeId: panel.probeId, depth, segment, source: "probe-position" });
+      this.onRegionSelect?.({ recording: this.recording, probeId: panel.probeId, shankId: panel.probeId, depth, segment, source: "probe-position" });
       this.draw();
     }
 
     handleCanvasContextMenu(event) {
-      if (!this.layout || !this.probeIds.length) return;
+      if (!this.layout || !this.shankIds.length) return;
       const { x, y } = this.canvasPosition(event);
       const target = this.targetAt(x, y);
       if (!target) return;
@@ -608,7 +615,7 @@
       context.fillRect(0, 0, width, height);
       this.hitTargets = [];
       this.segmentHitTargets = [];
-      if (!this.geometry.length || !this.probeIds.length) {
+      if (!this.geometry.length || !this.shankIds.length) {
         context.fillStyle = PROBE_THEME.emptyText;
         context.font = '10px "Cascadia Mono", Consolas, monospace';
         context.textAlign = "center";
@@ -628,8 +635,8 @@
       const bottom = height - 24;
       const outer = 8;
       const gap = 7;
-      const panelWidth = Math.max(20, (width - outer * 2 - gap * (this.probeIds.length - 1)) / this.probeIds.length);
-      const panels = this.probeIds.map((probeId, index) => ({
+      const panelWidth = Math.max(20, (width - outer * 2 - gap * (this.shankIds.length - 1)) / this.shankIds.length);
+      const panels = this.shankIds.map((probeId, index) => ({
         probeId,
         left: outer + index * (panelWidth + gap),
         right: outer + index * (panelWidth + gap) + panelWidth,
@@ -642,18 +649,18 @@
       panels.forEach((panel) => {
         const channels = [];
         for (let channel = 0; channel < this.geometry.length / 2; channel += 1) {
-          const probeId = this.channelProbeIds.length ? Number(this.channelProbeIds[channel]) : this.probeIds[0];
+          const probeId = this.channelShankIds.length ? Number(this.channelShankIds[channel]) : this.shankIds[0];
           if (probeId === panel.probeId) channels.push(channel);
         }
-        const locationCount = this.locations.filter((location) => Number(location.physicalProbeId) === Number(panel.probeId)).length;
+        const locationCount = this.locations.filter((location) => Number(location.shankId) === Number(panel.probeId)).length;
         context.fillStyle = panel.accent;
         context.fillRect(panel.left, 2, panel.right - panel.left, 2);
         context.fillStyle = PROBE_THEME.headerText;
         context.textAlign = "center";
-        context.fillText(`PROBE ${Number(panel.probeId) + 1}`, (panel.left + panel.right) / 2, 16);
+        context.fillText(this.t("probe.shankShort", { shank: Number(panel.probeId) + 1 }), (panel.left + panel.right) / 2, 16);
         context.fillStyle = PROBE_THEME.mutedText;
         context.font = '9px "Cascadia Mono", Consolas, monospace';
-        context.fillText(`${locationCount} UNITS`, (panel.left + panel.right) / 2, 30);
+        context.fillText(this.t("probe.unitCountShort", { count: locationCount }), (panel.left + panel.right) / 2, 30);
         context.fillStyle = PROBE_THEME.panel;
         context.fillRect(panel.left, top, panel.right - panel.left, bottom - top);
 
@@ -709,11 +716,11 @@
       const openById = new Map(this.items.map((item) => [Number(item.clusterId), item]));
       const focused = this.focusedItem();
       const markers = this.locations.map((location) => {
-        const panel = panels.find((candidate) => Number(candidate.probeId) === Number(location.physicalProbeId));
+        const panel = panels.find((candidate) => Number(candidate.probeId) === Number(location.shankId));
         if (!panel) return null;
         const open = openById.get(Number(location.id)) || null;
         return {
-          probeId: Number(location.physicalProbeId),
+          probeId: Number(location.shankId),
           x: (panel.left + panel.right) / 2,
           y: yFor(location.y),
           panel,

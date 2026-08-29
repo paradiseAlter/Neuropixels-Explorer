@@ -144,7 +144,8 @@
       amplitudeValues: Float32Array.from(payload.amplitudeValues || []),
       templateWaveform: Float32Array.from(payload.templateWaveform || []),
       channelGeometry: Float32Array.from(payload.channelGeometry || []),
-      channelProbeIds: Int16Array.from(payload.channelProbeIds || [])
+      channelShankIds: Int16Array.from(payload.channelShankIds || payload.channelProbeIds || []),
+      channelProbeIds: Int16Array.from(payload.channelShankIds || payload.channelProbeIds || [])
     };
   }
 

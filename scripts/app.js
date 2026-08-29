@@ -53,6 +53,8 @@
     helpContent: document.getElementById("help-content"),
     contextTooltip: document.getElementById("context-tooltip"),
     recordingStrip: document.getElementById("recording-strip"),
+    recordingPrevious: document.getElementById("recording-scroll-previous"),
+    recordingNext: document.getElementById("recording-scroll-next"),
     unitCount: document.getElementById("unit-count-label"),
     unitSearch: document.getElementById("unit-search"),
     qualityFilter: document.getElementById("quality-filter"),
@@ -93,6 +95,8 @@
     toast: document.getElementById("toast"),
     probeCanvas: document.getElementById("probe-canvas"),
     probeCount: document.getElementById("probe-count"),
+    probeGroup: document.getElementById("probe-group"),
+    probeGroupMeta: document.getElementById("probe-group-meta"),
     probeLegend: document.getElementById("probe-legend"),
     probeUnit: document.getElementById("probe-unit"),
     probeRegion: document.getElementById("probe-region"),
@@ -177,6 +181,7 @@
     probePanel: document.getElementById("spatial-panel"),
     unitSplitter: document.getElementById("unit-panel-splitter"),
     probeSplitter: document.getElementById("probe-panel-splitter"),
+    probeHeightSplitter: document.getElementById("probe-height-splitter"),
     unitToggle: document.getElementById("unit-panel-toggle"),
     probeToggle: document.getElementById("probe-panel-toggle")
   });
@@ -200,17 +205,14 @@
   }, (view) => handlePlotWindow(primaryOpenUnit()?.key || "primary", view), (plotState) => handlePlotState(primaryOpenUnit()?.key || "primary", plotState));
 
   const detailPlots = new PlotManager({
-    amplitude: document.getElementById("amplitude-canvas"),
-    acg: document.getElementById("acg-canvas"),
     template: document.getElementById("template-canvas"),
-    amplitudeEmpty: document.getElementById("amplitude-empty"),
-    acgEmpty: document.getElementById("acg-empty"),
     templateEmpty: document.getElementById("template-empty")
   });
 
   const probeViewer = new ProbeViewer({
     canvas: elements.probeCanvas,
     count: elements.probeCount,
+    groupMeta: elements.probeGroupMeta,
     legend: elements.probeLegend,
     unit: elements.probeUnit,
     region: elements.probeRegion,
@@ -228,7 +230,11 @@
     stackList: elements.probeStackList,
     trackStatus: elements.probeTrackStatus
   }, (interaction) => handleProbeUnitInteraction(interaction), ({ probeId, depth, segment }) => {
-    showToast(t("toast.probePosition", { probe: Number(probeId) + 1, region: segment?.region || t("units.unmapped"), depth: depth.toFixed(0) }));
+    showToast(t("toast.probePosition", { probe: 1, shank: Number(probeId) + 1, region: segment?.region || t("units.unmapped"), depth: depth.toFixed(0) }));
+  });
+
+  elements.probeGroup?.addEventListener("toggle", () => {
+    if (elements.probeGroup.open) requestAnimationFrame(() => probeViewer.draw());
   });
 
   videoController = new VideoSyncController({
@@ -826,11 +832,21 @@
   }
 
   function renderRecordings() {
-    elements.recordingStrip.innerHTML = state.recordings.map((recording) => `<button class="recording-button ${recording === state.activeRecording ? "active" : ""}" type="button" data-recording-key="${escapeHtml(recording.key)}">
-      <strong>${escapeHtml(recording.name)}</strong>
-      <span>${escapeHtml(t("units.countMeta", { count: number(recording.clusterLabels.length), duration: recording.duration.toFixed(1) }))}</span>
-    </button>`).join("");
-    elements.recordingStrip.querySelector(".recording-button.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    elements.recordingStrip.innerHTML = state.recordings.map((recording, index) => `<button class="recording-button ${recording === state.activeRecording ? "active" : ""}" type="button" data-recording-key="${escapeHtml(recording.key)}" title="${escapeHtml(t("units.countMeta", { count: number(recording.clusterLabels.length), duration: recording.duration.toFixed(1) }))}"><strong>${index + 1}</strong><span>${escapeHtml(recording.name)}</span></button>`).join("");
+    requestAnimationFrame(() => {
+      elements.recordingStrip.querySelector(".recording-button.active")?.scrollIntoView({ block: "nearest", inline: "center" });
+      updateRecordingScrollControls();
+    });
+  }
+
+  function updateRecordingScrollControls() {
+    const maximum = Math.max(0, elements.recordingStrip.scrollWidth - elements.recordingStrip.clientWidth);
+    elements.recordingPrevious.disabled = elements.recordingStrip.scrollLeft <= 1;
+    elements.recordingNext.disabled = elements.recordingStrip.scrollLeft >= maximum - 1;
+  }
+
+  function scrollRecordings(direction) {
+    elements.recordingStrip.scrollBy({ left: direction * Math.max(180, elements.recordingStrip.clientWidth * .78), behavior: "smooth" });
   }
 
   function dataStatusGroup(title, items, emptyText) {
@@ -1537,6 +1553,10 @@
     const recording = state.recordings.find((item) => item.key === button?.dataset.recordingKey);
     if (recording && recording !== state.activeRecording) selectRecording(recording);
   });
+  elements.recordingPrevious.addEventListener("click", () => scrollRecordings(-1));
+  elements.recordingNext.addEventListener("click", () => scrollRecordings(1));
+  elements.recordingStrip.addEventListener("scroll", updateRecordingScrollControls, { passive: true });
+  window.addEventListener("resize", updateRecordingScrollControls, { passive: true });
 
   elements.unitList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-cluster-id]");

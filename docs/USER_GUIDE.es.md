@@ -103,11 +103,11 @@ El panel derecho separa cuatro capas:
 - Los círculos grises son Unidades disponibles pero no abiertas.
 - Los círculos de color son Unidades abiertas y comparten color con sus señales.
 
-La Unidad enfocada tiene anillo blanco, línea horizontal de profundidad y etiqueta fija. Pase sobre un marcador para ver ID, Sonda física, profundidad, región y canal. Haga clic para bloquear la posición; haga clic en espacio vacío o pulse **Esc** para desbloquear. Si varias Unidades se superponen, aparece una lista pequeña.
+La Unidad enfocada tiene anillo blanco, línea horizontal de profundidad y etiqueta fija. Pase sobre un marcador para ver ID, Sonda física, shank, profundidad, región y canal. Haga clic para bloquear la posición; haga clic en espacio vacío del shank o pulse **Esc** para desbloquear. Si varias Unidades se superponen, aparece una lista pequeña.
 
 Las reglas son iguales a las de la lista: clic abre solo, Ctrl+clic añade y clic derecho abre el menú común. Las Unidades cercanas se calculan respecto a la posición bloqueada; la proximidad espacial no implica por sí sola similitud funcional.
 
-Cuando `channel_shanks.npy` codifica cuatro grupos, representan cuatro electrodos físicos. La interfaz no los reinterpreta como cuatro shanks de una única Sonda física.
+En la adquisición actual, `channel_shanks.npy` identifica cuatro shanks de una sola Sonda física. El Inspector muestra por ello un grupo expandible **Sonda 1** que contiene **Shank 1–4** y nunca los etiqueta como cuatro Sondas físicas. Un futuro conjunto con varias Sondas necesitará una identidad física explícita además de la identidad del shank.
 
 ## 7. Mapeo de regiones cerebrales
 
@@ -123,7 +123,7 @@ El mapeo actual es metadato a nivel de electrodo/profundidad. No constituye un t
 
 ## 8. Disposición, temas, idioma y teclado
 
-Arrastre los dos separadores para cambiar el ancho de la lista, las señales y el Inspector de Sonda. Doble clic restaura el ancho predeterminado. Con foco de teclado, use Flecha izquierda/derecha para cambios pequeños, Shift + flecha para cambios grandes y Home para restablecer. En pantallas estrechas, los botones de chevrón pliegan los paneles laterales.
+Arrastre el separador izquierdo para cambiar el ancho de la lista y del área de señales. El Inspector de Sonda conserva un ancho fijo porque ensancharlo no mejora la resolución en profundidad. Arrastre el control horizontal bajo el diagrama para cambiar su altura; con foco de teclado, use Flecha arriba/abajo, Shift para cambios grandes y Home para restablecer. En pantallas estrechas, los botones de chevrón siguen plegando los paneles laterales.
 
 Los temas son Oscuro, Claro, Alto contraste y Sistema. El tema afecta HTML, Canvas de señales, bandas de Sonda, cuadrículas, selecciones y colores de Unidades. El idioma y el tema se guardan en el dispositivo.
 

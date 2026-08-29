@@ -13,7 +13,7 @@
     { key: "position", label: "Spike positions", detail: "spike_positions.npy" },
     { key: "template", label: "KiloSort templates", detail: "templates.npy" },
     { key: "geometry", label: "Channel geometry", detail: "channel_positions.npy or geometry CSV" },
-    { key: "probeGrouping", label: "Physical Probe grouping", detail: "channel_shanks.npy or geometry CSV" }
+    { key: "probeGrouping", label: "Shank grouping", detail: "channel_shanks.npy or geometry CSV" }
   ]);
 
   const LABEL_FILES = ["cluster_info.tsv", "cluster_group.tsv", "cluster_kslabel.tsv"];

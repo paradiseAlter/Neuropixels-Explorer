@@ -32,6 +32,7 @@ function fakeElement(width = 1440, isButton = false) {
       const event = {
         button: 0,
         clientX: 0,
+        clientY: 0,
         pointerId: 1,
         key: "",
         shiftKey: false,
@@ -68,6 +69,7 @@ function fixture(width = 1440) {
     probePanel: fakeElement(),
     unitSplitter: fakeElement(),
     probeSplitter: fakeElement(),
+    probeHeightSplitter: fakeElement(),
     unitToggle: fakeElement(0, true),
     probeToggle: fakeElement(0, true)
   };
@@ -79,6 +81,7 @@ new WorkspaceLayout(elements, { storage, windowRef: { innerWidth: 1440 } });
 
 assert.equal(elements.layout.style.getPropertyValue("--unit-panel-width"), `${DEFAULT_LAYOUT.unitWidth}px`);
 assert.equal(elements.layout.style.getPropertyValue("--probe-panel-width"), `${DEFAULT_LAYOUT.probeWidth}px`);
+assert.equal(elements.layout.style.getPropertyValue("--probe-canvas-height"), `${DEFAULT_LAYOUT.probeHeight}px`);
 
 elements.unitSplitter.emit("pointerdown", { clientX: 100 });
 elements.unitSplitter.emit("pointermove", { clientX: 148 });
@@ -86,10 +89,19 @@ elements.unitSplitter.emit("pointerup", { clientX: 148 });
 assert.equal(elements.layout.style.getPropertyValue("--unit-panel-width"), "320px", "Pointer drag should resize the Units panel");
 assert(storage.getItem(STORAGE_KEY), "Pointer resize should persist the layout");
 
-elements.probeSplitter.emit("keydown", { key: "ArrowLeft" });
-assert.equal(elements.layout.style.getPropertyValue("--probe-panel-width"), "340px", "Probe ArrowLeft should widen the panel");
-elements.probeSplitter.emit("keydown", { key: "ArrowRight", shiftKey: true });
-assert.equal(elements.layout.style.getPropertyValue("--probe-panel-width"), "292px", "Shift plus ArrowRight should use the larger step");
+elements.probeSplitter.emit("pointerdown", { clientX: 100 });
+elements.probeSplitter.emit("pointermove", { clientX: 160 });
+elements.probeSplitter.emit("pointerup", { clientX: 160 });
+assert.equal(elements.layout.style.getPropertyValue("--probe-panel-width"), `${DEFAULT_LAYOUT.probeWidth}px`, "The Probe panel should keep a fixed width");
+
+elements.probeHeightSplitter.emit("keydown", { key: "ArrowDown" });
+assert.equal(elements.layout.style.getPropertyValue("--probe-canvas-height"), "664px", "ArrowDown should make the Probe diagram taller");
+elements.probeHeightSplitter.emit("keydown", { key: "ArrowUp", shiftKey: true });
+assert.equal(elements.layout.style.getPropertyValue("--probe-canvas-height"), "568px", "Shift plus ArrowUp should use the larger vertical step");
+elements.probeHeightSplitter.emit("pointerdown", { clientY: 100 });
+elements.probeHeightSplitter.emit("pointermove", { clientY: 172 });
+elements.probeHeightSplitter.emit("pointerup", { clientY: 172 });
+assert.equal(elements.layout.style.getPropertyValue("--probe-canvas-height"), "640px", "Vertical pointer drag should resize the Probe diagram");
 
 elements.unitToggle.emit("click");
 assert.equal(elements.layout.dataset.unitCollapsed, "true");
@@ -102,6 +114,7 @@ assert.equal(elements.layout.dataset.unitCollapsed, "false", "Keyboard resize sh
 elements.unitSplitter.emit("dblclick");
 assert.equal(elements.layout.style.getPropertyValue("--unit-panel-width"), `${DEFAULT_LAYOUT.unitWidth}px`);
 assert.equal(elements.layout.style.getPropertyValue("--probe-panel-width"), `${DEFAULT_LAYOUT.probeWidth}px`);
+assert.equal(elements.layout.style.getPropertyValue("--probe-canvas-height"), `${DEFAULT_LAYOUT.probeHeight}px`);
 assert.equal(elements.layout.dataset.unitCollapsed, "false");
 assert.equal(elements.layout.dataset.probeCollapsed, "false");
 

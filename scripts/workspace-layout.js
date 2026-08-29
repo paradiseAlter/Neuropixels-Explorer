@@ -9,16 +9,18 @@
   const STORAGE_KEY = "neuropixelsExplorer.workspaceLayout.v1";
   const DEFAULT_LAYOUT = Object.freeze({
     unitWidth: 272,
-    probeWidth: 328,
+    probeWidth: 352,
+    probeHeight: 640,
     unitCollapsed: false,
     probeCollapsed: false
   });
   const LAYOUT_LIMITS = Object.freeze({
     unit: Object.freeze({ minimum: 200, maximum: 440 }),
-    probe: Object.freeze({ minimum: 260, maximum: 520 }),
+    probeHeight: Object.freeze({ minimum: 420, maximum: 1200 }),
     centerMinimum: 620,
     splitterWidth: 8,
-    keyboardStep: 12
+    keyboardStep: 12,
+    heightKeyboardStep: 24
   });
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
@@ -31,16 +33,18 @@
   function normalizeLayout(value = {}) {
     return {
       unitWidth: finiteWidth(value.unitWidth, DEFAULT_LAYOUT.unitWidth, LAYOUT_LIMITS.unit),
-      probeWidth: finiteWidth(value.probeWidth, DEFAULT_LAYOUT.probeWidth, LAYOUT_LIMITS.probe),
+      // The Probe Inspector has one deliberate width. More horizontal room does
+      // not improve depth resolution, so old saved widths are intentionally ignored.
+      probeWidth: DEFAULT_LAYOUT.probeWidth,
+      probeHeight: finiteWidth(value.probeHeight, DEFAULT_LAYOUT.probeHeight, LAYOUT_LIMITS.probeHeight),
       unitCollapsed: Boolean(value.unitCollapsed),
       probeCollapsed: Boolean(value.probeCollapsed)
     };
   }
 
   function keyboardWidthDelta(side, key, step = LAYOUT_LIMITS.keyboardStep) {
-    if (!['ArrowLeft', 'ArrowRight'].includes(key)) return 0;
-    const physicalDirection = key === 'ArrowRight' ? 1 : -1;
-    return side === 'probe' ? -physicalDirection * step : physicalDirection * step;
+    if (side !== 'unit' || !['ArrowLeft', 'ArrowRight'].includes(key)) return 0;
+    return (key === 'ArrowRight' ? 1 : -1) * step;
   }
 
   class WorkspaceLayout {
@@ -51,7 +55,8 @@
       this.drag = null;
       this.state = this.load();
       this.installSplitter('unit', elements.unitSplitter, elements.unitToggle);
-      this.installSplitter('probe', elements.probeSplitter, elements.probeToggle);
+      this.installProbeRail(elements.probeSplitter, elements.probeToggle);
+      this.installProbeHeightSplitter(elements.probeHeightSplitter);
       this.apply(false);
     }
 
@@ -90,22 +95,28 @@
     }
 
     limits(side) {
-      return side === 'probe' ? LAYOUT_LIMITS.probe : LAYOUT_LIMITS.unit;
+      return LAYOUT_LIMITS.unit;
     }
 
     availableMaximum(side) {
       const bounds = this.elements.layout?.getBoundingClientRect();
       if (!bounds?.width) return this.limits(side).maximum;
-      const otherSide = side === 'probe' ? 'unit' : 'probe';
-      const otherWidth = this.state[this.collapsedKey(otherSide)] ? 0 : this.state[this.widthKey(otherSide)];
+      const otherWidth = this.state.probeCollapsed ? 0 : DEFAULT_LAYOUT.probeWidth;
       const available = bounds.width - LAYOUT_LIMITS.centerMinimum - LAYOUT_LIMITS.splitterWidth * 2 - otherWidth;
       return clamp(available, this.limits(side).minimum, this.limits(side).maximum);
     }
 
     setWidth(side, value, persist = true) {
+      if (side !== 'unit') return;
       const limits = this.limits(side);
       this.state[this.widthKey(side)] = Math.round(clamp(value, limits.minimum, this.availableMaximum(side)));
       this.state[this.collapsedKey(side)] = false;
+      this.apply(persist);
+    }
+
+    setProbeHeight(value, persist = true) {
+      const limits = LAYOUT_LIMITS.probeHeight;
+      this.state.probeHeight = Math.round(clamp(value, limits.minimum, limits.maximum));
       this.apply(persist);
     }
 
@@ -180,6 +191,61 @@
       });
     }
 
+    installProbeRail(rail, toggle) {
+      if (!rail) return;
+      toggle?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.toggle('probe');
+        toggle.focus({ preventScroll: true });
+      });
+    }
+
+    installProbeHeightSplitter(splitter) {
+      if (!splitter) return;
+      splitter.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        splitter.setPointerCapture(event.pointerId);
+        this.drag = {
+          side: 'probe-height',
+          pointerId: event.pointerId,
+          startY: event.clientY,
+          startHeight: this.state.probeHeight
+        };
+        this.elements.layout?.classList.add('is-resizing-probe-height');
+        splitter.classList.add('active');
+      });
+      splitter.addEventListener('pointermove', (event) => {
+        if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.side !== 'probe-height') return;
+        this.setProbeHeight(this.drag.startHeight + (event.clientY - this.drag.startY), false);
+      });
+      const finish = (event) => {
+        if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.side !== 'probe-height') return;
+        this.drag = null;
+        this.elements.layout?.classList.remove('is-resizing-probe-height');
+        splitter.classList.remove('active');
+        this.save();
+      };
+      splitter.addEventListener('pointerup', finish);
+      splitter.addEventListener('pointercancel', finish);
+      splitter.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        this.setProbeHeight(DEFAULT_LAYOUT.probeHeight, true);
+      });
+      splitter.addEventListener('keydown', (event) => {
+        if (event.key === 'Home') {
+          event.preventDefault();
+          this.setProbeHeight(DEFAULT_LAYOUT.probeHeight, true);
+          return;
+        }
+        if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        const step = event.shiftKey ? LAYOUT_LIMITS.heightKeyboardStep * 4 : LAYOUT_LIMITS.heightKeyboardStep;
+        this.setProbeHeight(this.state.probeHeight + direction * step, true);
+      });
+    }
+
     apply(persist = true) {
       const layout = this.elements.layout;
       if (!layout) return;
@@ -187,10 +253,12 @@
       const probeWidth = this.state.probeCollapsed ? 0 : this.state.probeWidth;
       layout.style.setProperty('--unit-panel-width', `${unitWidth}px`);
       layout.style.setProperty('--probe-panel-width', `${probeWidth}px`);
+      layout.style.setProperty('--probe-canvas-height', `${this.state.probeHeight}px`);
       layout.dataset.unitCollapsed = String(this.state.unitCollapsed);
       layout.dataset.probeCollapsed = String(this.state.probeCollapsed);
       this.updateControl('unit', this.elements.unitSplitter, this.elements.unitToggle, this.elements.unitPanel);
-      this.updateControl('probe', this.elements.probeSplitter, this.elements.probeToggle, this.elements.probePanel);
+      this.updateProbeControl(this.elements.probeSplitter, this.elements.probeToggle, this.elements.probePanel);
+      this.updateProbeHeightControl(this.elements.probeHeightSplitter);
       if (persist) this.save();
     }
 
@@ -216,6 +284,37 @@
         toggle.title = controlLabel;
       }
       panel?.setAttribute('aria-hidden', String(collapsed));
+    }
+
+    updateProbeControl(rail, toggle, panel) {
+      const t = this.translate || ((key) => ({
+        'layout.panelProbe': 'Probe Inspector panel', 'layout.expand': 'Expand', 'layout.collapse': 'Collapse',
+        'layout.probeRailTitle': 'Collapse or expand the Probe Inspector.'
+      }[key] || key));
+      const collapsed = this.state.probeCollapsed;
+      rail?.setAttribute('title', t('layout.probeRailTitle'));
+      if (toggle) {
+        const panelName = t('layout.panelProbe');
+        toggle.textContent = collapsed ? '‹' : '›';
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+        const controlLabel = `${t(collapsed ? 'layout.expand' : 'layout.collapse')} ${panelName}`;
+        toggle.setAttribute('aria-label', controlLabel);
+        toggle.title = controlLabel;
+      }
+      panel?.setAttribute('aria-hidden', String(collapsed));
+    }
+
+    updateProbeHeightControl(splitter) {
+      if (!splitter) return;
+      const t = this.translate || ((key, values = {}) => ({
+        'layout.pixels': `${values.width} pixels`,
+        'layout.probeHeightTitle': 'Drag vertically or use Up and Down arrows to adjust Probe height. Double-click or press Home to reset.'
+      }[key] || key));
+      splitter.setAttribute('aria-valuemin', String(LAYOUT_LIMITS.probeHeight.minimum));
+      splitter.setAttribute('aria-valuemax', String(LAYOUT_LIMITS.probeHeight.maximum));
+      splitter.setAttribute('aria-valuenow', String(this.state.probeHeight));
+      splitter.setAttribute('aria-valuetext', t('layout.pixels', { width: this.state.probeHeight }));
+      splitter.setAttribute('title', t('layout.probeHeightTitle'));
     }
 
     setTranslator(translator) {

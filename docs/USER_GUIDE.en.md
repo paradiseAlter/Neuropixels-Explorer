@@ -109,11 +109,11 @@ The right panel separates four visual layers:
 - Gray circles are Units that are available but not open.
 - Colored circles are open Units and use the same colors as their signals.
 
-The focused Unit has a white outer ring, a horizontal depth line, and a fixed label. Hover a Unit marker to see Unit ID, physical Probe, depth, region, and channel. Click to lock the marker and its depth; click empty Probe space or press **Esc** to clear the lock. If several Units overlap at a similar depth, the Explorer opens a small list instead of requiring you to guess which marker is which.
+The focused Unit has a white outer ring, a horizontal depth line, and a fixed label. Hover a Unit marker to see Unit ID, physical Probe, shank, depth, region, and channel. Click to lock the marker and its depth; click empty Shank space or press **Esc** to clear the lock. If several Units overlap at a similar depth, the Explorer opens a small list instead of requiring you to guess which marker is which.
 
 Probe interactions use the same selection rules as the left list: click opens only, Ctrl-click adds, and right-click opens the shared Unit menu. Nearby Units are listed relative to the locked Probe position; spatial distance does not itself imply functional similarity.
 
-The four Probe groups represent four physical electrodes when the loaded `channel_shanks.npy` encodes four groups. The interface does not reinterpret them as four shanks on one physical Probe.
+For the current acquisition, `channel_shanks.npy` identifies four shanks on one physical Probe. The Inspector therefore shows one expandable **Probe 1** group containing **Shank 1–4**; it never labels those shanks as four separate physical Probes. A future multi-Probe dataset will require an explicit physical-Probe identity in addition to its shank identity.
 
 ## 7. Brain-region mapping
 
@@ -129,7 +129,7 @@ The current mapping is electrode/depth-level metadata. It is not a registered th
 
 ## 8. Layout, themes, language, and keyboard use
 
-Drag the two subtle splitters to resize the Unit list, signal workspace, and Probe Inspector. Double-click a splitter to restore its default width. When the splitter has keyboard focus, use Left/Right arrows for small changes, Shift + Left/Right for larger changes, and Home to reset. On a narrow screen, side panels can be collapsed with the chevron buttons.
+Drag the left splitter to resize the Unit list and signal workspace. The Probe Inspector keeps a deliberate fixed width because horizontal expansion does not improve depth resolution. Drag the horizontal handle below the Probe diagram to change its height; with keyboard focus, use Up/Down arrows, Shift + Up/Down for larger changes, and Home to reset. On a narrow screen, side panels can still be collapsed with the chevron buttons.
 
 Themes include Dark, Light, High Contrast, and System. The theme affects the HTML interface, signal Canvas, Probe bands, grids, selections, and Unit colors. Language and theme choices are saved on the current device.
 
