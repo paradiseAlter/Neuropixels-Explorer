@@ -159,7 +159,9 @@
       unitX: nullableFloat32(payload.unitX),
       unitDepths: nullableFloat32(payload.unitDepths),
       unitShankIds: Int16Array.from(payload.unitShankIds || []),
-      normalizedActivity: Uint8Array.from(payload.normalizedActivity || [])
+      normalizedActivity: Uint8Array.from(payload.normalizedActivity || []),
+      unusualActivity: Uint8Array.from(payload.unusualActivity || []),
+      unusualThresholdCounts: Uint32Array.from(payload.unusualThresholdCounts || [])
     };
   }
 

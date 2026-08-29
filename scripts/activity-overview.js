@@ -6,11 +6,13 @@
 })(typeof globalThis !== "undefined" ? globalThis : window, () => {
   "use strict";
 
-  const GUTTER_WIDTH = 238;
+  const GUTTER_WIDTH = 276;
   const HEADER_HEIGHT = 31;
   const AXIS_HEIGHT = 25;
-  const MIN_ROW_HEIGHT = 18;
-  const EXPANDED_ROW_HEIGHT = 92;
+  const MIN_ROW_HEIGHT = 17;
+  const EXPANDED_ROW_HEIGHT = 98;
+  const MIN_OVERVIEW_ROWS = 10;
+  const MAX_OVERVIEW_ROWS = 18;
 
   function finiteOrNull(value) {
     if (value == null || value === "") return null;
@@ -34,20 +36,37 @@
     });
   }
 
-  function regionRange(units) {
-    const regions = [...new Set(units.map((unit) => unit.region || "Unmapped"))];
-    if (regions.length === 1) return regions[0];
-    return `${regions[0]}–${regions[regions.length - 1]}`;
+  function unitRegion(unit) {
+    return unit?.region || "Unmapped";
+  }
+
+  function spatialRegion(unit) {
+    return unit?.trackRegion || unitRegion(unit);
+  }
+
+  function spatialRegionColor(unit) {
+    return unit?.trackRegionColor || unit?.regionColor || "";
+  }
+
+  function anatomyBoundaryKey(unit) {
+    const shank = finiteOrNull(unit?.shankId);
+    const trackStart = finiteOrNull(unit?.trackStartDepthUm);
+    const trackEnd = finiteOrNull(unit?.trackEndDepthUm);
+    if (unit?.trackRegion && trackStart != null && trackEnd != null) {
+      return `${shank ?? "none"}|track|${trackStart}|${trackEnd}|${unit.trackRegion}`;
+    }
+    const mapped = unitRegion(unit);
+    return `${shank ?? "none"}|unit|${mapped}`;
   }
 
   function aggregateActivity(units, matrix, binCount) {
     const activity = new Uint8Array(binCount);
     for (let bin = 0; bin < binCount; bin += 1) {
-      let active = 0;
+      let unusual = 0;
       units.forEach((unit) => {
-        if (matrix[Number(unit.sourceIndex) * binCount + bin] > 0) active += 1;
+        if (matrix[Number(unit.sourceIndex) * binCount + bin] > 0) unusual += 1;
       });
-      activity[bin] = Math.round(active / Math.max(1, units.length) * 255);
+      activity[bin] = Math.round(unusual / Math.max(1, units.length) * 255);
     }
     return activity;
   }
@@ -62,14 +81,15 @@
     };
   }
 
-  function aggregateRow(units, matrix, binCount) {
+  function aggregateRow(units, matrix, binCount, level = 0, ancestors = []) {
     const first = units[0];
     const last = units[units.length - 1];
     const shanks = [...new Set(units.map((unit) => finiteOrNull(unit.shankId)).filter((value) => value != null))];
     const depths = units.map((unit) => finiteOrNull(unit.depthUm ?? unit.depth)).filter((value) => value != null);
     const minimumDepth = depths.length ? Math.min(...depths) : null;
     const maximumDepth = depths.length ? Math.max(...depths) : null;
-    const key = `group:${first.id}:${last.id}`;
+    const key = `group:${level}:${first.id}:${last.id}`;
+    const mappedCount = units.filter((unit) => unitRegion(unit) !== "Unmapped").length;
     return {
       key,
       kind: "aggregate",
@@ -81,40 +101,92 @@
       shankRange: shanks,
       minimumDepth,
       maximumDepth,
-      region: regionRange(units),
-      count: units.length
+      region: spatialRegion(first),
+      regionColor: spatialRegionColor(first),
+      regionSource: first.trackRegion ? "probe-track" : first.regionSource || "unit-map",
+      regionUncertain: Boolean(first.trackAmbiguous) || !first.trackRegion,
+      mappedCount,
+      count: units.length,
+      level,
+      ancestors: [...ancestors]
     };
   }
 
-  function buildDisplayRows(units, matrix, binCount, maximumRows, expandedGroupKey = null, forceUnitId = null) {
+  function overviewRowTarget(canvasHeight) {
+    const available = Math.max(1, Number(canvasHeight || 620) - HEADER_HEIGHT - AXIS_HEIGHT);
+    return Math.max(MIN_OVERVIEW_ROWS, Math.min(MAX_OVERVIEW_ROWS, Math.round(available / 46)));
+  }
+
+  function splitContiguous(groups, targetRows) {
+    const result = groups.map((group) => [...group]);
+    while (result.length < targetRows) {
+      let bestIndex = -1;
+      let bestLength = 1;
+      result.forEach((group, index) => {
+        if (group.length > bestLength) { bestLength = group.length; bestIndex = index; }
+      });
+      if (bestIndex < 0) break;
+      const group = result[bestIndex];
+      const middle = Math.ceil(group.length / 2);
+      result.splice(bestIndex, 1, group.slice(0, middle), group.slice(middle));
+    }
+    return result;
+  }
+
+  function anatomicalGroups(units, targetRows) {
     const ordered = stableUnitOrder(units);
-    const safeMaximum = Math.max(1, Math.floor(Number(maximumRows) || 1));
-    if (ordered.length <= safeMaximum) return ordered.map(individualRow);
-    const targetSize = Math.max(2, Math.ceil(ordered.length / safeMaximum));
-    const groups = [];
-    let cursor = 0;
-    while (cursor < ordered.length) {
-      const start = cursor;
-      const shank = finiteOrNull(ordered[start].shankId);
-      cursor += 1;
-      while (cursor < ordered.length && cursor - start < targetSize && finiteOrNull(ordered[cursor].shankId) === shank) cursor += 1;
-      groups.push(ordered.slice(start, cursor));
-    }
-    while (groups.length > safeMaximum) {
-      let bestIndex = 0;
-      let bestSize = Infinity;
-      for (let index = 0; index < groups.length - 1; index += 1) {
-        const size = groups[index].length + groups[index + 1].length;
-        if (size < bestSize) { bestSize = size; bestIndex = index; }
+    if (!ordered.length) return [];
+    const partitions = [];
+    let current = [];
+    let currentKey = null;
+    ordered.forEach((unit) => {
+      const key = anatomyBoundaryKey(unit);
+      if (current.length && key !== currentKey) {
+        partitions.push(current);
+        current = [];
       }
-      groups.splice(bestIndex, 2, [...groups[bestIndex], ...groups[bestIndex + 1]]);
-    }
-    const forceId = finiteOrNull(forceUnitId);
-    return groups.flatMap((group) => {
-      const aggregate = aggregateRow(group, matrix, binCount);
-      if (aggregate.key === expandedGroupKey || (forceId != null && aggregate.unitIds.includes(forceId))) return group.map(individualRow);
-      return [aggregate];
+      currentKey = key;
+      current.push(unit);
     });
+    if (current.length) partitions.push(current);
+    return splitContiguous(partitions, Math.max(partitions.length, Math.min(ordered.length, Math.floor(Number(targetRows) || 1))));
+  }
+
+  function localGroups(units) {
+    const requested = Math.max(2, Math.min(4, Math.ceil(units.length / 6)));
+    return splitContiguous([units], requested);
+  }
+
+  function selectedNeighborhoodRows(group, matrix, binCount, selectedId, level, ancestors) {
+    const selectedIndex = group.findIndex((unit) => Number(unit.id) === Number(selectedId));
+    if (selectedIndex < 0) return [];
+    const start = Math.max(0, selectedIndex - 2);
+    const end = Math.min(group.length, selectedIndex + 3);
+    const rows = [];
+    if (start > 0) rows.push(aggregateRow(group.slice(0, start), matrix, binCount, level + 1, ancestors));
+    rows.push(...group.slice(start, end).map(individualRow));
+    if (end < group.length) rows.push(aggregateRow(group.slice(end), matrix, binCount, level + 1, ancestors));
+    return rows;
+  }
+
+  function buildDisplayRows(units, matrix, binCount, targetRows, groupFocusPath = [], forceUnitId = null, unusualMatrix = null) {
+    const ordered = stableUnitOrder(units);
+    const safeTarget = Math.max(1, Math.floor(Number(targetRows) || 1));
+    if (ordered.length <= safeTarget) return ordered.map(individualRow);
+    const groups = anatomicalGroups(ordered, safeTarget);
+    const focusPath = Array.isArray(groupFocusPath) ? groupFocusPath : groupFocusPath ? [groupFocusPath] : [];
+    const forceId = finiteOrNull(forceUnitId);
+    const aggregateMatrix = unusualMatrix?.length === matrix?.length ? unusualMatrix : matrix;
+    const renderGroup = (group, level = 0, ancestors = []) => {
+      const aggregate = aggregateRow(group, aggregateMatrix, binCount, level, ancestors);
+      if (forceId != null && aggregate.unitIds.includes(forceId)) {
+        return selectedNeighborhoodRows(group, aggregateMatrix, binCount, forceId, level, [...ancestors, aggregate.key]);
+      }
+      if (focusPath[level] !== aggregate.key) return [aggregate];
+      if (group.length <= 8) return group.map(individualRow);
+      return localGroups(group).flatMap((child) => renderGroup(child, level + 1, [...ancestors, aggregate.key]));
+    };
+    return groups.flatMap((group) => renderGroup(group));
   }
 
   function formatDepth(value) {
@@ -125,7 +197,11 @@
   function formatIdentity(unit) {
     if (!unit) return "";
     const shank = finiteOrNull(unit.shankId);
-    return `Unit ${Number(unit.id)} · ${shank == null ? "Shank —" : `Shank ${shank + 1}`} · ${formatDepth(unit.depthUm ?? unit.depth)} · ${unit.region || "Unmapped"}`;
+    const mapped = unitRegion(unit);
+    const source = mapped === "Unmapped"
+      ? (unit.trackRegion ? `Unmapped · track context ${unit.trackRegion}` : "Unmapped")
+      : `${mapped}${unit.regionSource ? ` · ${unit.regionSource}` : ""}`;
+    return `Unit ${Number(unit.id)} · ${shank == null ? "Shank —" : `Shank ${shank + 1}`} · ${formatDepth(unit.depthUm ?? unit.depth)} · ${source}`;
   }
 
   function lowerBound(values, target) {
@@ -137,6 +213,14 @@
       else high = middle;
     }
     return low;
+  }
+
+  function temporalDetailMode(spanSeconds, plotWidth, visibleSpikeCount) {
+    const width = Math.max(1, Number(plotWidth) || 1);
+    const secondsPerPixel = Math.max(0, Number(spanSeconds) || 0) / width;
+    if (secondsPerPixel <= .05 && Number(visibleSpikeCount || 0) <= width * .7) return "individual spikes";
+    if (secondsPerPixel <= .14) return "normalized rate envelope";
+    return "recording density";
   }
 
   function readCss(name, fallback) {
@@ -156,13 +240,15 @@
       this.rowGeometry = [];
       this.state = {
         visibleRange: { start: 0, end: 0 }, cursorTime: 0, selectedInterval: null,
-        selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null,
+        selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, groupFocusPath: [],
         selectedShank: null, selectedRegion: null
       };
       this.selectedSpikeTimes = new Float64Array(0);
+      this.selectedRateBins = new Float32Array(0);
+      this.selectedDuration = 0;
       this.hover = null;
       this.drag = null;
-      this.expandedGroupKey = null;
+      this.layoutSignature = "";
       this.resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => this._resize()) : null;
       this.resizeObserver?.observe(canvas);
       this._install();
@@ -185,11 +271,13 @@
         selectedUnitId: null,
         expandedUnitId: null,
         selectedGroupKey: null,
+        groupFocusPath: [],
         selectedShank: null,
         selectedRegion: null
       };
-      this.expandedGroupKey = null;
       this.selectedSpikeTimes = new Float64Array(0);
+      this.selectedRateBins = new Float32Array(0);
+      this.selectedDuration = 0;
       if (this.empty) this.empty.hidden = Boolean(data?.units?.length);
       this._prepareRows();
       this.render();
@@ -197,7 +285,6 @@
 
     setViewState(next) {
       this.state = { ...this.state, ...(next || {}) };
-      if (this.state.selectedUnitId != null) this.expandedGroupKey = null;
       this._prepareRows();
       this.render();
     }
@@ -206,6 +293,10 @@
       this.selectedSpikeTimes = result?.spikeTimes instanceof Float64Array
         ? result.spikeTimes
         : Float64Array.from(result?.spikeTimes || []);
+      this.selectedRateBins = result?.rateBins instanceof Float32Array
+        ? result.rateBins
+        : Float32Array.from(result?.rateBins || []);
+      this.selectedDuration = Number(result?.duration || this.data?.duration || 0);
       this.render();
     }
 
@@ -214,6 +305,7 @@
       if (normalized == null || !this.units.some((unit) => Number(unit.id) === normalized)) return false;
       this.state.selectedUnitId = normalized;
       this.state.expandedUnitId = normalized;
+      this.state.groupFocusPath = [];
       this._prepareRows();
       this.render();
       return true;
@@ -255,20 +347,21 @@
     _prepareRows() {
       if (!this.data) { this.rows = []; this.rowGeometry = []; return; }
       const available = Math.max(1, (this.height || 620) - HEADER_HEIGHT - AXIS_HEIGHT);
-      const maximumRows = Math.max(4, Math.floor(available / MIN_ROW_HEIGHT));
+      const targetRows = overviewRowTarget(this.height || 620);
       this.rows = buildDisplayRows(
         this.units,
         this.data.normalizedActivity,
         Number(this.data.binCount),
-        maximumRows,
-        this.expandedGroupKey,
-        this.state.selectedUnitId
+        targetRows,
+        this.state.groupFocusPath,
+        this.state.selectedUnitId,
+        this.data.unusualActivity
       );
       const selected = finiteOrNull(this.state.expandedUnitId);
       const expandedCount = selected == null ? 0 : this.rows.filter((row) => row.kind === "unit" && Number(row.unit.id) === selected).length;
       const normalCount = Math.max(1, this.rows.length - expandedCount);
       const availableHeight = Math.max(MIN_ROW_HEIGHT, available - expandedCount * EXPANDED_ROW_HEIGHT);
-      const normalHeight = Math.max(MIN_ROW_HEIGHT, Math.min(30, availableHeight / normalCount));
+      const normalHeight = Math.max(MIN_ROW_HEIGHT, Math.min(48, availableHeight / normalCount));
       let y = HEADER_HEIGHT;
       this.rowGeometry = this.rows.map((row) => {
         const expanded = row.kind === "unit" && Number(row.unit.id) === selected;
@@ -277,6 +370,22 @@
         y += height;
         return geometry;
       });
+      const aggregateCount = this.rows.filter((row) => row.kind === "aggregate").length;
+      const unitCount = this.rows.length - aggregateCount;
+      const summary = {
+        targetRows,
+        displayRows: this.rows.length,
+        aggregateRows: aggregateCount,
+        unitRows: unitCount,
+        shanks: new Set(this.rows.flatMap((row) => row.kind === "unit" ? [finiteOrNull(row.unit.shankId)] : row.shankRange).filter((value) => value != null)).size,
+        binCount: Number(this.data.binCount || 0),
+        binSeconds: Number(this.data.binSeconds || 0)
+      };
+      const signature = JSON.stringify(summary);
+      if (signature !== this.layoutSignature) {
+        this.layoutSignature = signature;
+        this.callbacks.onLayoutChange?.(summary);
+      }
     }
 
     _rowActivity(row, bin) {
@@ -314,6 +423,7 @@
       this._drawHeader(context, colors);
       if (!this.data || !this.rows.length) return;
       this.rowGeometry.forEach((geometry, index) => this._drawRow(context, colors, geometry, index));
+      this._drawSpatialIndex(context, colors);
       this._drawSelection(context, colors);
       this._drawCursor(context, colors);
       this._drawAxis(context, colors);
@@ -327,13 +437,14 @@
       context.moveTo(0, HEADER_HEIGHT - .5);
       context.lineTo(this.width, HEADER_HEIGHT - .5);
       context.stroke();
-      context.font = '600 9px "Cascadia Mono", Consolas, monospace';
+      context.font = '650 9px "Cascadia Mono", Consolas, monospace';
       context.fillStyle = colors.muted;
       context.textBaseline = "middle";
       context.fillText("SHANK", 10, HEADER_HEIGHT / 2);
-      context.fillText("DEPTH", 61, HEADER_HEIGHT / 2);
-      context.fillText("REGION / UNIT", 118, HEADER_HEIGHT / 2);
-      context.fillText("RECORDING-WIDE NORMALIZED ACTIVITY", GUTTER_WIDTH + 12, HEADER_HEIGHT / 2);
+      context.fillText("DEPTH", 52, HEADER_HEIGHT / 2);
+      context.fillText("REGION TRACK", 101, HEADER_HEIGHT / 2);
+      context.fillText("ROW", 190, HEADER_HEIGHT / 2);
+      context.fillText("RELATIVE ACTIVITY · GROUPS = FRACTION ABOVE OWN P90", GUTTER_WIDTH + 12, HEADER_HEIGHT / 2);
       context.textAlign = "right";
       context.fillText("time →", this.width - 10, HEADER_HEIGHT / 2);
       context.textAlign = "left";
@@ -350,7 +461,7 @@
       }
       if (selectedRegion) {
         if (row.kind === "unit") return (row.unit.region || "Unmapped") !== selectedRegion;
-        return !row.units.some((unit) => (unit.region || "Unmapped") === selectedRegion);
+        return row.region !== selectedRegion && !row.units.some((unit) => (unit.region || "Unmapped") === selectedRegion);
       }
       return false;
     }
@@ -368,54 +479,178 @@
         context.fillStyle = "rgba(159,198,241,.055)";
         context.fillRect(0, y, this.width, height);
       }
-      context.strokeStyle = selected ? colors.accent : colors.line;
-      context.lineWidth = selected ? 1.5 : 1;
-      context.beginPath();
-      context.moveTo(0, y + height - .5);
-      context.lineTo(this.width, y + height - .5);
-      context.stroke();
-      this._drawAnatomy(context, colors, geometry);
+      if (selected) {
+        context.strokeStyle = colors.accentStrong;
+        context.lineWidth = 1.5;
+        context.strokeRect(.75, y + .75, this.width - 1.5, height - 1.5);
+      }
       this._drawActivity(context, colors, geometry);
       if (expanded) this._drawExpandedSpikes(context, colors, geometry);
       context.restore();
     }
 
-    _drawAnatomy(context, colors, geometry) {
-      const { row, y, height, expanded } = geometry;
-      const middle = y + Math.min(height, expanded ? 31 : height) / 2;
-      context.textBaseline = "middle";
-      context.font = '600 9px "Cascadia Mono", Consolas, monospace';
-      context.fillStyle = colors.soft;
-      if (row.kind === "aggregate") {
-        const shank = row.shankId == null ? "MIX" : String(row.shankId + 1);
-        const depth = row.minimumDepth == null ? "—" : `${Math.round(row.minimumDepth)}–${Math.round(row.maximumDepth)}`;
-        context.fillText(shank, 10, middle);
-        context.fillText(depth, 61, middle);
-        context.fillStyle = colors.warn;
-        context.fillText(`GROUP · ${row.count} Units`, 118, middle - 5);
-        context.fillStyle = colors.muted;
-        context.font = '500 8px "Cascadia Mono", Consolas, monospace';
-        context.fillText(row.region, 118, middle + 7);
-      } else {
-        const unit = row.unit;
-        const shank = finiteOrNull(unit.shankId);
-        context.fillText(shank == null ? "—" : String(shank + 1), 10, middle);
-        context.fillText(finiteOrNull(unit.depthUm ?? unit.depth) == null ? "—" : String(Math.round(unit.depthUm ?? unit.depth)), 61, middle);
-        context.fillStyle = unit.regionColor || colors.muted;
-        context.fillRect(108, y + 4, 3, Math.max(4, Math.min(height - 8, expanded ? 21 : height - 8)));
-        context.fillStyle = colors.soft;
-        context.fillText(`Unit ${Number(unit.id)}`, 118, middle - (expanded ? 5 : 0));
-        if (expanded) {
-          context.fillStyle = colors.muted;
-          context.font = '500 8px "Cascadia Mono", Consolas, monospace';
-          context.fillText(unit.region || "Unmapped", 118, middle + 8);
+    _rowShank(row) {
+      return row.kind === "unit" ? finiteOrNull(row.unit.shankId) : row.shankId;
+    }
+
+    _rowRegion(row) {
+      return row.kind === "unit" ? spatialRegion(row.unit) : row.region;
+    }
+
+    _rowRegionKey(row) {
+      if (row.kind === "unit") return anatomyBoundaryKey(row.unit);
+      return anatomyBoundaryKey(row.units[0]);
+    }
+
+    _sections(keyFor) {
+      const sections = [];
+      this.rowGeometry.forEach((geometry) => {
+        const key = keyFor(geometry.row);
+        const previous = sections[sections.length - 1];
+        if (previous && previous.key === key) {
+          previous.height = geometry.y + geometry.height - previous.y;
+          previous.rows.push(geometry.row);
+        } else {
+          sections.push({ key, y: geometry.y, height: geometry.height, rows: [geometry.row] });
         }
-      }
-      context.strokeStyle = colors.lineStrong;
+      });
+      return sections;
+    }
+
+    _drawUnmappedHatch(context, x, y, width, height, colors) {
+      context.save();
       context.beginPath();
-      context.moveTo(GUTTER_WIDTH - .5, y);
-      context.lineTo(GUTTER_WIDTH - .5, y + height);
-      context.stroke();
+      context.rect(x, y, width, height);
+      context.clip();
+      context.strokeStyle = colors.lineStrong;
+      context.globalAlpha = .38;
+      for (let offset = -height; offset < width + height; offset += 9) {
+        context.beginPath();
+        context.moveTo(x + offset, y + height);
+        context.lineTo(x + offset + height, y);
+        context.stroke();
+      }
+      context.restore();
+    }
+
+    _drawSpatialIndex(context, colors) {
+      const bodyTop = HEADER_HEIGHT;
+      const bodyBottom = this.height - AXIS_HEIGHT;
+      context.save();
+      context.fillStyle = colors.background;
+      context.fillRect(0, bodyTop, GUTTER_WIDTH, bodyBottom - bodyTop);
+
+      const shankSections = this._sections((row) => String(this._rowShank(row)));
+      shankSections.forEach((section, index) => {
+        context.fillStyle = index % 2 ? colors.rowAlt : colors.row;
+        context.fillRect(0, section.y, 43, section.height);
+        context.fillStyle = colors.soft;
+        context.font = '700 11px "Cascadia Mono", Consolas, monospace';
+        context.textBaseline = "middle";
+        const shank = this._rowShank(section.rows[0]);
+        context.fillText(shank == null ? "S—" : `S${shank + 1}`, 11, section.y + section.height / 2);
+        context.strokeStyle = colors.lineStrong;
+        context.globalAlpha = .8;
+        context.beginPath();
+        context.moveTo(0, section.y + .5);
+        context.lineTo(this.width, section.y + .5);
+        context.stroke();
+        context.globalAlpha = 1;
+      });
+
+      const regionSections = this._sections((row) => this._rowRegionKey(row));
+      regionSections.forEach((section) => {
+        const first = section.rows[0];
+        const unit = first.kind === "unit" ? first.unit : first.units[0];
+        const region = this._rowRegion(first) || "Unmapped";
+        const color = first.kind === "unit" ? spatialRegionColor(unit) : first.regionColor;
+        if (color) {
+          context.save();
+          context.globalAlpha = .12;
+          context.fillStyle = color;
+          context.fillRect(94, section.y, 86, section.height);
+          context.restore();
+          context.fillStyle = color;
+          context.fillRect(94, section.y, 2.5, section.height);
+        }
+        if (region === "Unmapped") this._drawUnmappedHatch(context, 94, section.y, 86, section.height, colors);
+        context.fillStyle = colors.soft;
+        context.font = '650 9px "Cascadia Mono", Consolas, monospace';
+        context.textBaseline = "middle";
+        context.fillText(region.length > 13 ? `${region.slice(0, 12)}…` : region, 101, section.y + section.height / 2 - (section.height >= 29 && unit?.trackAmbiguous ? 5 : 0));
+        if (section.height >= 29 && unit?.trackAmbiguous) {
+          context.fillStyle = colors.muted;
+          context.font = '550 7px "Cascadia Mono", Consolas, monospace';
+          context.fillText("TRACK · UNCERTAIN", 101, section.y + section.height / 2 + 7);
+        }
+        const depths = section.rows.flatMap((row) => row.kind === "unit"
+          ? [finiteOrNull(row.unit.depthUm ?? row.unit.depth)]
+          : [row.minimumDepth, row.maximumDepth]).filter((value) => value != null);
+        if (depths.length) {
+          context.fillStyle = colors.muted;
+          context.font = '550 8px "Cascadia Mono", Consolas, monospace';
+          context.textBaseline = "top";
+          context.fillText(String(Math.round(Math.min(...depths))), 51, section.y + 3);
+          if (section.height >= 28) {
+            context.textBaseline = "bottom";
+            context.fillText(String(Math.round(Math.max(...depths))), 51, section.y + section.height - 3);
+          }
+        }
+        context.strokeStyle = colors.line;
+        context.beginPath();
+        context.moveTo(43, section.y + .5);
+        context.lineTo(GUTTER_WIDTH, section.y + .5);
+        context.stroke();
+      });
+
+      this.rowGeometry.forEach(({ row, y, height, expanded }) => {
+        const middle = y + Math.min(height, expanded ? 31 : height) / 2;
+        const selected = row.kind === "unit" && Number(row.unit.id) === finiteOrNull(this.state.selectedUnitId);
+        const groupSelected = row.kind === "aggregate" && row.key === this.state.selectedGroupKey;
+        context.textBaseline = "middle";
+        context.fillStyle = selected ? colors.accentStrong : row.kind === "aggregate" ? colors.warn : colors.soft;
+        context.font = `${selected ? 700 : 620} ${selected ? 10 : 9}px "Cascadia Mono", Consolas, monospace`;
+        if (row.kind === "aggregate") {
+          context.fillText(`◇ ${row.count} ${row.count === 1 ? "Unit" : "Units"}`, 190, middle - (height >= 30 ? 5 : 0));
+          if (height >= 30) {
+            context.fillStyle = colors.muted;
+            context.font = '550 7px "Cascadia Mono", Consolas, monospace';
+            const depth = row.minimumDepth == null ? "depth —" : `${Math.round(row.minimumDepth)}–${Math.round(row.maximumDepth)} µm`;
+            context.fillText(depth, 190, middle + 7);
+          }
+        } else {
+          context.fillText(`Unit ${Number(row.unit.id)}`, 190, middle - (expanded ? 5 : 0));
+          if (expanded) {
+            context.fillStyle = colors.muted;
+            context.font = '550 8px "Cascadia Mono", Consolas, monospace';
+            context.fillText(unitRegion(row.unit), 190, middle + 8);
+          } else if (unitRegion(row.unit) === "Unmapped") {
+            context.strokeStyle = colors.muted;
+            context.strokeRect(181.5, middle - 2.5, 4, 4);
+          }
+        }
+        if (selected || groupSelected) {
+          context.strokeStyle = colors.accentStrong;
+          context.lineWidth = 1.5;
+          context.strokeRect(1, y + 1, GUTTER_WIDTH - 2, height - 2);
+          context.fillStyle = colors.accentStrong;
+          context.beginPath();
+          context.moveTo(44, middle);
+          context.lineTo(50, middle - 4);
+          context.lineTo(50, middle + 4);
+          context.closePath();
+          context.fill();
+        }
+      });
+
+      context.strokeStyle = colors.lineStrong;
+      [43.5, 93.5, 180.5, GUTTER_WIDTH - .5].forEach((x) => {
+        context.beginPath();
+        context.moveTo(x, bodyTop);
+        context.lineTo(x, bodyBottom);
+        context.stroke();
+      });
+      context.restore();
     }
 
     _drawActivity(context, colors, geometry) {
@@ -433,16 +668,20 @@
         if (!value) continue;
         const x0 = plotLeft + (bin - binStart) / visibleBins * plotWidth;
         const x1 = plotLeft + (bin - binStart + 1) / visibleBins * plotWidth;
-        const alpha = row.kind === "aggregate" ? .12 + value / 255 * .72 : .08 + value / 255 * .82;
+        const scaled = Math.pow(value / 255, row.kind === "aggregate" ? .72 : .88);
+        const alpha = row.kind === "aggregate" ? .025 + scaled * .76 : .02 + scaled * .62;
         context.fillStyle = row.kind === "aggregate"
           ? `rgba(209,173,114,${alpha.toFixed(3)})`
           : `rgba(159,198,241,${alpha.toFixed(3)})`;
         context.fillRect(x0, y + 2, Math.max(1, x1 - x0 + .2), Math.max(1, textureHeight - 4));
       }
       if (row.kind === "aggregate") {
-        context.strokeStyle = "rgba(209,173,114,.42)";
-        context.setLineDash([4, 4]);
-        context.strokeRect(plotLeft + .5, y + 2.5, plotWidth - 1, Math.max(1, textureHeight - 5));
+        context.strokeStyle = "rgba(209,173,114,.18)";
+        context.setLineDash([2, 5]);
+        context.beginPath();
+        context.moveTo(plotLeft, y + textureHeight - 2.5);
+        context.lineTo(this.width, y + textureHeight - 2.5);
+        context.stroke();
         context.setLineDash([]);
       }
     }
@@ -452,33 +691,65 @@
       const unit = row.unit;
       const plotLeft = GUTTER_WIDTH;
       const plotWidth = Math.max(1, this.width - plotLeft);
-      const selected = this.state.selectedInterval;
-      const rangeStart = selected ? Number(selected.start) : Number(this.state.visibleRange.start);
-      const rangeEnd = selected ? Number(selected.end) : Number(this.state.visibleRange.end);
+      const rangeStart = Number(this.state.visibleRange.start);
+      const rangeEnd = Number(this.state.visibleRange.end);
       const span = Math.max(.000001, rangeEnd - rangeStart);
       const top = y + 31;
-      context.fillStyle = "rgba(0,0,0,.2)";
+      context.fillStyle = "rgba(0,0,0,.16)";
       context.fillRect(plotLeft, top, plotWidth, height - 33);
       context.fillStyle = colors.accentStrong;
-      context.font = '600 9px "Cascadia Mono", Consolas, monospace';
-      context.fillText(`${formatIdentity(unit)} · spikes in ${rangeStart.toFixed(3)}–${rangeEnd.toFixed(3)} s`, plotLeft + 9, y + 15);
+      context.font = '650 10px "Cascadia Mono", Consolas, monospace';
+      context.fillText(formatIdentity(unit), plotLeft + 9, y + 15);
       const left = lowerBound(this.selectedSpikeTimes, rangeStart);
       const right = lowerBound(this.selectedSpikeTimes, rangeEnd + Number.EPSILON);
-      const stride = Math.max(1, Math.ceil((right - left) / Math.max(1, plotWidth * 1.5)));
-      context.strokeStyle = colors.accentStrong;
-      context.globalAlpha *= .86;
-      context.beginPath();
-      for (let index = left; index < right; index += stride) {
-        const x = plotLeft + (Number(this.selectedSpikeTimes[index]) - rangeStart) / span * plotWidth;
-        context.moveTo(x, top + 8);
-        context.lineTo(x, y + height - 9);
+      const visibleSpikes = right - left;
+      const mode = temporalDetailMode(span, plotWidth, visibleSpikes);
+
+      if (mode === "individual spikes") {
+        context.strokeStyle = colors.accentStrong;
+        context.globalAlpha *= .84;
+        context.beginPath();
+        for (let index = left; index < right; index += 1) {
+          const x = plotLeft + (Number(this.selectedSpikeTimes[index]) - rangeStart) / span * plotWidth;
+          context.moveTo(x, top + 8);
+          context.lineTo(x, y + height - 10);
+        }
+        context.stroke();
+        context.globalAlpha = 1;
+      } else if (this.selectedRateBins.length) {
+        const rateDuration = Math.max(.000001, this.selectedDuration || this.data.duration);
+        const values = [];
+        for (let index = 0; index < this.selectedRateBins.length; index += 1) {
+          const time = index / this.selectedRateBins.length * rateDuration;
+          if (time >= rangeStart && time <= rangeEnd) values.push(Number(this.selectedRateBins[index] || 0));
+        }
+        const positive = values.filter((value) => value > 0).sort((a, b) => a - b);
+        const robustMaximum = positive.length ? positive[Math.floor((positive.length - 1) * .95)] : 1;
+        context.beginPath();
+        context.moveTo(plotLeft, y + height - 9);
+        let points = 0;
+        for (let index = 0; index < this.selectedRateBins.length; index += 1) {
+          const time = index / this.selectedRateBins.length * rateDuration;
+          if (time < rangeStart || time > rangeEnd) continue;
+          const x = plotLeft + (time - rangeStart) / span * plotWidth;
+          const normalized = Math.min(1, Number(this.selectedRateBins[index] || 0) / Math.max(1, robustMaximum));
+          const lineHeight = normalized * (height - 51);
+          context.lineTo(x, y + height - 9 - lineHeight);
+          points += 1;
+        }
+        if (points) {
+          context.lineTo(this.width, y + height - 9);
+          context.closePath();
+          context.fillStyle = mode === "recording density" ? "rgba(159,198,241,.18)" : "rgba(159,198,241,.24)";
+          context.fill();
+          context.strokeStyle = "rgba(193,221,251,.66)";
+          context.stroke();
+        }
       }
-      context.stroke();
-      context.globalAlpha = 1;
       context.fillStyle = colors.muted;
-      context.font = '500 8px "Cascadia Mono", Consolas, monospace';
+      context.font = '550 8px "Cascadia Mono", Consolas, monospace';
       context.textAlign = "right";
-      context.fillText(`${right - left} spikes${stride > 1 ? ` · display stride ${stride}` : ""}`, this.width - 9, y + height - 5);
+      context.fillText(`${visibleSpikes} spikes · ${mode}`, this.width - 9, y + height - 5);
       context.textAlign = "left";
     }
 
@@ -500,12 +771,15 @@
       if (!interval) return;
       const left = this._timeToX(Math.min(interval.start, interval.end));
       const right = this._timeToX(Math.max(interval.start, interval.end));
-      context.fillStyle = "rgba(103,155,207,.13)";
+      context.fillStyle = "rgba(103,155,207,.07)";
       context.fillRect(left, HEADER_HEIGHT, Math.max(1, right - left), this.height - HEADER_HEIGHT - AXIS_HEIGHT);
-      context.strokeStyle = colors.accent;
-      context.setLineDash([3, 3]);
-      context.strokeRect(left + .5, HEADER_HEIGHT + .5, Math.max(1, right - left - 1), this.height - HEADER_HEIGHT - AXIS_HEIGHT - 1);
-      context.setLineDash([]);
+      context.strokeStyle = "rgba(159,198,241,.58)";
+      context.beginPath();
+      context.moveTo(left + .5, HEADER_HEIGHT);
+      context.lineTo(left + .5, this.height - AXIS_HEIGHT);
+      context.moveTo(right + .5, HEADER_HEIGHT);
+      context.lineTo(right + .5, this.height - AXIS_HEIGHT);
+      context.stroke();
     }
 
     _drawCursor(context, colors) {
@@ -607,16 +881,14 @@
       }
       const time = this._xToTime(point.x);
       if (row.kind === "aggregate") {
-        this.expandedGroupKey = row.key;
-        this._emitState({ selectedGroupKey: row.key, selectedUnitId: null, expandedUnitId: null, selectedShank: row.shankId, selectedRegion: row.region, cursorTime: time });
+        const groupFocusPath = [...(row.ancestors || []), row.key];
+        this._emitState({ selectedGroupKey: row.key, groupFocusPath, selectedUnitId: null, expandedUnitId: null, selectedShank: row.shankId, selectedRegion: row.region, cursorTime: time });
         this.callbacks.onAggregateSelect?.(row);
-        this._prepareRows();
-        this.render();
         this.callbacks.onCursorCommit?.(time);
         return;
       }
       const id = Number(row.unit.id);
-      this._emitState({ selectedUnitId: id, expandedUnitId: id, selectedGroupKey: null, selectedShank: finiteOrNull(row.unit.shankId), selectedRegion: row.unit.region || "Unmapped", cursorTime: time });
+      this._emitState({ selectedUnitId: id, expandedUnitId: id, selectedGroupKey: null, groupFocusPath: [], selectedShank: finiteOrNull(row.unit.shankId), selectedRegion: row.unit.region || "Unmapped", cursorTime: time });
       this.callbacks.onUnitSelect?.(id, row.unit);
       this.callbacks.onCursorCommit?.(time);
     }
@@ -644,7 +916,7 @@
         return;
       }
       if (event.key === "Escape") {
-        this._emitState({ selectedInterval: null, selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, selectedShank: null, selectedRegion: null });
+        this._emitState({ selectedInterval: null, selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, groupFocusPath: [], selectedShank: null, selectedRegion: null });
         return;
       }
       const span = Number(this.state.visibleRange.end) - Number(this.state.visibleRange.start);
@@ -658,7 +930,7 @@
       if (!this.tooltip || !row) { if (this.tooltip) this.tooltip.hidden = true; return; }
       const identity = row.kind === "unit"
         ? formatIdentity(row.unit)
-        : `Aggregate · ${row.count} Units · ${row.shankId == null ? "mixed shanks" : `Shank ${row.shankId + 1}`} · ${row.minimumDepth == null ? "depth unavailable" : `${Math.round(row.minimumDepth)}–${Math.round(row.maximumDepth)} µm`} · ${row.region}`;
+        : `Anatomical group · ${row.count} Units · ${row.shankId == null ? "Shank —" : `Shank ${row.shankId + 1}`} · ${row.minimumDepth == null ? "depth unavailable" : `${Math.round(row.minimumDepth)}–${Math.round(row.maximumDepth)} µm`} · ${row.region} ${row.regionSource === "probe-track" ? "probe track" : "unit mapping"} · activity = fraction above each Unit's own p90`;
       this.tooltip.textContent = `${identity}${time == null ? "" : ` · ${time.toFixed(3)} s`}`;
       this.tooltip.hidden = false;
       const host = this.canvas.parentElement?.getBoundingClientRect();
@@ -679,6 +951,10 @@
   return {
     GUTTER_WIDTH,
     stableUnitOrder,
+    overviewRowTarget,
+    anatomicalGroups,
+    anatomyBoundaryKey,
+    temporalDetailMode,
     buildDisplayRows,
     formatIdentity,
     ActivityAnatomyCanvas

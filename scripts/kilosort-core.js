@@ -457,6 +457,8 @@
     };
 
     const normalizedActivity = new Uint8Array(unitIds.length * binCount);
+    const unusualActivity = new Uint8Array(unitIds.length * binCount);
+    const unusualThresholdCounts = new Uint32Array(unitIds.length);
     unitIds.forEach((id, row) => {
       const count = Number(countsByUnit.get(Number(id)) || 0);
       unitCounts[row] = count;
@@ -481,8 +483,12 @@
       }
       positive.sort((left, right) => left - right);
       const robustMaximum = positive.length ? positive[Math.min(positive.length - 1, Math.floor((positive.length - 1) * .95))] : 1;
+      const recordingCounts = Array.from(binnedCounts.subarray(offset, offset + binCount)).sort((left, right) => left - right);
+      const unusualThreshold = recordingCounts[Math.min(recordingCounts.length - 1, Math.ceil((recordingCounts.length - 1) * .90))] || 0;
+      unusualThresholdCounts[row] = unusualThreshold;
       for (let bin = 0; bin < binCount; bin += 1) {
         normalizedActivity[offset + bin] = Math.round(Math.min(1, binnedCounts[offset + bin] / Math.max(1, robustMaximum)) * 255);
+        unusualActivity[offset + bin] = binnedCounts[offset + bin] > unusualThreshold ? 255 : 0;
       }
     });
 
@@ -497,7 +503,15 @@
       unitX,
       unitDepths,
       unitShankIds,
-      normalizedActivity
+      normalizedActivity,
+      unusualActivity,
+      unusualThresholdCounts,
+      semantics: {
+        individual: "spike count per recording-wide bin divided by the Unit's non-empty-bin 95th percentile and clipped to [0, 1]",
+        aggregate: "fraction of constituent Units whose bin count is strictly above that Unit's recording-wide 90th-percentile bin count",
+        unusualThreshold: "recording-wide 90th percentile across all bins for each Unit; sparse Units with a zero threshold are unusual in bins containing at least one spike",
+        rawFiringRate: false
+      }
     };
   }
 

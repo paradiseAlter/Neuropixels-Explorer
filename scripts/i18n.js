@@ -657,11 +657,12 @@
       "workspace.activityLoading": "Preparing recording overview…",
       "workspace.legendAria": "Activity display semantics",
       "workspace.unitTexture": "Unit · within-Unit normalized",
-      "workspace.aggregateTexture": "Group · fraction active",
+      "workspace.aggregateTexture": "Group · fraction unusually active",
       "workspace.canvasAria": "Recording-wide Unit activity with aligned shank, depth, and brain region",
       "workspace.activityEmpty": "No activity overview is available.",
-      "workspace.hint": "CLICK a Unit to expand · CLICK anatomy to emphasize · DRAG time to select · WHEEL to zoom · DOUBLE CLICK to reset",
-      "workspace.videoRegionAria": "Synchronized behavior region"
+      "workspace.hint": "CLICK a group to focus or Unit to expand · CLICK anatomy to emphasize · DRAG time to select · WHEEL to zoom · DOUBLE CLICK to reset",
+      "workspace.videoRegionAria": "Synchronized behavior region",
+      "workspace.videoSplitter": "Resize activity and behavior regions"
     },
     "zh-CN": {
       "workspace.aria": "实验活动、解剖与行为工作区",
@@ -678,11 +679,12 @@
       "workspace.activityLoading": "正在准备记录总览…",
       "workspace.legendAria": "活动显示语义",
       "workspace.unitTexture": "单元 · 单元内归一化",
-      "workspace.aggregateTexture": "分组 · 活跃单元比例",
+      "workspace.aggregateTexture": "分组 · 异常活跃单元比例",
       "workspace.canvasAria": "与 shank、深度及脑区对齐的全记录单元活动",
       "workspace.activityEmpty": "没有可用的活动总览。",
-      "workspace.hint": "单击单元展开 · 单击解剖信息强调 · 拖动选择时间 · 滚轮缩放 · 双击复位",
-      "workspace.videoRegionAria": "同步行为视频区域"
+      "workspace.hint": "单击分组聚焦或单元展开 · 单击解剖信息强调 · 拖动选择时间 · 滚轮缩放 · 双击复位",
+      "workspace.videoRegionAria": "同步行为视频区域",
+      "workspace.videoSplitter": "调整神经活动与行为视频区域宽度"
     },
     es: {
       "workspace.aria": "Área de actividad, anatomía y conducta del experimento",
@@ -699,11 +701,12 @@
       "workspace.activityLoading": "Preparando la vista general…",
       "workspace.legendAria": "Semántica de actividad mostrada",
       "workspace.unitTexture": "Unidad · normalizada dentro de la Unidad",
-      "workspace.aggregateTexture": "Grupo · fracción activa",
+      "workspace.aggregateTexture": "Grupo · fracción inusualmente activa",
       "workspace.canvasAria": "Actividad de Unidades alineada con shank, profundidad y región cerebral",
       "workspace.activityEmpty": "No hay una vista general de actividad disponible.",
-      "workspace.hint": "CLIC en Unidad para expandir · CLIC en anatomía para resaltar · ARRASTRAR para intervalo · RUEDA para zoom · DOBLE CLIC para restablecer",
-      "workspace.videoRegionAria": "Región de vídeo conductual sincronizado"
+      "workspace.hint": "CLIC en grupo para enfocar o Unidad para expandir · CLIC en anatomía para resaltar · ARRASTRAR para intervalo · RUEDA para zoom · DOBLE CLIC para restablecer",
+      "workspace.videoRegionAria": "Región de vídeo conductual sincronizado",
+      "workspace.videoSplitter": "Redimensionar las regiones de actividad y conducta"
     }
   };
 

@@ -102,7 +102,7 @@
                 </div>
                 <div class="activity-legend" aria-label="Activity display semantics" data-i18n-aria-label="workspace.legendAria">
                   <span><i class="unit-texture"></i><b data-i18n="workspace.unitTexture">Unit · within-Unit normalized</b></span>
-                  <span><i class="aggregate-texture"></i><b data-i18n="workspace.aggregateTexture">Group · fraction active</b></span>
+                  <span><i class="aggregate-texture"></i><b data-i18n="workspace.aggregateTexture">Group · fraction unusually active</b></span>
                 </div>
               </header>
               <div class="activity-canvas-frame" id="activity-canvas-frame">
@@ -110,8 +110,9 @@
                 <div class="activity-tooltip" id="activity-tooltip" role="status" hidden></div>
                 <div class="activity-empty" id="activity-empty" data-i18n="workspace.activityEmpty">No activity overview is available.</div>
               </div>
-              <footer class="activity-hint" data-i18n="workspace.hint">CLICK a Unit to expand · CLICK anatomy to emphasize · DRAG time to select · WHEEL to zoom · DOUBLE CLICK to reset</footer>
+              <footer class="activity-hint" data-i18n="workspace.hint">CLICK a group to focus or Unit to expand · CLICK anatomy to emphasize · DRAG time to select · WHEEL to zoom · DOUBLE CLICK to reset</footer>
             </section>
+            <div class="video-region-splitter" id="video-region-splitter" role="separator" aria-orientation="vertical" aria-label="Resize activity and behavior regions" data-i18n-aria-label="workspace.videoSplitter" tabindex="0"></div>
             <aside class="experiment-video-region" id="experiment-video-region" aria-label="Synchronized behavior region" data-i18n-aria-label="workspace.videoRegionAria"></aside>
           </div>
         </section>
@@ -339,17 +340,17 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="./scripts/kilosort-core.js" defer></script>
+  <script src="./scripts/kilosort-core.js?v=3.4.0-round-2-5" defer></script>
   <script src="./scripts/region-core.js" defer></script>
   <script src="./scripts/help-content.js?v=3.3.0-ui-preview-5" defer></script>
   <script src="./scripts/data-status.js?v=3.3.0" defer></script>
   <script src="./scripts/stream-contracts.js?v=3.3.0" defer></script>
   <script src="./scripts/video-sync.js?v=3.3.0" defer></script>
-  <script src="./scripts/activity-overview.js?v=3.4.0-checkpoint-a" defer></script>
+  <script src="./scripts/activity-overview.js?v=3.4.0-round-2-5" defer></script>
   <script src="./scripts/plots.js" defer></script>
   <script src="./scripts/probe-view.js?v=3.3.0-ui-preview-5" defer></script>
-  <script src="./scripts/database-client.js?v=3.3.0" defer></script>
+  <script src="./scripts/database-client.js?v=3.4.0-round-2-5" defer></script>
   <script src="./scripts/workspace-layout.js?v=3.3.0-ui-preview-5" defer></script>
-  <script src="./scripts/app.js?v=3.3.0-ui-preview-5" defer></script>
+  <script src="./scripts/app.js?v=3.4.0-round-2-5" defer></script>
 </body>
 </html>

@@ -9,6 +9,7 @@ const probeView = require("../scripts/probe-view.js");
 const workspaceLayout = require("../scripts/workspace-layout.js");
 const theme = require("../scripts/theme.js");
 const dataStatus = require("../scripts/data-status.js");
+const activityOverview = require("../scripts/activity-overview.js");
 
 const codeOnly = process.argv.includes("--code-only");
 const repositoryRoot = path.resolve(__dirname, "..");
@@ -230,6 +231,8 @@ function buffer(directory, name) {
   const overviewBuildMs = performance.now() - overviewStarted;
   assert(exp1Overview.unitIds.length === 103, `Expected 103 Unit rows in the exp1 overview, found ${exp1Overview.unitIds.length}`);
   assert(exp1Overview.normalizedActivity.length === exp1Overview.unitIds.length * 512, "The overview matrix does not map every Unit to every time bin");
+  assert(exp1Overview.unusualActivity.length === exp1Overview.unitIds.length * 512, "The relative-activity matrix does not map every Unit to every time bin");
+  assert(exp1Overview.unusualThresholdCounts.length === exp1Overview.unitIds.length, "Every Unit must retain its own p90 activity threshold");
   assert(new Set(exp1Overview.unitShankIds).size === 4, "The overview did not retain all four shank IDs");
   assert(Math.abs(exp1Overview.binSeconds * exp1Overview.binCount - exp1Overview.duration) < 1e-9, "Overview bins do not map back to the recording duration");
 
@@ -249,6 +252,48 @@ function buffer(directory, name) {
   assert(realDataStatus.optional.every((item) => item.state === "available"), "Real Unit- and Probe-region inputs should appear as available optional data");
   const exp1Unit7Track = regionResult.probeTrack.segments.find((segment) => segment.probeId === 0 && segment.startDepthUm <= 240 && segment.endDepthUm >= 240);
   assert(exp1Unit7Track?.region === "MPN", `Shank 1 at 240 µm should map to MPN, found ${exp1Unit7Track?.region}`);
+  const exp1Units = Array.from(exp1Overview.unitIds, (id, sourceIndex) => {
+    const shankId = Number(exp1Overview.unitShankIds[sourceIndex]);
+    const depthUm = Number(exp1Overview.unitDepths[sourceIndex]);
+    const track = regionResult.probeTrack.segments.find((segment) => segment.probeId === shankId && depthUm >= segment.startDepthUm && depthUm < segment.endDepthUm);
+    return {
+      id: Number(id), sourceIndex, shankId, depthUm,
+      region: regionResult.mapping.get(`1::${Number(id)}`)?.region || "Unmapped",
+      trackRegion: track?.region || "",
+      trackRegionColor: track?.color || "",
+      trackStartDepthUm: track?.startDepthUm ?? null,
+      trackEndDepthUm: track?.endDepthUm ?? null
+    };
+  });
+  const exp1Rows = activityOverview.buildDisplayRows(exp1Units, exp1Overview.normalizedActivity, 512, activityOverview.overviewRowTarget(760), [], null, exp1Overview.unusualActivity);
+  assert(exp1Rows.length >= 10 && exp1Rows.length <= 18, `Expected roughly 10-18 desktop overview rows, found ${exp1Rows.length}`);
+  assert(exp1Rows.every((row) => row.kind === "unit" || new Set(row.units.map((unit) => unit.shankId)).size === 1), "Real-data overview groups must never cross shanks");
+  assert(exp1Rows.every((row) => row.kind === "unit" || new Set(row.units.map(activityOverview.anatomyBoundaryKey)).size === 1), "Real-data overview groups must never cross Probe-track boundaries");
+
+  const groupFraction = (matrix) => Array.from({ length: 512 }, (_, bin) => {
+    let count = 0;
+    for (let row = 0; row < exp1Overview.unitIds.length; row += 1) if (matrix[row * 512 + bin] > 0) count += 1;
+    return count / exp1Overview.unitIds.length;
+  }).sort((left, right) => left - right);
+  const currentFraction = groupFraction(exp1Overview.normalizedActivity);
+  const unusualFraction = groupFraction(exp1Overview.unusualActivity);
+  const quantile = (values, fraction) => values[Math.floor((values.length - 1) * fraction)];
+  const semanticsAudit = {
+    currentFractionActive: { median: quantile(currentFraction, .5), p95: quantile(currentFraction, .95), binsAtLeast80Pct: currentFraction.filter((value) => value >= .8).length },
+    selectedFractionAboveP90: { median: quantile(unusualFraction, .5), p95: quantile(unusualFraction, .95), binsAtLeast80Pct: unusualFraction.filter((value) => value >= .8).length }
+  };
+  const representativeCases = {
+    mostlyUnmapped: regionResult.mapping.get("1::7") != null && exp1Units.filter((unit) => unit.region !== "Unmapped").length < exp1Units.length / 4,
+    mappedUnit: exp1Units.find((unit) => unit.id === 7)?.region || null,
+    sparseMinimumSpikes: Math.min(...exp1Overview.unitCounts),
+    highRateMaximumHz: Math.max(...exp1Overview.unitRateHz),
+    shanks: [...new Set(exp1Overview.unitShankIds)].sort((left, right) => left - right)
+  };
+  assert(representativeCases.mostlyUnmapped, "exp1 should exercise the mostly-Unmapped overview case");
+  assert(representativeCases.mappedUnit === "MPN", "exp1 Unit 7 should exercise a mapped anatomy identity");
+  assert(representativeCases.sparseMinimumSpikes <= 2, "exp1 should exercise a sparse Unit");
+  assert(representativeCases.highRateMaximumHz >= 70, "exp1 should exercise a high-rate Unit");
+  assert(representativeCases.shanks.length === 4, "exp1 should exercise all four shanks");
 
   console.log(JSON.stringify({
     status: "PASS",
@@ -262,7 +307,7 @@ function buffer(directory, name) {
     probeRegionRows: regionResult.probeTrack.rowCount,
     shankTracks: regionResult.probeTrack.probeCount,
     trackSegments: regionResult.probeTrack.segments.length,
-    activityOverview: { units: exp1Overview.unitIds.length, bins: exp1Overview.binCount, buildMs: Number(overviewBuildMs.toFixed(3)) },
+    activityOverview: { units: exp1Overview.unitIds.length, bins: exp1Overview.binCount, rowsAt760px: exp1Rows.length, buildMs: Number(overviewBuildMs.toFixed(3)), semanticsAudit, representativeCases },
     dataStatus: dataStatus.summaryText(realDataStatus),
     reviewed
   }, null, 2));

@@ -768,10 +768,15 @@ class CatalogService:
             np.add.at(counts, (row_indices[valid], time_bins[valid]), 1)
 
         normalized = np.zeros(counts.shape, dtype=np.uint8)
+        unusual = np.zeros(counts.shape, dtype=np.uint8)
+        unusual_threshold_counts = np.zeros(counts.shape[0], dtype=np.uint32)
         for row_index in range(counts.shape[0]):
             positive = counts[row_index][counts[row_index] > 0]
             robust_maximum = float(np.quantile(positive, .95, method="nearest")) if positive.size else 1.0
             normalized[row_index] = np.rint(np.minimum(1.0, counts[row_index] / max(1.0, robust_maximum)) * 255).astype(np.uint8)
+            unusual_threshold = int(np.quantile(counts[row_index], .90, method="higher"))
+            unusual_threshold_counts[row_index] = unusual_threshold
+            unusual[row_index] = np.where(counts[row_index] > unusual_threshold, 255, 0).astype(np.uint8)
 
         positions = arrays.get("spike_positions")
         spike_templates = arrays.get("spike_templates")
@@ -819,9 +824,12 @@ class CatalogService:
             "unitDepths": unit_depths,
             "unitShankIds": unit_shanks,
             "normalizedActivity": normalized.reshape(-1).astype(int).tolist(),
+            "unusualActivity": unusual.reshape(-1).astype(int).tolist(),
+            "unusualThresholdCounts": unusual_threshold_counts.astype(int).tolist(),
             "semantics": {
                 "individual": "spike count per recording-wide bin divided by the Unit's non-empty-bin 95th percentile and clipped to [0, 1]",
-                "aggregate": "fraction of constituent Units with one or more spikes in the bin",
+                "aggregate": "fraction of constituent Units whose bin count is strictly above that Unit's recording-wide 90th-percentile bin count",
+                "unusualThreshold": "recording-wide 90th percentile across all bins for each Unit; sparse Units with a zero threshold are unusual in bins containing at least one spike",
                 "rawFiringRate": False,
             },
         }

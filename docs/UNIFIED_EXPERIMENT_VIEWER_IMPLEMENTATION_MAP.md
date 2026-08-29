@@ -2,9 +2,10 @@
 
 ## Scope and status
 
-Dialogue 1 implements Round 0 through Round 2 only. Checkpoint A is the
-mandatory stop. Rounds 3-6, behavior interpretation, candidate ranking,
-saliency, and persistent disk caching remain deferred.
+Dialogue 1 implemented Round 0 through Round 2 and stopped at Checkpoint A.
+The authorized Round 2.5 correction pass is complete and stopped at Checkpoint
+B. Rounds 3-6, behavior interpretation, candidate ranking, saliency, and
+persistent disk caching remain deferred pending explicit Checkpoint B approval.
 
 ## Verified current architecture
 
@@ -62,12 +63,14 @@ paint path. The provider returns:
 - a fixed recording-wide time-bin mapping;
 - per-Unit binned spike counts converted to robust within-Unit display
   intensity;
+- a per-Unit/bin unusual-activity flag defined by counts strictly above that
+  Unit's recording-wide p90;
 - an explicit Unit-row/bin to Unit-ID/time-interval mapping.
 
 The Canvas derives viewport aggregates only when data or geometry changes.
 Individual rows display their within-Unit normalized bin count. Aggregate rows
-display the fraction of constituent Units with one or more spikes in a bin.
-Neither value is raw firing rate.
+display the fraction of constituent Units strictly above their own p90 in a
+bin. Neither value is raw firing rate.
 
 ## Planned modules and files
 
@@ -200,3 +203,102 @@ directory supplied by the Codex desktop session.
 - The initial brush selects an interval without automatically zooming into it;
   wheel zoom and double-click reset remain separate direct actions. Smooth
   semantic zoom is deferred to Round 4.
+
+## Round 2.5 verified implementation result - Checkpoint B
+
+Round 2.5 is complete and stopped at Checkpoint B. Round 3 has not started.
+
+### Semantic compression and visual hierarchy
+
+- Default row count is based on available Canvas height only and is clamped to
+  10-18 target rows. At 1920x1080, real `ks4_exp1` renders 17 anatomical
+  groups; changing to the 3840x1080 requested viewport does not add rows.
+- Groups never cross a shank or a reliable contiguous probe-track segment.
+  Where Unit anatomy is absent, ordering and fallback boundaries remain based
+  on real Unit-map/`Unmapped` continuity; probe-track labels are shown as track
+  context and are not presented as inferred Unit identity.
+- A group row is explicitly marked with a diamond and Unit count. Selecting a
+  large group replaces it in place with three or four smaller contiguous local
+  groups; continued focus reaches real Unit rows without unfolding the whole
+  recording.
+- Selecting Unit 7 shows only that Unit and at most two depth neighbors per
+  side inside its anatomical group. The remaining members stay aggregated and
+  all four shanks remain visible. Selection uses an outline and gutter marker,
+  not color alone.
+- Ordinary aggregate activity is recessed. The warm aggregate texture is the
+  fraction of constituent Units whose bin count is strictly above that Unit's
+  own recording-wide p90. Each Unit's threshold is computed across all 512
+  recording bins; a zero threshold therefore marks only non-zero bins. The
+  individual row remains robust p95-normalized display intensity.
+- On real `ks4_exp1`, the former fraction-active aggregate had median 0.592233,
+  p95 0.815534, and 37 of 512 bins at or above 0.8. The selected p90-exceedance
+  metric has median 0.038835, p95 0.330097, and zero bins at or above 0.8. This
+  preserves temporal contrast without the former saturation.
+
+### Spatial, temporal, and video behavior
+
+- The spatial gutter labels each shank once, shows meaningful depth boundaries
+  and contiguous probe-track region bands once, hatches `Unmapped`, and labels
+  ambiguity only when it exists.
+- Expanded Unit identity is explicit. The representative mapped case is
+  `Unit 7 · Shank 1 · 240 um · MPN · SQLite · legacy_unverified`; the MPN
+  probe-track band remains contextual rather than a substitute for mapping
+  provenance.
+- Expanded rows use recording density at the full range, a normalized rate
+  envelope at medium scale, and individual spike marks only at short scale.
+  Exact spikes are therefore not painted across the full recording.
+- The selected interval is a secondary translucent overlay with boundary
+  lines. The verified real-data interval is 95.894-185.477 s.
+- The video split defaults to 26%, is keyboard- and pointer-resizable from
+  20-42%, and keeps one shared cursor. Attaching the deterministic validation
+  video at the current neural cursor preserved 185.477 s (video slider
+  185.4667 s within the frame mapping).
+
+### Checkpoint B tests and performance
+
+- Activity overview semantics, anatomy boundaries, stable membership,
+  progressive focus, selected-Unit neighborhood, temporal detail, HTML wiring,
+  i18n/help, video synchronization, workspace layout, incremental ingest, and
+  safe real-data Node checks: PASS.
+- Python suite: 15/15 PASS.
+- Safe real-data validation: 18 recordings, 504 files, 1,603,487,329 bytes,
+  2,387 Units, 4,450,319 spikes, 1,402 mappings, 25 regions, 5,120 probe-region
+  rows, and four shank tracks.
+- Direct `ks4_exp1` overview builds with both 103 x 512 matrices were 63.709 ms
+  in the final validation and 73.259 ms in the earlier audit. After a fresh
+  service start the cold build was 70.642 ms and the hot cache lookup was
+  0.005 ms. The JSON response was 273,844 bytes. These are one-machine
+  observations, not general performance guarantees.
+- Browser smoke testing covered default, local group focus, mapped selected
+  Unit, interval, video, separator keyboard control, and ultrawide states. The
+  final browser console contained no warnings or errors.
+
+### Checkpoint B screenshots
+
+- `desktop-default-overview-no-video-1920x1080.jpg`
+- `desktop-group-focus-local-unfold-1920x1080.jpg`
+- `desktop-unit7-expanded-mapped-anatomy-1920x1080.jpg`
+- `desktop-unit7-expanded-mapped-interval-1920x1080.jpg`
+- `desktop-video-synced-resizable-1920x1080.jpg`
+- `ultrawide-video-unit7-synced-3840x1080.jpg`
+- `short-range-individual-spikes-video-ultrawide.jpg`
+
+The files are stored outside the repository in the Codex desktop Checkpoint B
+evidence directory.
+
+### Checkpoint B limitations and deviations
+
+- The provider still exposes one 512-bin in-memory level. Persistent and
+  multi-resolution storage, cancellation, and progress UI remain Round 3 work.
+- The real recordings do not include an attached laboratory behavior video;
+  video-present and shared-cursor behavior was verified with the existing
+  deterministic validation video only.
+- The app requested a 3840x1080 CSS viewport and retained the same row
+  structure. The Codex desktop capture surface was 3332x1080 after its sidebar
+  reservation, so the stored ultrawide bitmap is 3332x1080 even though the
+  browser layout viewport was requested at 3840x1080.
+- Mapping provenance remains `legacy_unverified` where that is what the catalog
+  reports. Round 2.5 does not promote probe-track context into confirmed Unit
+  anatomy.
+- Focused groups may temporarily exceed the default 10-18 target because local
+  replacement preserves the rest of the experiment while exposing detail.

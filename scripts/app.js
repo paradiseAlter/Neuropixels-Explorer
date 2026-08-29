@@ -57,6 +57,7 @@
     recordingPrevious: document.getElementById("recording-scroll-previous"),
     recordingNext: document.getElementById("recording-scroll-next"),
     experimentWorkspace: document.getElementById("experiment-workspace"),
+    experimentBody: document.querySelector(".experiment-body"),
     experimentRecordingName: document.getElementById("experiment-recording-name"),
     experimentFacts: document.getElementById("experiment-facts"),
     experimentTime: document.getElementById("experiment-time-readout"),
@@ -65,6 +66,7 @@
     activityTooltip: document.getElementById("activity-tooltip"),
     activityEmpty: document.getElementById("activity-empty"),
     videoHost: document.getElementById("experiment-video-region"),
+    videoSplitter: document.getElementById("video-region-splitter"),
     findUnitButton: document.getElementById("find-unit-button"),
     findUnitPopover: document.getElementById("find-unit-popover"),
     findUnitInput: document.getElementById("find-unit-input"),
@@ -192,17 +194,61 @@
     overviewToken: 0,
     activityOverviewCache: new Map(),
     activeActivityOverview: null,
+    activityLayoutSummary: null,
+    videoSplitPercent: 26,
+    pendingVideoCursorTime: null,
     experimentView: {
       visibleRange: { start: 0, end: 0 },
       cursorTime: 0,
       selectedInterval: null,
       selectedGroupKey: null,
+      groupFocusPath: [],
       selectedUnitId: null,
       selectedShank: null,
       selectedRegion: null,
       expandedUnitId: null
     }
   };
+
+  function setVideoSplitPercent(value) {
+    const percentValue = Math.max(20, Math.min(42, Number(value) || 26));
+    state.videoSplitPercent = percentValue;
+    elements.experimentBody?.style.setProperty("--video-region-width", `${percentValue}%`);
+    elements.videoSplitter?.setAttribute("aria-valuenow", String(Math.round(percentValue)));
+  }
+
+  function installVideoSplitter() {
+    const splitter = elements.videoSplitter;
+    const body = elements.experimentBody;
+    if (!splitter || !body) return;
+    splitter.setAttribute("aria-valuemin", "20");
+    splitter.setAttribute("aria-valuemax", "42");
+    splitter.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      splitter.classList.add("is-dragging");
+      splitter.setPointerCapture?.(event.pointerId);
+    });
+    splitter.addEventListener("pointermove", (event) => {
+      if (!splitter.hasPointerCapture?.(event.pointerId)) return;
+      const rectangle = body.getBoundingClientRect();
+      setVideoSplitPercent((rectangle.right - event.clientX) / Math.max(1, rectangle.width) * 100);
+    });
+    const finish = (event) => {
+      if (splitter.hasPointerCapture?.(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+      splitter.classList.remove("is-dragging");
+    };
+    splitter.addEventListener("pointerup", finish);
+    splitter.addEventListener("pointercancel", finish);
+    splitter.addEventListener("dblclick", () => setVideoSplitPercent(26));
+    splitter.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+      event.preventDefault();
+      setVideoSplitPercent(event.key === "Home" ? 26 : state.videoSplitPercent + (event.key === "ArrowLeft" ? 2 : -2));
+    });
+    setVideoSplitPercent(26);
+  }
+
+  installVideoSplitter();
 
   let helpReturnFocus = null;
   let activeHelpControl = null;
@@ -297,9 +343,20 @@
     collapse: elements.videoCollapse
   }, {
     onNeuralTime: (time, context) => handleVideoNeuralTime(time, context),
-    onStateChange: () => renderExperimentHeader(),
+    onStateChange: (snapshot) => {
+      if (snapshot?.hasSource && state.pendingVideoCursorTime != null) {
+        const desired = state.pendingVideoCursorTime;
+        state.pendingVideoCursorTime = null;
+        queueMicrotask(() => videoController?.seekNeural(desired));
+      }
+      renderExperimentHeader();
+    },
     translator: t
   });
+
+  [elements.videoGenerate, elements.videoChoose].forEach((control) => control?.addEventListener("click", () => {
+    state.pendingVideoCursorTime = Number(state.experimentView.cursorTime || 0);
+  }, { capture: true }));
 
   const activityCanvas = new ActivityAnatomyCanvas({
     canvas: elements.activityCanvas,
@@ -310,7 +367,11 @@
     onCursorCommit: (time) => videoController?.seekNeural(time),
     onUnitSelect: (unitId) => selectActivityUnit(unitId),
     onAggregateSelect: () => renderExperimentHeader(),
-    onAnatomySelect: () => renderExperimentHeader()
+    onAnatomySelect: () => renderExperimentHeader(),
+    onLayoutChange: (summary) => {
+      state.activityLayoutSummary = summary;
+      renderActivityStatus();
+    }
   });
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -725,6 +786,20 @@
     return experiment == null ? null : state.regionResult?.mapping?.get(`${experiment}::${Number(clusterId)}`) || null;
   }
 
+  function probeTrackSegmentFor(recording, shankId, depthUm) {
+    const shank = Number(shankId);
+    const depth = Number(depthUm);
+    if (!Number.isFinite(shank) || !Number.isFinite(depth)) return null;
+    const experiment = experimentNumber(recording);
+    const candidates = (state.regionResult?.probeTrack?.segments || []).filter((segment) => (
+      Number(segment.probeId) === shank
+      && depth >= Number(segment.startDepthUm)
+      && depth < Number(segment.endDepthUm)
+      && (segment.experiment == null || Number(segment.experiment) === experiment)
+    ));
+    return candidates.find((segment) => segment.experiment != null) || candidates[0] || null;
+  }
+
   function normalizeActivityOverview(result, recording) {
     const ids = result?.unitIds || [];
     const catalogById = new Map((recording?.units || []).map((unit) => [Number(unit.cluster_id), unit]));
@@ -737,6 +812,9 @@
       const catalogDepth = nullableNumber(catalog?.probe_depth_um);
       const rawShank = nullableNumber(result.unitShankIds?.[sourceIndex]);
       const catalogShank = nullableNumber(catalog?.shank_id);
+      const depthUm = catalogDepth ?? rawDepth;
+      const shankId = catalogShank ?? (rawShank != null && rawShank >= 0 ? rawShank : null);
+      const trackSegment = probeTrackSegmentFor(recording, shankId, depthUm);
       const label = labelFor(recording, id);
       return {
         sourceIndex,
@@ -744,11 +822,17 @@
         count: Number(result.unitCounts?.[sourceIndex] || 0),
         rateHz: Number(result.unitRateHz?.[sourceIndex] || 0),
         x: Number.isFinite(Number(result.unitX?.[sourceIndex])) ? Number(result.unitX[sourceIndex]) : null,
-        depthUm: catalogDepth ?? rawDepth,
-        shankId: catalogShank ?? (rawShank != null && rawShank >= 0 ? rawShank : null),
+        depthUm,
+        shankId,
         region: region?.region || catalog?.brain_region || t("units.unmapped"),
         regionColor: region?.color || catalog?.atlas_color_hex || "",
         regionSource: region?.source || catalog?.region_annotation_status || "",
+        trackRegion: trackSegment?.region || "",
+        trackRegionColor: trackSegment?.color || "",
+        trackStartDepthUm: nullableNumber(trackSegment?.startDepthUm),
+        trackEndDepthUm: nullableNumber(trackSegment?.endDepthUm),
+        trackAmbiguous: Number(trackSegment?.ambiguousDepths || 0) > 0,
+        trackSource: trackSegment ? state.regionResult?.probeTrack?.source || "" : "",
         quality: label.quality || "unknown"
       };
     });
@@ -758,6 +842,8 @@
       binCount: Number(result.binCount || 512),
       binSeconds: Number(result.binSeconds || (Number(result.duration || recording?.duration || 0) / Number(result.binCount || 512)) || 1),
       normalizedActivity: result.normalizedActivity instanceof Uint8Array ? result.normalizedActivity : Uint8Array.from(result.normalizedActivity || []),
+      unusualActivity: result.unusualActivity instanceof Uint8Array ? result.unusualActivity : Uint8Array.from(result.unusualActivity || []),
+      unusualThresholdCounts: result.unusualThresholdCounts instanceof Uint32Array ? result.unusualThresholdCounts : Uint32Array.from(result.unusualThresholdCounts || []),
       units
     };
   }
@@ -788,6 +874,17 @@
       ? `${Number(interval.start).toFixed(3)}–${Number(interval.end).toFixed(3)} s`
       : `${Number(state.experimentView.cursorTime || 0).toFixed(3)} s`;
     elements.inspectUnitButton.disabled = state.experimentView.selectedUnitId == null;
+  }
+
+  function renderActivityStatus() {
+    const overview = state.activeActivityOverview;
+    if (!overview) return;
+    const layout = state.activityLayoutSummary;
+    const rows = layout
+      ? `${layout.aggregateRows} anatomical groups${layout.unitRows ? ` + ${layout.unitRows} Unit rows` : ""}`
+      : "anatomical overview";
+    const selected = state.experimentView.selectedUnitId == null ? "" : ` · Unit ${Number(state.experimentView.selectedUnitId)} expanded`;
+    elements.activityStatus.textContent = `${number(overview.units.length)} Units · ${rows} · ${number(overview.binCount)} bins × ${Number(overview.binSeconds).toFixed(3)} s · group = fraction above own p90${selected}`;
   }
 
   function handleExperimentViewChange(patch, snapshot = null) {
@@ -839,6 +936,7 @@
       selectedUnitId: normalized,
       expandedUnitId: normalized,
       selectedGroupKey: null,
+      groupFocusPath: [],
       selectedShank: unit.shankId,
       selectedRegion: unit.region || t("units.unmapped")
     });
@@ -848,7 +946,7 @@
       if (recording !== state.activeRecording || Number(state.experimentView.selectedUnitId) !== normalized) return;
       const entry = state.openUnits.get(viewKey(recording, normalized));
       if (entry?.result) activityCanvas.setSelectedUnitData(entry.result);
-      elements.activityStatus.textContent = `${number(state.activeActivityOverview.units.length)} Units · ${number(state.activeActivityOverview.binCount)} recording-wide bins · selected Unit expanded in place`;
+      renderActivityStatus();
       renderExperimentHeader();
     } catch (error) {
       elements.activityStatus.textContent = `Unit ${normalized} · ${error.message}`;
@@ -858,11 +956,13 @@
   async function refreshExperimentWorkspace(recording) {
     const token = ++state.overviewToken;
     state.activeActivityOverview = null;
+    state.activityLayoutSummary = null;
     state.experimentView = {
       visibleRange: { start: 0, end: Number(recording?.duration || 0) },
       cursorTime: 0,
       selectedInterval: null,
       selectedGroupKey: null,
+      groupFocusPath: [],
       selectedUnitId: null,
       selectedShank: null,
       selectedRegion: null,
@@ -877,14 +977,14 @@
       const raw = await loadRecordingActivityOverview(recording);
       if (token !== state.overviewToken || recording !== state.activeRecording) return;
       const overview = normalizeActivityOverview(raw, recording);
+      overview.providerComputeMs = Number(raw.server?.computeMs);
+      overview.totalLoadMs = performance.now() - started;
       state.activeActivityOverview = overview;
       state.experimentView.visibleRange = { start: 0, end: overview.duration };
       recording.unitSummaryMap = new Map(overview.units.map((unit) => [Number(unit.id), { id: Number(unit.id), count: unit.count, rateHz: unit.rateHz }]));
       activityCanvas.setData(overview);
       activityCanvas.setViewState(state.experimentView);
-      const elapsed = performance.now() - started;
-      const providerMs = Number(raw.server?.computeMs);
-      elements.activityStatus.textContent = `${number(overview.units.length)} Units · ${number(overview.binCount)} recording-wide bins · prepared ${Number.isFinite(providerMs) ? `${providerMs.toFixed(1)} ms provider` : `${elapsed.toFixed(1)} ms`}`;
+      renderActivityStatus();
       renderUnitList();
       renderExperimentHeader();
     } catch (error) {

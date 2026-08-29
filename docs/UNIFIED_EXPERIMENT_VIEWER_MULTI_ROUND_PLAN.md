@@ -23,6 +23,15 @@ grows:
 > Can the user naturally understand the whole experiment through information
 > organization and interaction, without intelligent recommendations?
 
+After the Checkpoint A review, the authorized correction boundary is:
+
+> Round 2.5 -> Checkpoint B -> STOP
+
+Round 2.5 may improve overview readability, semantic compression, progressive
+local focus, temporal detail, and video layout inside the existing in-memory
+overview architecture. It does not authorize Round 3 storage, behavior
+classification, ranking, saliency, or persistent disk caching.
+
 ## Dialogue protocol
 
 At the beginning of every implementation dialogue:
@@ -52,8 +61,8 @@ Do not mark a visual round complete because the new layout merely renders.
 | Dialogue | Source scope | State | Exit gate |
 | --- | --- | --- | --- |
 | 1 | Rounds 0-2 | Complete; stopped at Checkpoint A | Checkpoint A mandatory stop |
-| 2 | Checkpoint A review/corrections | Ready for user review | Explicit visual and interaction approval |
-| 3 | Round 3 | Blocked on Checkpoint A approval | Cache semantics and mapping review |
+| 2 | Round 2.5 Checkpoint A corrections | Complete; stopped at Checkpoint B | Checkpoint B mandatory stop |
+| 3 | Round 3 | Blocked on Checkpoint B approval | Cache semantics and mapping review |
 | 4 | Round 4 | Blocked on Round 3 | Progressive-focus and synchronization review |
 | 5 | Round 5 | Blocked on Round 4 | Diagnostic parity and accessibility review |
 | 6 | Round 6 | Blocked on Round 5 | Final validation and performance acceptance |
@@ -277,9 +286,26 @@ Possible outcomes:
 > anatomy-focus, and video/no-video states; implement the corrections; rerun the
 > relevant tests; and stop again at Checkpoint A. Do not start Round 3.
 
+### Round 2.5 correction result and Checkpoint B
+
+The Checkpoint A correction pass is complete. It replaces viewport-width-driven
+row budgeting with height-aware anatomical grouping, keeps shanks and reliable
+probe-track segments separate, uses the fraction of constituent Units above
+their own recording-wide p90 as the aggregate signal, and adds progressive
+local group focus plus bounded selected-Unit neighborhoods. Expanded Units now
+move from recording density to a normalized rate envelope and then exact spike
+marks as the visible time span narrows. The video region starts at 26% width,
+is resizable from 20-42%, and preserves the shared neural cursor when a source
+is attached.
+
+Checkpoint B repeats the real-data desktop, ultrawide, overview, progressive
+focus, mapped-anatomy, expanded-Unit, interval, video/no-video, semantics,
+performance, and automated-test evidence. Round 3 remains blocked until the
+user explicitly approves Checkpoint B.
+
 ## Dialogue 3 - Round 3: Persistent multi-resolution overview backend
 
-This dialogue requires explicit Checkpoint A approval.
+This dialogue requires explicit Checkpoint B approval.
 
 Implement:
 
