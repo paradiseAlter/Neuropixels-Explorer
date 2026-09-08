@@ -17,7 +17,7 @@ outside the repository and are not required by the standalone folder workflow.
 
 ## Module map
 
-- `index.html` defines the current v3.3.0 review interface.
+- `index.html` defines the current Explorer interface; `VERSION` controls its release label.
 - `scripts/app.js` owns application state, folder selection, review modes, and
   DOM coordination.
 - `scripts/kilosort-core.js` indexes KiloSort files, parses NPY arrays, and
@@ -112,3 +112,21 @@ tags and release notes in `CHANGELOG.md`; full `vX.Y.Z/` snapshot directories
 are not added to the current tree. Previous layouts remain recoverable from Git
 history. Starting with v3.3, a product tag also identifies the Python service
 version and the highest checked-in SQLite migration.
+
+
+## Behavior annotation beta
+
+The separately authorized annotation round adds `scripts/annotation-core.js`
+(immutable project operations and validation), `scripts/annotation-ui.js`
+(IndexedDB drafts, group/clip review, local video sampling and shared-state
+integration), and `scripts/behavior-discovery.js` (an experimental motion
+baseline executed in a worker). The app still owns the only neural cursor and
+visible time range. Video-relative annotation boundaries are projected through
+its existing time mapping. Annotation imports do not modify the neural catalog.
+
+Raw candidate runs, editable intervals, laboratory schemes and review states
+are distinct. Exported project JSON includes all schemes and original runs;
+CSV uses the current scheme and records the current synchronization mapping.
+External algorithms use a versioned candidate-file contract rather than adding
+their training stacks to the browser. See `docs/BEHAVIOR_ANNOTATION.md` for exact
+semantics, limits, reproducible trials and source/license boundaries.

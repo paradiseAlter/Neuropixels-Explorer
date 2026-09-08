@@ -4,11 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuropixels-explorer"
-version = "3.3.0"
+version = "4.0.0b1"
 description = "Local-first Neuropixels review UI and optional indexed data service"
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.23"]
+
+[project.optional-dependencies]
+behavior = ["scikit-learn>=1.5,<2"]
 
 [project.scripts]
 neuropixels-explorer = "neuropixels_explorer.cli:main"

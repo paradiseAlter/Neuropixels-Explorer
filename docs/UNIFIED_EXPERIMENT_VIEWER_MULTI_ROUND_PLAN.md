@@ -439,3 +439,10 @@ actions unless explicitly requested.
 > ultrawide layouts. Run the full relevant portable and safe real-data checks,
 > present final screenshots and measured evidence, and stop for final acceptance.
 > Do not push, tag, publish, or add behavior/ranking features.
+
+## Separate annotation beta round
+
+On 2026-09-08 the user explicitly authorized the behavior annotation beta,
+license/algorithm trials, version tags, and GitHub push. This feature is scoped
+separately from the still-deferred general viewer Rounds 4-6. See the current
+implementation map and `BEHAVIOR_ANNOTATION.md`.

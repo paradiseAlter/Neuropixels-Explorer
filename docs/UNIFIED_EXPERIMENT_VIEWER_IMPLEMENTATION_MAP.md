@@ -387,3 +387,42 @@ evidence directory.
   as raw firing rate.
 - Round 3 does not add smooth semantic zoom, behavior linkage, missing-frame
   warnings, or new selection semantics. Those remain Round 4 scope.
+
+
+## Separately authorized behavior annotation beta - 2026-09-08
+
+The user explicitly authorized implementation, algorithm/license trials,
+version/tag updates and GitHub publication of this annotation beta. This is a
+separate feature round; it does not claim completion of deferred Rounds 4-6.
+The user also explicitly selected MIT for the repository license.
+
+Entry point and rendering remain plain-browser `index.html` / `scripts/app.js`.
+The new annotation core, UI and disposable clustering worker use the existing
+video controller and shared `experimentView`; KiloSort data, Unit diagnostics,
+Probe views and scientific display preprocessing remain on their existing paths.
+The video source remains external. Drafts live in browser IndexedDB and portable
+project files rather than the source neural database.
+
+Implementation/validation contract and algorithm findings are documented in
+`docs/BEHAVIOR_ANNOTATION.md`. Acceptance uses the real app with the existing
+neural catalog copied into ignored runtime storage and a separately sourced
+public mouse video, explicitly unverified as a biological pair. Desktop and
+ultrawide screenshots are runtime artifacts, not product data. Candidate
+contracts, provenance, laboratory scheme separation, clock conversion and
+boundary operations are exercised by focused tests alongside the existing
+video, activity, layout, language, ingestion and Python service suites.
+
+Release: `v4.0.0-beta.1`; `VERSION` and `scripts/sync-version.cjs` now keep UI,
+asset-cache and Python service/package labels consistent. This is a testable
+beta for user review, not acceptance of automatic semantic behavior labeling.
+
+Final beta verification (2026-09-09): 21 Python tests passed; the annotation,
+video, activity, layout, ingestion, language and safe real-data checks passed.
+Both indexed-service and direct-file/folder browser workflows exercised edit,
+drag, undo, split/merge, looping, independent schemes, JSON/CSV, cancellation,
+group generation, decoded sample previews and persisted drafts with no page
+errors. Visual inspection covered desktop and ultrawide layouts. The annotation
+editor now sizes the main video to keep its transport visible, and an interval
+outside neural coverage retains a valid neural viewport without changing its
+true video-relative boundaries. These are engineering checks; no expert-labeled
+behavior accuracy was measured.

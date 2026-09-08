@@ -3,7 +3,30 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
-## [Unreleased]
+## [4.0.0-beta.1] - 2026-09-09
+
+- Added a behavior annotation editor and tracks tied to the existing shared
+  neural/video cursor, with interval editing, split/merge, loop review, undo/redo,
+  subjects/tracks, and explicit human review status.
+- Added independent laboratory label schemes, batch group naming/regrouping,
+  multi-clip video previews, local draft persistence and portable JSON/CSV.
+- Preserved original candidate runs independently from human edits; validated
+  recording/video identity, interval bounds and timebases on import.
+- Added optional local motion grouping and a separate Keypoint-MoSeq CSV adapter.
+  Compared optional scikit-learn KMeans/Ward methods on a public mouse video;
+  these trials do not establish semantic behavior accuracy.
+- Added MIT licensing, third-party notices, a central VERSION file and a version
+  synchronization script for UI/cache/package labels. This user-requested major
+  product milestone is a prerelease; existing KiloSort and catalog contracts are
+  retained. Earlier v3.x tags remain unchanged.
+- Corrected the experiment header to show unverified video synchronization when
+  only a manual/default mapping is available.
+
+## Earlier synchronized-video work
+
+The following work was present before the annotation beta; its prior history
+is preserved in the v3.x Git tags.
+
 
 - Added a compact behavior-video track directly above the aligned Unit signals,
   with play/pause, seek, frame-step, speed, follow, collapse, and manual-offset

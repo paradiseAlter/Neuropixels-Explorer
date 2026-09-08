@@ -269,6 +269,7 @@
   });
 
   let videoController = null;
+  let annotationController = null;
 
   const plots = new PlotManager({
     detail: document.getElementById("spike-detail-canvas"),
@@ -378,6 +379,17 @@
     }
   });
 
+  annotationController = new window.NeuropixelsAnnotationUI.AnnotationController({
+    panel: document.getElementById("annotation-panel"),
+    strip: document.getElementById("annotation-timeline"),
+    button: document.getElementById("annotation-toggle"),
+    video: videoController,
+    getRecording: () => state.activeRecording,
+    getView: () => state.experimentView,
+    setView: (patch, options) => setExperimentView(patch, options),
+    toast: (message) => showToast(message)
+  });
+
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
   const number = (value) => Number(value || 0).toLocaleString();
   const percent = (value) => Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}%` : "—";
@@ -481,6 +493,7 @@
     probeViewer.setTranslator?.(t);
     workspaceLayout.setTranslator?.(t);
     videoController?.setTranslator(t);
+    annotationController?.render();
     if (!elements.helpDrawer.hidden) renderHelpContent();
     if (activeHelpControl) showContextHelp(activeHelpControl);
     if (state.recordings.length) {
@@ -853,6 +866,7 @@
   }
 
   function renderExperimentHeader() {
+    annotationController?.update();
     const recording = state.activeRecording;
     if (!recording) {
       elements.experimentRecordingName.textContent = "—";
@@ -870,7 +884,7 @@
       [t("summary.units"), number(units.length)],
       ["DURATION", `${Number(recording.duration || overview?.duration || 0).toFixed(1)} s`],
       ["ANATOMY", mapped ? `${mapped} mapped · ${shanks.size || "—"} shanks` : t("units.unmapped")],
-      ["VIDEO", video ? "SYNCHRONIZED" : "NOT ATTACHED"]
+      ["VIDEO", video ? t(videoController.mapping.verificationStatus === "verified" ? "video.verified" : "video.unverified") : "NOT ATTACHED"]
     ];
     elements.experimentFacts.innerHTML = facts.map(([label, value]) => `<span>${escapeHtml(label)}<strong>${escapeHtml(value)}</strong></span>`).join("");
     const interval = state.experimentView.selectedInterval;

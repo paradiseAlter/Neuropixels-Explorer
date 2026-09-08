@@ -193,7 +193,7 @@
       this.pause();
       this._releaseObjectUrl();
       this.objectUrl = URL.createObjectURL(file);
-      this.source = { kind: "file", name: file.name || this.t("video.localFile"), duration: 0, fps: DEFAULT_FPS, automatic };
+      this.source = { kind: "file", name: file.name || this.t("video.localFile"), size: file.size, lastModified: file.lastModified, duration: 0, fps: DEFAULT_FPS, automatic };
       this.mapping = new TimeMapping({ method: "manual_offset", verificationStatus: "unverified" });
       this.currentVideoTime = 0;
       this._showSource("video");

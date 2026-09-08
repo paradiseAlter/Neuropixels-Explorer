@@ -127,7 +127,8 @@ function buffer(directory, name) {
   assert(/if \(!\["zoom", "pan"\]\.includes\(this\.mode\)\) return;[\s\S]{0,220}event\.preventDefault\(\)/.test(plotSource), "Plot wheel handling should preserve normal scrolling outside Zoom and Pan");
   assert(!/inTimeAxis|TIME_AXIS_HIT_ZONE/.test(plotSource), "Plot navigation should not be restricted to a hidden time-axis hit zone");
   const pageSource = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
-  assert(/Neuropixels Explorer 3\.3\.0/.test(pageSource), "The v3.3.0 page title is missing");
+  const releaseVersion = fs.readFileSync(path.join(repositoryRoot, "VERSION"), "utf8").trim();
+  assert(pageSource.includes(`<title>Neuropixels Explorer ${releaseVersion}</title>`), "The release page title is inconsistent with VERSION");
   const pageIds = new Set([...pageSource.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
   const missingAppIds = [...appSource.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]).filter((id) => !pageIds.has(id));
   assert(!missingAppIds.length, `app.js references missing page IDs: ${missingAppIds.join(", ")}`);
@@ -145,8 +146,8 @@ function buffer(directory, name) {
   assert(/id="unit-panel-splitter"[^>]+role="separator"[^>]+aria-orientation="vertical"/.test(pageSource), "The Units splitter should expose vertical separator semantics");
   assert(/id="probe-height-splitter"[^>]+role="separator"[^>]+aria-orientation="horizontal"/.test(pageSource), "The Probe height splitter should expose horizontal separator semantics");
   assert(!/id="probe-panel-splitter"[^>]+role="separator"/.test(pageSource), "The fixed-width Probe rail must not claim horizontal resize semantics");
-  assert(/workspace-layout\.js\?v=3\.3\.0/.test(pageSource), "Workspace layout module is not loaded");
-  assert(/theme\.js\?v=3\.3\.0/.test(pageSource) && /data-status\.js\?v=3\.3\.0/.test(pageSource), "Theme or data-status module is not loaded");
+  assert(pageSource.includes(`workspace-layout.js?v=${releaseVersion}`), "Workspace layout module is not loaded");
+  assert(pageSource.includes(`theme.js?v=${releaseVersion}`) && pageSource.includes(`data-status.js?v=${releaseVersion}`), "Theme or data-status module is not loaded");
   const styleSource = fs.readFileSync(path.resolve(__dirname, "..", "styles", "app.css"), "utf8");
   assert(/--unit-panel-width: 272px/.test(styleSource) && /--probe-panel-width: 352px/.test(styleSource), "Default workspace widths are missing");
   assert(/grid-template-columns: var\(--unit-panel-width\)[^;]+var\(--probe-panel-width\)/.test(styleSource), "The five-column workspace grid is missing");
@@ -163,7 +164,7 @@ function buffer(directory, name) {
   }
 
   if (codeOnly) {
-    console.log(JSON.stringify({ status: "PASS", mode: "code-only", version: "3.3.0" }, null, 2));
+    console.log(JSON.stringify({ status: "PASS", mode: "code-only", version: releaseVersion }, null, 2));
     return;
   }
 

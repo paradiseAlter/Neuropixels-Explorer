@@ -145,3 +145,26 @@ La Ayuda se conserva como Markdown y se precompila como contenido JavaScript loc
 - **Voltaje sin procesar no disponible**: KiloSort suele referirse a un `continuous.dat` externo; el Explorer expone un puerto versionado de proveedor/lector, pero no registra una implementación de Raw Voltage ni presenta tiempos de potenciales como voltaje.
 - **No hay vídeo del laboratorio**: use **Generar vídeo de validación** para comprobar reproducción y alineación exacta sin crear ni copiar datos protegidos.
 - **La navegación cambia la señal equivocada**: compruebe Tiempo vinculado/independiente y qué señal está enfocada.
+
+
+## 11. Anotación de conducta beta
+
+Adjunta el vídeo del registro y abre **Anotar · Beta**. Selecciona un intervalo
+en el lienzo neural y usa **Usar intervalo compartido**, o fija inicio/fin en el
+cursor del vídeo. Define etiquetas, individuos y pistas. Seleccionar un clip
+enfoca el vídeo y el tiempo neural; puedes editar límites, dividir, unir clips
+adyacentes o repetirlos. Las ediciones permiten deshacer y rehacer.
+
+**Agrupación experimental** propone grupos de movimiento y apariencia en el
+equipo local. Es sensible a posición e iluminación y no es reconocimiento
+conductual validado. Compara vídeos del grupo, nómbralo y confirma los clips.
+Mueve selecciones a un nuevo grupo para refinar la agrupación. También puedes
+importar candidatos JSON externos. Los grupos originales se conservan.
+
+Cada **Esquema de etiquetas** mantiene etiquetas, agrupaciones y revisiones
+independientes. Cambiar los límites compartidos exige volver a revisar en todos
+los esquemas. **Guardar proyecto** exporta esquemas y resultados originales;
+**Exportar CSV** incluye el esquema activo, tiempos y estado de sincronización.
+El navegador guarda borradores locales; descarga el proyecto como respaldo
+portátil. Los vídeos sin calibrar siguen indicándose como no verificados.
+Los datos de origen no se modifican.

@@ -7,6 +7,19 @@ on the local machine and no upload or localhost service is required. An
 optional indexed service is included in the same product repository for larger
 managed collections.
 
+## Annotation beta
+
+Open a recording, attach its behavior video, and choose **Annotate · Beta**.
+Create/edit intervals on the shared neural timeline, review motion groups,
+name them using independent laboratory label schemes, and save portable JSON
+or CSV. Automatic results remain suggestions until reviewed. Browser drafts
+are saved locally. The built-in motion grouping is experimental and is not a
+validated grooming/sniffing classifier.
+
+See [behavior annotation usage and results](docs/BEHAVIOR_ANNOTATION.md) and
+[third-party method notices](THIRD_PARTY_NOTICES.md). The project uses the
+[MIT license](LICENSE). Videos, datasets and model weights are not distributed.
+
 ## Quick start
 
 1. Open [`index.html`](index.html) in Chrome.
@@ -55,7 +68,8 @@ the active language. Its three Markdown sources are precompiled into a local
 asset, so Help remains available when the Explorer is opened through
 `file://` without a CDN or online Markdown service.
 
-The current release is **v3.3.0**. The `main` branch contains only the current
+The current prerelease is **v4.0.0-beta.1** (behavior annotation). Earlier v3.x
+states remain available through their Git tags. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.
 
@@ -149,3 +163,11 @@ See [the Probe-region mapping contract](docs/PROBE_REGION_MAPPING.md) for the
 optional CSV schema and its interpretation boundary. See
 [the product repository boundary](docs/PRODUCT_REPOSITORY_BOUNDARY.md) for the
 release, data, and generated-file rules.
+
+## Release versioning
+
+`VERSION` is the human release version. After updating it, run
+`node scripts/sync-version.cjs` to update the page title, visible badges, asset
+cache keys and Python package version. Beta tags use `v4.0.0-beta.N`; the Python
+package uses the equivalent PEP 440 spelling `4.0.0bN`. Commit and create an
+annotated tag for each reviewable release; never move an existing tag.

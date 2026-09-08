@@ -151,3 +151,25 @@ The Help documentation is stored as Markdown in this repository and precompiled 
 - **Raw voltage is unavailable**: KiloSort output folders often reference an external `continuous.dat`; the Explorer exposes a versioned provider/reader extension port but registers no Raw Voltage implementation and never labels spike timing as voltage.
 - **No laboratory video is available**: use **Generate validation video** to test playback and exact alignment without creating or copying protected data.
 - **Navigation changes the wrong trace**: check whether time is Linked or Independent and which signal is focused.
+
+
+## 11. Behavior annotation beta
+
+Attach the recording's behavior video and open **Annotate · Beta**. Brush a
+time interval in the neural canvas and choose **Use shared selection**, or set
+start/end at the video cursor. Add a user-defined behavior, subject and track.
+Select a clip to focus both video and neural time; edit boundaries, split, merge
+adjacent clips, or loop the clip. Undo/redo remains available.
+
+**Experimental grouping** proposes motion/appearance groups locally. It is
+sensitive to position and lighting and is not validated behavior recognition.
+Choose a group, compare its sample videos, name it and explicitly confirm clips.
+Move selected clips into a new group to refine the grouping. Import external
+algorithm candidates through JSON. Original algorithm groups remain preserved.
+
+Each **Label scheme** has independent labels, group mappings and review states.
+Changing shared video boundaries makes affected clips need review in all schemes.
+**Save project** exports every scheme and original run; **Export CSV** exports
+the current scheme, mapped times and synchronization status. Browser drafts are
+saved locally, but a downloaded project is the portable backup. Unsynchronized
+videos remain visibly unverified. The original data is never edited.
