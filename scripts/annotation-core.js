@@ -202,13 +202,23 @@
       if (typeof value === "string" && /^\s*[=+@-]/.test(value)) formatted = "'" + formatted;
       return `"${formatted.replaceAll('"', '""')}"`;
     };
-    const rows = [["segment_id", "video", "subject", "track", "video_start_s", "video_end_s", "neural_start_s", "neural_end_s", "label_scheme", "label", "status", "review_group", "run_id", "original_group_id", "sync_status", "sync_offset_s", "sync_scale"]];
-    for (const s of [...doc.segments].sort((a, b) => a.start - b.start)) rows.push([
+    const metadata = typeof mapping.toJSON === "function" ? mapping.toJSON() : mapping;
+    if (metadata.provenance?.frame_clock && typeof mapping.videoToNeural !== "function") {
+      throw new TypeError("Frame-clock export requires a TimeMapping instance");
+    }
+    const mapTime = (time) => typeof mapping.videoToNeural === "function"
+      ? mapping.videoToNeural(time) : metadata.offset_s + time * metadata.scale;
+    const rows = [["segment_id", "video", "subject", "track", "video_start_s", "video_end_s", "neural_start_s", "neural_end_s", "label_scheme", "label", "status", "review_group", "run_id", "original_group_id", "sync_status", "sync_offset_s", "sync_scale", "sync_method", "sync_model"]];
+    for (const s of [...doc.segments].sort((a, b) => a.start - b.start)) {
+      const start = mapTime(s.start), end = mapTime(s.end), mapped = Number.isFinite(start) && Number.isFinite(end);
+      rows.push([
       s.id, doc.context.videoName, s.subject, s.track, s.start, s.end,
-      mapping.offset_s + s.start * mapping.scale, mapping.offset_s + s.end * mapping.scale,
+      mapped ? start : "", mapped ? end : "",
       scheme(doc).name, label(doc, s), reviewed(doc, s) ? "reviewed" : "suggested", groupKey(doc, s), s.runId, s.groupId,
-      mapping.verification_status, mapping.offset_s, mapping.scale
+      mapped ? metadata.verification_status : "unmapped", metadata.offset_s, metadata.scale,
+      metadata.method || "unknown", metadata.provenance?.frame_clock ? "frame_clock" : "affine"
     ]);
+    }
     return rows.map((row) => row.map(cell).join(",")).join("\r\n");
   }
   return { SCHEMA, CANDIDATE_SCHEMA, create, validate, change, clone, scheme, groupKey, label, reviewed,

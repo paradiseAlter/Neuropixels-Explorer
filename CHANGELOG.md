@@ -3,6 +3,23 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.0.0-beta.2] - 2026-09-09
+
+- Added a bounded, resumable Allen VBN download manifest and source integrity
+  receipts, plus a matched-video/NWB physical-probe adapter that preserves
+  original unit identities and source data.
+- Added measured piecewise frame clocks for dropped camera frames. Playback,
+  interval selection and CSV export share the mapping; unmapped boundary
+  frames are explicit and manual offsets remove verified status.
+- Added reproducible official V1 PSTH and published ripple-table filtering
+  examples, with documented source-format problems and limits on inference.
+- Prepared and verified eight matched Allen sessions (60.19 GB externally),
+  including full side-camera clocks and browser recording switches.
+- Verified the real Allen pilot in Chrome, including neural activity, Unit
+  expansion, video seek, manual annotation, anonymous candidate grouping,
+  exact CSV time conversion and draft persistence. No new behavior-accuracy
+  or whole-paper replication claim is made. Database schema remains 3.
+
 ## [4.0.0-beta.1] - 2026-09-09
 
 - Added a behavior annotation editor and tracks tied to the existing shared

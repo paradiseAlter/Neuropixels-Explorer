@@ -11,6 +11,17 @@
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
+  function interpolateClock(value, source, target) {
+    const time = Number(value);
+    if (!Number.isFinite(time) || time < source[0] || time > source[source.length - 1]) return NaN;
+    let low = 0, high = source.length - 1;
+    while (high - low > 1) {
+      const middle = (low + high) >>> 1;
+      if (source[middle] <= time) low = middle; else high = middle;
+    }
+    return target[low] + (time - source[low]) / (source[high] - source[low]) * (target[high] - target[low]);
+  }
+
   class TimeMapping {
     constructor({
       method = "unknown",
@@ -28,7 +39,7 @@
       provenance = null
     } = {}) {
       const normalizedScale = Number(scale);
-      if (!(normalizedScale > 0)) throw new RangeError("TimeMapping scale must be greater than zero");
+      if (!Number.isFinite(normalizedScale) || !(normalizedScale > 0)) throw new RangeError("TimeMapping scale must be greater than zero");
       this.method = String(method || "unknown");
       this.offsetSeconds = Number(offset_s ?? offsetSeconds) || 0;
       this.scale = normalizedScale;
@@ -37,18 +48,37 @@
       this.matchedEventCount = Number.isFinite(Number(matched_event_count ?? matchedEventCount)) ? Number(matched_event_count ?? matchedEventCount) : null;
       this.residualRmsMs = Number.isFinite(Number(residual_rms_ms ?? residualRmsMs)) ? Number(residual_rms_ms ?? residualRmsMs) : null;
       this.provenance = provenance || null;
+      this.frameClock = null;
+      if (provenance?.frame_clock) {
+        const { video_s: video, neural_s: neural } = provenance.frame_clock;
+        if (!Array.isArray(video) || !Array.isArray(neural) || video.length < 2 || video.length !== neural.length
+          || video.some((v, i) => !Number.isFinite(v) || (i > 0 && v <= video[i - 1]))
+          || neural.some((v, i) => !Number.isFinite(v) || (i > 0 && v <= neural[i - 1]))) {
+          throw new RangeError("Frame-clock anchors must be finite, paired, and strictly increasing");
+        }
+        this.frameClock = Object.freeze({ video_s: Object.freeze([...video]), neural_s: Object.freeze([...neural]) });
+        this.provenance = { ...provenance, frame_clock: this.frameClock };
+      }
     }
 
     videoToNeural(videoSeconds) {
-      return this.offsetSeconds + Number(videoSeconds || 0) * this.scale;
+      return this.frameClock
+        ? interpolateClock(videoSeconds, this.frameClock.video_s, this.frameClock.neural_s)
+        : this.offsetSeconds + Number(videoSeconds || 0) * this.scale;
     }
 
     neuralToVideo(neuralSeconds) {
-      return (Number(neuralSeconds || 0) - this.offsetSeconds) / this.scale;
+      return this.frameClock
+        ? interpolateClock(neuralSeconds, this.frameClock.neural_s, this.frameClock.video_s)
+        : (Number(neuralSeconds || 0) - this.offsetSeconds) / this.scale;
     }
 
     withOffset(offsetSeconds, { verificationStatus = "unverified", method = "manual_offset" } = {}) {
-      return new TimeMapping({ ...this, offsetSeconds, method, verificationStatus });
+      const provenance = this.frameClock ? { ...this.provenance, frame_clock: {
+        video_s: this.frameClock.video_s,
+        neural_s: this.frameClock.neural_s.map((time) => time + Number(offsetSeconds) - this.offsetSeconds)
+      } } : this.provenance;
+      return new TimeMapping({ ...this, provenance, offsetSeconds, method, verificationStatus });
     }
 
     toJSON() {
@@ -209,6 +239,7 @@
       this._releaseObjectUrl();
       this.source = {
         kind: "url",
+        size: descriptor.byte_size == null ? undefined : Number(descriptor.byte_size),
         name: descriptor.video_name || descriptor.videoName || this.t("video.databaseVideo"),
         duration: Number(descriptor.duration_s || descriptor.duration || 0),
         fps: Number(descriptor.frame_rate_hz || descriptor.frameRate || DEFAULT_FPS),
@@ -298,6 +329,7 @@
     seekVideo(videoSeconds) {
       if (!this.source) return;
       const next = clamp(Number(videoSeconds) || 0, 0, Number(this.source.duration || 0));
+      this.outsideClock = false;
       this.currentVideoTime = next;
       if (["file", "url"].includes(this.source.kind)) this.elements.video.currentTime = next;
       else this._renderSyntheticFrame();
@@ -311,7 +343,14 @@
 
     seekNeural(neuralSeconds) {
       if (!this.source) return;
-      this.seekVideo(this.mapping.neuralToVideo(neuralSeconds));
+      const time = this.mapping.neuralToVideo(neuralSeconds);
+      if (!Number.isFinite(time)) {
+        this.pause();
+        this.outsideClock = true;
+        this._renderTime();
+        return;
+      }
+      this.seekVideo(time);
     }
 
     setCollapsed(collapsed) {
@@ -351,6 +390,7 @@
 
     _syncFromRealVideo() {
       if (!this.source || !["file", "url"].includes(this.source.kind)) return;
+      this.outsideClock = false;
       this.currentVideoTime = Number(this.elements.video.currentTime || 0);
       this._renderTime();
       this._emitTime();
@@ -476,7 +516,9 @@
       const duration = Number(this.source?.duration || 0);
       if (this.elements.seek) this.elements.seek.value = String(clamp(this.currentVideoTime, 0, duration || 1));
       if (this.elements.current) this.elements.current.textContent = formatClock(this.currentVideoTime);
-      if (this.elements.neural) this.elements.neural.textContent = `${this.mapping.videoToNeural(this.currentVideoTime).toFixed(3)} s`;
+      const neuralTime = this.mapping.videoToNeural(this.currentVideoTime);
+      if (this.elements.neural) this.elements.neural.textContent = !this.outsideClock && Number.isFinite(neuralTime)
+        ? `${neuralTime.toFixed(3)} s` : this.t("video.outsideClock");
       if (this.elements.frame) this.elements.frame.textContent = String(Math.floor(this.currentVideoTime * Number(this.source?.fps || DEFAULT_FPS))).padStart(7, "0");
     }
 
@@ -504,7 +546,9 @@
 
     _emitTime() {
       if (!this.source) return;
-      this.onNeuralTime?.(this.mapping.videoToNeural(this.currentVideoTime), {
+      const neuralTime = this.mapping.videoToNeural(this.currentVideoTime);
+      if (this.outsideClock || !Number.isFinite(neuralTime)) return;
+      this.onNeuralTime?.(neuralTime, {
         videoTime: this.currentVideoTime,
         playing: this.playing,
         follow: this.follow,

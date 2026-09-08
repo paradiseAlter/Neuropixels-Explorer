@@ -20,6 +20,14 @@ See [behavior annotation usage and results](docs/BEHAVIOR_ANNOTATION.md) and
 [third-party method notices](THIRD_PARTY_NOTICES.md). The project uses the
 [MIT license](LICENSE). Videos, datasets and model weights are not distributed.
 
+## Allen public data
+
+[Allen VBN download, import and validation](docs/ALLEN_VBN_VALIDATION.md) provides
+an explicit 60.19 GB manifest, matched-video frame clocks, a physical-probe NWB
+adapter, an official V1 PSTH positive control, and a published ripple-table
+reuse example. Data remains in a user-selected external directory. Install the
+optional analysis dependencies with `python -m pip install -e ".[allen]"`.
+
 ## Quick start
 
 1. Open [`index.html`](index.html) in Chrome.
@@ -68,7 +76,7 @@ the active language. Its three Markdown sources are precompiled into a local
 asset, so Help remains available when the Explorer is opened through
 `file://` without a CDN or online Markdown service.
 
-The current prerelease is **v4.0.0-beta.1** (behavior annotation). Earlier v3.x
+The current prerelease is **v4.0.0-beta.2** (annotation with verified Allen data access). Earlier v3.x
 states remain available through their Git tags. The `main` branch contains only the current
 application tree; earlier releases are retained in Git history and release
 tags instead of duplicated version directories.

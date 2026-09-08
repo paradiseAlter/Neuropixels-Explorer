@@ -320,7 +320,7 @@ class CatalogService:
     def _video_descriptors(self, connection: sqlite3.Connection) -> list[dict[str, Any]]:
         rows = connection.execute(
             """
-            SELECT vs.*, source.relative_path AS source_relative_path,
+            SELECT vs.*, COALESCE(proxy.byte_size, source.byte_size) AS byte_size, source.relative_path AS source_relative_path,
                    proxy.relative_path AS proxy_relative_path,
                    tm.mapping_method, tm.offset_s, tm.scale, tm.drift_ppm,
                    tm.matched_event_count, tm.residual_rms_ms,

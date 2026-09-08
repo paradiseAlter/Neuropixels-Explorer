@@ -211,6 +211,7 @@
     "video.offsetAria": "Video to neural time offset in seconds",
     "video.playhead": "VIDEO",
     "video.verified": "VERIFIED",
+    "video.outsideClock": "No matching timestamp",
     "video.unverified": "UNVERIFIED",
     "video.syntheticClock": "SYNTHETIC CLOCK",
     "video.method.ttl": "TTL",
@@ -447,6 +448,7 @@
     ,"video.offsetAria": "视频到神经时间的秒偏移"
     ,"video.playhead": "视频"
     ,"video.verified": "已验证"
+    ,"video.outsideClock": "无对应时间戳"
     ,"video.unverified": "未验证"
     ,"video.syntheticClock": "合成时钟"
     ,"video.method.ttl": "TTL"
@@ -516,6 +518,7 @@
     ,"video.offsetAria": "Desfase entre vídeo y tiempo neural en segundos"
     ,"video.playhead": "VÍDEO"
     ,"video.verified": "VERIFICADO"
+    ,"video.outsideClock": "Sin marca de tiempo correspondiente"
     ,"video.unverified": "NO VERIFICADO"
     ,"video.syntheticClock": "RELOJ SINTÉTICO"
     ,"video.method.ttl": "TTL"

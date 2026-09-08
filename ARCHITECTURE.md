@@ -40,7 +40,9 @@ outside the repository and are not required by the standalone folder workflow.
 - `scripts/video-sync.js` owns `VideoStream` playback, invertible `TimeMapping`,
   deterministic validation frames, transport controls, and the shared neural
   playhead. A local video file and a generated synthetic source use the same
-  controller.
+  controller. Optional measured frame-clock anchors are stored under
+  `TimeMapping.provenance.frame_clock`; both playback and CSV export use the
+  same piecewise mapping and reject extrapolation beyond measured coverage.
 - `scripts/stream-contracts.js` exposes the versioned Raw Voltage provider
   registry. A future provider must advertise supported `raw_voltage`, `ap`, or
   `lfp` streams and return a reader with `readWindow(request)` and `close()`;
@@ -130,3 +132,14 @@ CSV uses the current scheme and records the current synchronization mapping.
 External algorithms use a versioned candidate-file contract rather than adding
 their training stacks to the browser. See `docs/BEHAVIOR_ANNOTATION.md` for exact
 semantics, limits, reproducible trials and source/license boundaries.
+
+## Allen adapter boundary
+
+The optional scripts in `scripts/*allen*.py` download an explicit public file
+manifest, validate camera clocks, adapt one physical NWB probe per Recording,
+and run bounded analysis examples. They write generated arrays/catalogs and
+provenance beside external source data; schema version 3 is unchanged. Original
+Allen unit IDs, labels, probe identities, spike seconds and peak-channel anatomy
+are retained. The derived float64 sample-equivalent arrays serve the existing
+KiloSort reader contract and do not represent another spike-sorting run.
+See `docs/ALLEN_VBN_VALIDATION.md` for acquisition-specific limits and commands.

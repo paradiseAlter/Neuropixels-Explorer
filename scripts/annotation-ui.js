@@ -152,7 +152,8 @@
       this.selected = new Set([...this.selected].filter((id) => next.segments.some((s) => s.id === id)));
       if (this.selected.size === 1) {
         const clip = next.segments.find((s) => this.selected.has(s.id));
-        this.setView({ selectedInterval: { start: this.video.mapping.videoToNeural(clip.start), end: this.video.mapping.videoToNeural(clip.end) } });
+        const start = this.video.mapping.videoToNeural(clip.start), end = this.video.mapping.videoToNeural(clip.end);
+        this.setView({ selectedInterval: Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null });
       }
       this.persist(); this.render();
     }
@@ -165,7 +166,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.0.0-beta.1</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.0.0-beta.2</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -226,10 +227,11 @@
       if (!this.doc) { this.strip.innerHTML = ""; return; }
       const view = this.getView(), range = view.visibleRange, duration = Math.max(.001, range.end - range.start);
       const mapping = this.video.mapping;
-      const signature = JSON.stringify([range, this.doc.updatedAt, this.doc.activeSchemeId, [...this.selected], mapping.toJSON()]);
+      const signature = JSON.stringify([range, this.doc.updatedAt, this.doc.activeSchemeId, [...this.selected]]);
       const x = (videoTime) => (mapping.videoToNeural(videoTime) - range.start) / duration * 1000;
-      if (force || signature !== this.timelineSignature) {
+      if (force || signature !== this.timelineSignature || mapping !== this.timelineMapping) {
         this.timelineSignature = signature;
+        this.timelineMapping = mapping;
         const visible = this.doc.segments.filter((s) => x(s.end) >= 0 && x(s.start) <= 1000);
         const tracks = [...new Set(visible.map((s) => `${s.subject} / ${s.track}`))].slice(0, 5);
         const height = Math.max(32, tracks.length * 30);
@@ -249,7 +251,15 @@
       this.selected = new Set([id]); this.opened = true; this.loop = null;
       const mapping = this.video.mapping;
       const start = mapping.videoToNeural(s.start), end = mapping.videoToNeural(s.end);
-      this.video.pause(); const padding = Math.max(.5, (end - start) * .2);
+      this.video.pause();
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        this.setView({ selectedInterval: null });
+        this.video.seekVideo(s.start);
+        this.toast(this.video.t("video.outsideClock"));
+        this.render();
+        return;
+      }
+      const padding = Math.max(.5, (end - start) * .2);
       // The video can extend beyond the neural recording. Keep its real interval
       // and cursor while focusing a valid range inside the available neural data.
       const total = Math.max(.001, Number(this.getRecording().duration || end + padding));
@@ -285,13 +295,13 @@
         if (action === "close") { this.opened = false; this.render(); this.button.focus(); return; }
         if (!this.doc) return;
         if (action === "save") this.downloadProject();
-        if (action === "csv") this.download(A.toCSV(this.doc, this.video.mapping.toJSON()), "annotations.csv", "text/csv");
+        if (action === "csv") this.download(A.toCSV(this.doc, this.video.mapping), "annotations.csv", "text/csv");
         if (action === "import") this.panel.querySelector("[data-import]").click();
         if (action === "undo" && this.history.length) { this.future.push(this.doc); this.doc = this.history.pop(); this.loop = null; this.selected.clear(); this.persist(); this.render(); }
         if (action === "redo" && this.future.length) { this.history.push(this.doc); this.doc = this.future.pop(); this.loop = null; this.selected.clear(); this.persist(); this.render(); }
         if (action === "scheme") this.commit(A.addScheme(this.doc, this.panel.querySelector("[data-new-scheme]").value));
         if (["start", "end"].includes(action)) this.input(action).value = this.video.currentVideoTime.toFixed(3);
-        if (action === "range") { const r = this.getView().selectedInterval; if (!r) throw new Error(tr("useRange")); this.input("start").value = Math.max(0, this.video.mapping.neuralToVideo(r.start)).toFixed(3); this.input("end").value = Math.min(this.doc.context.duration, this.video.mapping.neuralToVideo(r.end)).toFixed(3); }
+        if (action === "range") { const r = this.getView().selectedInterval; if (!r) throw new Error(tr("useRange")); const start = this.video.mapping.neuralToVideo(r.start), end = this.video.mapping.neuralToVideo(r.end); if (!Number.isFinite(start) || !Number.isFinite(end)) throw new Error(this.video.t("video.outsideClock")); this.input("start").value = Math.max(0, start).toFixed(3); this.input("end").value = Math.min(this.doc.context.duration, end).toFixed(3); }
         if (action === "add") this.commit(A.add(this.doc, this.values()));
         if (action === "edit") this.commit(A.edit(this.doc, this.one(), this.values()));
         if (action === "split") this.commit(A.split(this.doc, this.one(), this.video.currentVideoTime));
@@ -376,7 +386,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.0.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.0.0-beta.2", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

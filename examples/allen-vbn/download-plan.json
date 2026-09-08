@@ -1,0 +1,590 @@
+{
+  "schema": "allen-explicit-download-plan/1",
+  "dataset_version": "0.5.0",
+  "selection": "No abnormal histology/activity; >=5 probes; paired familiar/novel days; distinct mice; anatomy coverage, not observed neural effect. Official quickstart session anchors development.",
+  "sessions": [
+    {
+      "ecephys_session_id": 1064644573,
+      "behavior_session_id": 1064666428,
+      "date_of_acquisition": "2020-11-19 15:18:01.372000+00:00",
+      "equipment_name": "NP.1",
+      "session_type": "EPHYS_1_images_H_3uL_reward",
+      "mouse_id": 544456,
+      "genotype": "Sst-IRES-Cre/wt;Ai32(RCL-ChR2(H134R)_EYFP)/wt",
+      "sex": "M",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 120,
+      "unit_count": 2254.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['APN', 'CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'Eth', 'HPF', 'LGd-sh', 'LP', 'LT', 'MB', 'MGd', 'MGm', 'MGv', 'MRN', 'NB', 'NOT', 'PIL', 'POL', 'POST', 'ProS', 'root', 'SUB', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl']",
+      "image_set": "H",
+      "prior_exposures_to_image_set": 0,
+      "session_number": 2,
+      "experience_level": "Novel",
+      "prior_exposures_to_omissions": 1,
+      "file_id": 909,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "development"
+    },
+    {
+      "ecephys_session_id": 1064400234,
+      "behavior_session_id": 1064442478,
+      "date_of_acquisition": "2020-11-18 14:45:26.403000+00:00",
+      "equipment_name": "NP.1",
+      "session_type": "EPHYS_1_images_G_3uL_reward",
+      "mouse_id": 544456,
+      "genotype": "Sst-IRES-Cre/wt;Ai32(RCL-ChR2(H134R)_EYFP)/wt",
+      "sex": "M",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 119,
+      "unit_count": 2118.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['APN', 'CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'Eth', 'HPF', 'LGd-co', 'LGd-sh', 'LGv', 'LP', 'MB', 'MGd', 'MGm', 'MGv', 'MRN', 'NOT', 'PIL', 'POST', 'root', 'SCig', 'SGN', 'SUB', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl', 'ZI']",
+      "image_set": "G",
+      "prior_exposures_to_image_set": 17,
+      "session_number": 1,
+      "experience_level": "Familiar",
+      "prior_exposures_to_omissions": 0,
+      "file_id": 906,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "development"
+    },
+    {
+      "ecephys_session_id": 1062755779,
+      "behavior_session_id": 1062781531,
+      "date_of_acquisition": "2020-11-11 14:43:02.341000+00:00",
+      "equipment_name": "NP.1",
+      "session_type": "EPHYS_1_images_G_3uL_reward",
+      "mouse_id": 541234,
+      "genotype": "wt/wt",
+      "sex": "M",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 133,
+      "unit_count": 2538.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['APN', 'APr', 'CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'LGd-co', 'LGd-sh', 'LP', 'MB', 'MGd', 'MGm', 'MGv', 'MRN', 'NOT', 'PIL', 'POL', 'POST', 'PoT', 'RN', 'root', 'RSPd', 'SCig', 'SCiw', 'SGN', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl']",
+      "image_set": "G",
+      "prior_exposures_to_image_set": 22,
+      "session_number": 1,
+      "experience_level": "Familiar",
+      "prior_exposures_to_omissions": 0,
+      "file_id": 903,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "held_out"
+    },
+    {
+      "ecephys_session_id": 1063010385,
+      "behavior_session_id": 1063068136,
+      "date_of_acquisition": "2020-11-12 15:27:33.661000+00:00",
+      "equipment_name": "NP.1",
+      "session_type": "EPHYS_1_images_H_3uL_reward",
+      "mouse_id": 541234,
+      "genotype": "wt/wt",
+      "sex": "M",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 134,
+      "unit_count": 1730.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['APN', 'CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'HPF', 'LGd-co', 'LGd-sh', 'LP', 'MB', 'MGd', 'MGm', 'MGv', 'MRN', 'PIL', 'POL', 'POST', 'PoT', 'PP', 'root', 'SCig', 'SCiw', 'SGN', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl']",
+      "image_set": "H",
+      "prior_exposures_to_image_set": 0,
+      "session_number": 2,
+      "experience_level": "Novel",
+      "prior_exposures_to_omissions": 1,
+      "file_id": 904,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "held_out"
+    },
+    {
+      "ecephys_session_id": 1055240613,
+      "behavior_session_id": 1055260435,
+      "date_of_acquisition": "2020-10-07 14:53:34.486000+00:00",
+      "equipment_name": "NP.0",
+      "session_type": "EPHYS_1_images_G_3uL_reward",
+      "mouse_id": 533539,
+      "genotype": "wt/wt",
+      "sex": "F",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 143,
+      "unit_count": 2290.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'HPF', 'LGd-co', 'LGd-sh', 'MB', 'MGd', 'MGm', 'MGv', 'MRN', 'NB', 'NOT', 'PIL', 'POST', 'PoT', 'PRE', 'ProS', 'root', 'SCig', 'SCiw', 'SPFp', 'SUB', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl']",
+      "image_set": "G",
+      "prior_exposures_to_image_set": 15,
+      "session_number": 1,
+      "experience_level": "Familiar",
+      "prior_exposures_to_omissions": 0,
+      "file_id": 893,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "validation"
+    },
+    {
+      "ecephys_session_id": 1055415082,
+      "behavior_session_id": 1055434752,
+      "date_of_acquisition": "2020-10-08 15:44:11.498000+00:00",
+      "equipment_name": "NP.0",
+      "session_type": "EPHYS_1_images_H_3uL_reward",
+      "mouse_id": 533539,
+      "genotype": "wt/wt",
+      "sex": "F",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 144,
+      "unit_count": 1510.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['APN', 'CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'grey', 'HPF', 'LP', 'MB', 'MGd', 'MGm', 'MGv', 'MRN', 'NB', 'PIL', 'POL', 'POST', 'PRE', 'root', 'SCig', 'SCiw', 'SUB', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl', 'ZI']",
+      "image_set": "H",
+      "prior_exposures_to_image_set": 0,
+      "session_number": 2,
+      "experience_level": "Novel",
+      "prior_exposures_to_omissions": 1,
+      "file_id": 895,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "validation"
+    },
+    {
+      "ecephys_session_id": 1052342277,
+      "behavior_session_id": 1052374521,
+      "date_of_acquisition": "2020-09-23 15:34:18.179000+00:00",
+      "equipment_name": "NP.1",
+      "session_type": "EPHYS_1_images_G_3uL_reward",
+      "mouse_id": 530862,
+      "genotype": "Vip-IRES-Cre/wt;Ai32(RCL-ChR2(H134R)_EYFP)/wt",
+      "sex": "M",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 148,
+      "unit_count": 1696.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['APN', 'CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'HPF', 'LGv', 'LP', 'MB', 'MRN', 'NOT', 'POL', 'POST', 'PoT', 'root', 'SCig', 'SCiw', 'SGN', 'SUB', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl', 'ZI']",
+      "image_set": "G",
+      "prior_exposures_to_image_set": 32,
+      "session_number": 1,
+      "experience_level": "Familiar",
+      "prior_exposures_to_omissions": 0,
+      "file_id": 885,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "training"
+    },
+    {
+      "ecephys_session_id": 1052533639,
+      "behavior_session_id": 1052572359,
+      "date_of_acquisition": "2020-09-24 15:12:13.229000+00:00",
+      "equipment_name": "NP.1",
+      "session_type": "EPHYS_1_images_H_3uL_reward",
+      "mouse_id": 530862,
+      "genotype": "Vip-IRES-Cre/wt;Ai32(RCL-ChR2(H134R)_EYFP)/wt",
+      "sex": "M",
+      "project_code": "NeuropixelVisualBehavior",
+      "age_in_days": 149,
+      "unit_count": 1677.0,
+      "probe_count": 6.0,
+      "channel_count": 2304.0,
+      "structure_acronyms": "['APN', 'CA1', 'CA3', 'DG-mo', 'DG-po', 'DG-sg', 'HPF', 'IGL', 'LGv', 'LP', 'MB', 'MRN', 'NOT', 'POL', 'POST', 'ProS', 'root', 'SCig', 'SGN', 'TH', 'VISal', 'VISam', 'VISl', 'VISp', 'VISpm', 'VISrl', 'ZI']",
+      "image_set": "H",
+      "prior_exposures_to_image_set": 0,
+      "session_number": 2,
+      "experience_level": "Novel",
+      "prior_exposures_to_omissions": 1,
+      "file_id": 887,
+      "abnormal_histology": null,
+      "abnormal_activity": null,
+      "split": "training"
+    }
+  ],
+  "files": [
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064644573/behavior_videos/face_metadata.json",
+      "size": 865,
+      "etag": "\"1423e2fc6486998d45688d2c4fdf5d87\"",
+      "path": "sources/v0.5.0/1064644573/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064644573/behavior_videos/face_timestamps.npy",
+      "size": 4582560,
+      "etag": "\"77ef34674b22caf332280cc3cc9329bc\"",
+      "path": "sources/v0.5.0/1064644573/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064644573/behavior_videos/side_metadata.json",
+      "size": 873,
+      "etag": "\"83301c41718ec0e1c80eb0dc8c473d79\"",
+      "path": "sources/v0.5.0/1064644573/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064644573/behavior_videos/side_timestamps.npy",
+      "size": 4582512,
+      "etag": "\"e5ae133755d20c8c9d19fb31ab791a39\"",
+      "path": "sources/v0.5.0/1064644573/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1064644573/ecephys_session_1064644573.nwb?versionId=.dTMBEOCuDrnK_kNn9m7CNXsH.wF4Ghw",
+      "size": 2993930309,
+      "etag": "\"4e0dd10d88aa1eafbd19bb29ba24c987-357\"",
+      "blake2b": "372f887f860fa669a620d7dfb78285d5ae668bc871fbfbf6a16f83a828f36649ff06dda8e883e0a15d37e73819a278cf3c81e7a483ed61d2340cfe78c4725b65",
+      "path": "sources/v0.5.0/1064644573/ecephys_session_1064644573.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/b5d9704e-49aa-4e95-80e8-1d12301a85bd/download/",
+      "mirror_asset_path": "sub-544456/sub-544456_ses-20201119T231801.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064644573/behavior_videos/face.mp4",
+      "size": 2387744294,
+      "etag": "\"3aadd6def90237c3420577f209fffc50-1\"",
+      "path": "sources/v0.5.0/1064644573/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064644573/behavior_videos/side.mp4",
+      "size": 2387348809,
+      "etag": "\"3bc097e6a779d628819d419f11e27775-1\"",
+      "path": "sources/v0.5.0/1064644573/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064400234/behavior_videos/face_metadata.json",
+      "size": 862,
+      "etag": "\"a6d21229ceadfa56c47ebb793fce3e86\"",
+      "path": "sources/v0.5.0/1064400234/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064400234/behavior_videos/face_timestamps.npy",
+      "size": 4532248,
+      "etag": "\"6fd572f27b3e62d44f3208da208e7848\"",
+      "path": "sources/v0.5.0/1064400234/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064400234/behavior_videos/side_metadata.json",
+      "size": 873,
+      "etag": "\"1ea1af7606acad10cb7a5b2d63167624\"",
+      "path": "sources/v0.5.0/1064400234/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064400234/behavior_videos/side_timestamps.npy",
+      "size": 4532200,
+      "etag": "\"ead69610c735e9edf72825ef86a1bae9\"",
+      "path": "sources/v0.5.0/1064400234/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1064400234/ecephys_session_1064400234.nwb?versionId=wSb.7TWEkM5FKyw0XSh.RgphauHtXMhY",
+      "size": 2707162707,
+      "etag": "\"7afde40bf8bf997a883b3ebad4c3e430-323\"",
+      "blake2b": "68433059aa056c28d6943360261cbb7a1d4974103c44bb74d069a9b8f544d33920f759d042e25541eb90dd693b62dddf35770fc7b51062a241bdccfe6995292a",
+      "path": "sources/v0.5.0/1064400234/ecephys_session_1064400234.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/f8f2b971-503f-42a9-a7ae-67a3dff298dc/download/",
+      "mirror_asset_path": "sub-544456/sub-544456_ses-20201118T224526.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064400234/behavior_videos/face.mp4",
+      "size": 2361300041,
+      "etag": "\"67044bdb5b16f7af3213a034346d8ada-1\"",
+      "path": "sources/v0.5.0/1064400234/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1064400234/behavior_videos/side.mp4",
+      "size": 2361879795,
+      "etag": "\"9e3bc87a1731f46ed13e7196f56b10d8-1\"",
+      "path": "sources/v0.5.0/1064400234/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1062755779/behavior_videos/face_metadata.json",
+      "size": 862,
+      "etag": "\"b10cd1faf5a47652804157e2fa3fb906\"",
+      "path": "sources/v0.5.0/1062755779/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1062755779/behavior_videos/face_timestamps.npy",
+      "size": 4732616,
+      "etag": "\"bbf4428d3048628be0619a8aa480d3f2\"",
+      "path": "sources/v0.5.0/1062755779/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1062755779/behavior_videos/side_metadata.json",
+      "size": 873,
+      "etag": "\"608e8a9806ca17bbd7382011c07fe3db\"",
+      "path": "sources/v0.5.0/1062755779/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1062755779/behavior_videos/side_timestamps.npy",
+      "size": 4732560,
+      "etag": "\"1d68fdaef11b70439873fef5254458e9\"",
+      "path": "sources/v0.5.0/1062755779/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1062755779/ecephys_session_1062755779.nwb?versionId=6BR8uh1jnIL34Ub7txDweIiLtjyd21Wr",
+      "size": 3415115950,
+      "etag": "\"0c42f518543bdba782bd9889221d2955-408\"",
+      "blake2b": "1d91645b60b906c49069a39cbaac5ede1ae2880775dbb24f0681ac3604400394ce523d64fbc7e6c6be35292818203477cb109b4cd373d829f5d42680c6375981",
+      "path": "sources/v0.5.0/1062755779/ecephys_session_1062755779.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/16605067-9276-4047-8186-0f9af611a6cc/download/",
+      "mirror_asset_path": "sub-541234/sub-541234_ses-20201111T224302.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1062755779/behavior_videos/face.mp4",
+      "size": 2466227598,
+      "etag": "\"8facf534d0b8aec7c6878bd7825afc78-1\"",
+      "path": "sources/v0.5.0/1062755779/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1062755779/behavior_videos/side.mp4",
+      "size": 2465160694,
+      "etag": "\"727804427192a8952a3b69fdaf14b039-1\"",
+      "path": "sources/v0.5.0/1062755779/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1063010385/behavior_videos/face_metadata.json",
+      "size": 865,
+      "etag": "\"451cf02ed95f1acdf20b4cacfa603795\"",
+      "path": "sources/v0.5.0/1063010385/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1063010385/behavior_videos/face_timestamps.npy",
+      "size": 4566896,
+      "etag": "\"7873df043aa6d51ed11df535c652f26e\"",
+      "path": "sources/v0.5.0/1063010385/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1063010385/behavior_videos/side_metadata.json",
+      "size": 873,
+      "etag": "\"ab5635d27492165cc5821d77b8ba2a55\"",
+      "path": "sources/v0.5.0/1063010385/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1063010385/behavior_videos/side_timestamps.npy",
+      "size": 4566832,
+      "etag": "\"c2d118a5f279a21863b07886eb7fa751\"",
+      "path": "sources/v0.5.0/1063010385/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1063010385/ecephys_session_1063010385.nwb?versionId=zRPqNvPD1LyXqKCqo7gqMJY4bnlta7w9",
+      "size": 2389587225,
+      "etag": "\"37adeebc2c63f3488d5a8bc802def8d1-285\"",
+      "blake2b": "aebfb620a737c23d1227deacdee1e52b7ef6b3d33078e88a254bcecf1cd72bf6c2102c0b54070e48d44978335baa63a68fdc37d6b36033d6f9d1e632ef22e3dc",
+      "path": "sources/v0.5.0/1063010385/ecephys_session_1063010385.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/15898485-0cbe-46ca-8e89-452f19ba9dcd/download/",
+      "mirror_asset_path": "sub-541234/sub-541234_ses-20201112T232733.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1063010385/behavior_videos/face.mp4",
+      "size": 2379522900,
+      "etag": "\"2e51ecab2451dbdff411aa98a3903bb7-1\"",
+      "path": "sources/v0.5.0/1063010385/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1063010385/behavior_videos/side.mp4",
+      "size": 2379310931,
+      "etag": "\"1e5a9391c8908cfd93b8784dbf5f510d-1\"",
+      "path": "sources/v0.5.0/1063010385/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055240613/behavior_videos/face_metadata.json",
+      "size": 866,
+      "etag": "\"739df69618483bb708526f9990523fd2\"",
+      "path": "sources/v0.5.0/1055240613/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055240613/behavior_videos/face_timestamps.npy",
+      "size": 4604312,
+      "etag": "\"1eded2080184fc83cf175bb835f7a40c\"",
+      "path": "sources/v0.5.0/1055240613/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055240613/behavior_videos/side_metadata.json",
+      "size": 874,
+      "etag": "\"7b29e635cd2657512a5ecedfbb95de94\"",
+      "path": "sources/v0.5.0/1055240613/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055240613/behavior_videos/side_timestamps.npy",
+      "size": 4604336,
+      "etag": "\"32e583078a2755dbd265d194273acc76\"",
+      "path": "sources/v0.5.0/1055240613/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1055240613/ecephys_session_1055240613.nwb?versionId=8QJe1m29vSxqoFfWIzrqraq.nwoKg564",
+      "size": 2986818795,
+      "etag": "\"5766409f8bb02b8d82cd823bb9030e13-357\"",
+      "blake2b": "77c06cec2e9bf781bdbb4333ebfa2646d26ba2fb82ba8fd4dcff430a754ef90af14d788db7f085cd866f79301d8fe8649fc525c4b6737cd5d9c1d58e8b0f8aef",
+      "path": "sources/v0.5.0/1055240613/ecephys_session_1055240613.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/80a7506f-da39-4972-b836-c0edff03ea5f/download/",
+      "mirror_asset_path": "sub-533539/sub-533539_ses-20201007T215334.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055240613/behavior_videos/face.mp4",
+      "size": 2399498380,
+      "etag": "\"5644ec93d320cf4b130158da0333bd27-1\"",
+      "path": "sources/v0.5.0/1055240613/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055240613/behavior_videos/side.mp4",
+      "size": 2398774629,
+      "etag": "\"994b50de9a6819bfa08475c72c5787c9-1\"",
+      "path": "sources/v0.5.0/1055240613/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055415082/behavior_videos/face_metadata.json",
+      "size": 869,
+      "etag": "\"5a006af0538b419dce61d97b521df92a\"",
+      "path": "sources/v0.5.0/1055415082/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055415082/behavior_videos/face_timestamps.npy",
+      "size": 4788080,
+      "etag": "\"5ae8d51fc54cb87bdd74f18add60f596\"",
+      "path": "sources/v0.5.0/1055415082/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055415082/behavior_videos/side_metadata.json",
+      "size": 874,
+      "etag": "\"94c5cfe01d2f4e7e55aa7bcae1c44512\"",
+      "path": "sources/v0.5.0/1055415082/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055415082/behavior_videos/side_timestamps.npy",
+      "size": 4788096,
+      "etag": "\"c7620a0f331cde3738e2d4b3bf81e063\"",
+      "path": "sources/v0.5.0/1055415082/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1055415082/ecephys_session_1055415082.nwb?versionId=xB.tsjMNkdhe0uQetFkQBjlt33cTifSm",
+      "size": 2230655384,
+      "etag": "\"d4bcd3a9168febbc0c39184c9605edd6-266\"",
+      "blake2b": "f49c35223c58821f39fe05c2f2fc8ee668f549dee4257174ad5e8b475d485b882acadf050c37004b2281d07e7958104cedb9704b460c6c10851fc290010f854b",
+      "path": "sources/v0.5.0/1055415082/ecephys_session_1055415082.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/6bcecfe9-8c62-4e78-8bdf-5d39f1384020/download/",
+      "mirror_asset_path": "sub-533539/sub-533539_ses-20201008T224411.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055415082/behavior_videos/face.mp4",
+      "size": 2495130115,
+      "etag": "\"c9c9bf0c1ddd13b643e4854a97bb3bfe-1\"",
+      "path": "sources/v0.5.0/1055415082/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1055415082/behavior_videos/side.mp4",
+      "size": 2495642687,
+      "etag": "\"4dac027e16c84f77e5ebdfed206c3411-1\"",
+      "path": "sources/v0.5.0/1055415082/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052342277/behavior_videos/face_metadata.json",
+      "size": 862,
+      "etag": "\"7954ebe2a1fc4eb95803c47de78b1b43\"",
+      "path": "sources/v0.5.0/1052342277/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052342277/behavior_videos/face_timestamps.npy",
+      "size": 4550792,
+      "etag": "\"a56f0a5ffc956a217ce9e6a90b5de445\"",
+      "path": "sources/v0.5.0/1052342277/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052342277/behavior_videos/side_metadata.json",
+      "size": 873,
+      "etag": "\"f2b29efe6ecaffbe022b41ddc3942afd\"",
+      "path": "sources/v0.5.0/1052342277/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052342277/behavior_videos/side_timestamps.npy",
+      "size": 4550744,
+      "etag": "\"0bde532e568833b812a99893710a8d47\"",
+      "path": "sources/v0.5.0/1052342277/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1052342277/ecephys_session_1052342277.nwb?versionId=tzEazi_Qg7Hn80.SsZ25TieBcfo7HSMC",
+      "size": 2400594176,
+      "etag": "\"4901f6de0490271ccc150da976cc5396-287\"",
+      "blake2b": "0274d684736363e357ef85b641861ec25509797ea3042eb57059f481be9e49923f6e25b27322914455a418b4912ac85125b18965e3638d2d00a3acd8e845eb40",
+      "path": "sources/v0.5.0/1052342277/ecephys_session_1052342277.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/4b03174b-84d4-4044-91b5-e0adcdf1b373/download/",
+      "mirror_asset_path": "sub-530862/sub-530862_ses-20200923T223418.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052342277/behavior_videos/face.mp4",
+      "size": 2371282110,
+      "etag": "\"5f2613bee94f594aadb72157c64283de-1\"",
+      "path": "sources/v0.5.0/1052342277/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052342277/behavior_videos/side.mp4",
+      "size": 2371782393,
+      "etag": "\"7c54312b6b20b428e1355582b4bb87b2-1\"",
+      "path": "sources/v0.5.0/1052342277/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052533639/behavior_videos/face_metadata.json",
+      "size": 862,
+      "etag": "\"87f05c449ccd15946afe638f6abaede1\"",
+      "path": "sources/v0.5.0/1052533639/behavior_videos/face_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052533639/behavior_videos/face_timestamps.npy",
+      "size": 4597888,
+      "etag": "\"1447e42f7fe438b2b7f274b36b1e1236\"",
+      "path": "sources/v0.5.0/1052533639/behavior_videos/face_timestamps.npy"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052533639/behavior_videos/side_metadata.json",
+      "size": 873,
+      "etag": "\"c887141454cb143abf978e6ee84e8b69\"",
+      "path": "sources/v0.5.0/1052533639/behavior_videos/side_metadata.json"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052533639/behavior_videos/side_timestamps.npy",
+      "size": 4597832,
+      "etag": "\"ea71bf49e1293f9e70ccd7bee50e0c7e\"",
+      "path": "sources/v0.5.0/1052533639/behavior_videos/side_timestamps.npy"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/behavior_ecephys_sessions/1052533639/ecephys_session_1052533639.nwb?versionId=F9BuQy_sJxb3qp4Xnv7G8b2KZrQd1ycW",
+      "size": 2313882110,
+      "etag": "\"8a1dbeff8d09a4cb13e633e7bcb95a1d-276\"",
+      "blake2b": "c121f07fb84ebc5c4748bad161cb6d1d5c372fd095cb7ec7a83fe804114d6ef45de921915504a44568841a437fac1e306f326700b83c23312aed949093e99dec",
+      "path": "sources/v0.5.0/1052533639/ecephys_session_1052533639.nwb",
+      "delivery_url": "https://api.dandiarchive.org/api/assets/65372b2a-c459-49e8-8f83-3e275066baea/download/",
+      "mirror_asset_path": "sub-530862/sub-530862_ses-20200924T221213.nwb"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052533639/behavior_videos/face.mp4",
+      "size": 2395134909,
+      "etag": "\"97e62392267ede21ea5308de2c583ff0-1\"",
+      "path": "sources/v0.5.0/1052533639/behavior_videos/face.mp4"
+    },
+    {
+      "url": "https://allen-brain-observatory.s3.amazonaws.com/visual-behavior-neuropixels/raw-data/1052533639/behavior_videos/side.mp4",
+      "size": 2396209170,
+      "etag": "\"8b78f1f027ed9ebd4ce04c0e8e5ba8d4-1\"",
+      "path": "sources/v0.5.0/1052533639/behavior_videos/side.mp4"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/project_metadata/channels.csv?versionId=57COcpSGYPvGzdywGdEt39U36j9g0OKb",
+      "size": 27901753,
+      "etag": "\"a9843fea6e38e3e75937bbe74af7cc6c-2\"",
+      "blake2b": "0deef24b6340638da7f1bba42864ef6b14e7966da9b9d9c89ec4c5518daed0ba8f6ce8f81f0802ff41f5beed825bc500cc93b0266acfe17f4175f2a7cc543b28",
+      "path": "metadata/channels.csv"
+    },
+    {
+      "url": "https://visual-behavior-neuropixels-data.s3.amazonaws.com/visual-behavior-neuropixels/project_metadata/units.csv?versionId=ldPGtqPGK_YjQxYL2hozkG.FVHdVyu9C",
+      "size": 133894832,
+      "etag": "\"02ed6319ec7b042e47a93bee889a6d75-16\"",
+      "blake2b": "8cd48080102bcd3a225e5b093818a6b6185a7b6c89c10e78a050c84bad2dbc961fa4819b99550e64c59881eabc54ccb07cf636bcab0df1b994509b164528e07d",
+      "path": "metadata/units.csv"
+    }
+  ],
+  "provenance": {
+    "project_manifest": "visual-behavior-neuropixels_project_manifest_v0.5.0.json",
+    "nwb_mirror": "DANDI 000713 / 0.240702.1725; delivery checked against primary Allen BLAKE2b",
+    "dataset_terms": "https://alleninstitute.org/terms-of-use/",
+    "citation_policy": "https://alleninstitute.org/citation-policy/",
+    "note": "Public identifiers and download metadata only; no videos or neural payloads are distributed."
+  }
+}

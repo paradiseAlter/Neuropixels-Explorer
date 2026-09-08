@@ -27,3 +27,24 @@ Primary upstream sources:
 The optional dependencies retain their own notices. Any future redistribution
 of their source, binaries or weights must carry the corresponding terms; this
 file does not relicense them under MIT.
+
+## Allen validation material (2026-09-09)
+
+The versioned example manifest contains public identifiers and download URLs;
+no neural payloads, camera images, manuscript source trees or model weights
+are redistributed. The selected DANDI NWB archive declares CC-BY-4.0. The
+separately hosted camera files retain the Allen Institute terms and citation
+policy; this project does not assume their license is the same as the NWB
+archive. Published ripple tables remain external OSF data, with their source
+and individual extraction hashes recorded locally.
+
+The VBN-Manuscript repository was inspected at
+`cf0d8a0046f0222954a1bf8d51b8ada1bc1d89f6`; no repository license was identified,
+so its software is not incorporated. The local analysis examples are separate
+implementations of the documented calculations. Optional h5py, pandas,
+matplotlib, requests and PyAV installations retain their own package and
+transitive binary notices; they are not relicensed or bundled here.
+
+See [the data/method citations and scope](docs/ALLEN_VBN_VALIDATION.md),
+[Allen terms](https://alleninstitute.org/terms-of-use/), and
+[Allen citation policy](https://alleninstitute.org/citation-policy/).
