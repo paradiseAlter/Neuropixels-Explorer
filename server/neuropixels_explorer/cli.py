@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     server = create_server(paths, host=args.host, port=args.port, quiet=args.quiet)
     host_for_url = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
-    url = f"http://{host_for_url}:{server.server_port}/?database=1"
+    url = f"http://{host_for_url}:{server.server_port}/"
     print(f"Neuropixels Explorer: {url}")
     print("Press Ctrl+C to stop the local service.")
     if args.open_browser:

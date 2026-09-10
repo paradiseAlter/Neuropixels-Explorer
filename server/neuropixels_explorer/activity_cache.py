@@ -13,7 +13,7 @@ import numpy as np
 
 
 ACTIVITY_CACHE_FORMAT = "neuropixels-display-activity-pyramid"
-ACTIVITY_PREPROCESSING_VERSION = "3.0.0"
+ACTIVITY_PREPROCESSING_VERSION = "3.1.0"
 ACTIVITY_LEVELS = (128, 256, 512, 1024, 2048)
 
 

@@ -143,3 +143,29 @@ Allen unit IDs, labels, probe identities, spike seconds and peak-channel anatomy
 are retained. The derived float64 sample-equivalent arrays serve the existing
 KiloSort reader contract and do not represent another spike-sorting run.
 See `docs/ALLEN_VBN_VALIDATION.md` for acquisition-specific limits and commands.
+
+## Local projects and compact annotation (Beta 3)
+
+`project-ui.js` owns the start screen, top-left open menu and local project
+actions. `local_projects.py` opens a native picker in a separate process and
+returns opaque candidate/file IDs. A browser request cannot nominate an arbitrary
+source path. The service registers selected Kilosort/video files in place using
+fingerprinted grants; NWB imports reuse the Allen physical-probe adapter and
+write derived arrays under `.explorer-imports`. Source grants and recent project
+links live in `.explorer-local.json` under the configured runtime data root.
+These machine-local files, original data and generated arrays stay outside Git.
+The local mutation endpoints reject foreign origins and non-loopback hosts.
+
+`mini-probe.js` renders available Unit coordinates and links Unit/region selection
+to the existing experiment state. It depicts measured positions, not an inferred
+atlas trajectory. Missing depth is not zero. Activity and unit-review responses
+use original catalog peak-channel coordinates when present and available
+Kilosort geometry otherwise. The server display-cache version is incremented so
+older cached coordinates cannot silently survive the adapter fix.
+
+The annotation panel now lives in the video body. The time strip supports direct
+interval selection; batch review moves the same controller into a native dialog.
+Annotation JSON schemas and candidate provenance are unchanged. Browser drafts
+remain scoped to the recording/video and origin. Local project links persist
+independently of annotation drafts. `Start-Explorer.cmd` starts or reuses the
+correct local service and opens the start screen after process restarts.

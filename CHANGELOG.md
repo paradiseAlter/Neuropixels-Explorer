@@ -3,6 +3,27 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.0.0-beta.3] - 2026-09-11
+
+- Made opening data a persistent top-left action and added a start screen with
+  recent projects. The local picker opens Kilosort folders and Allen NWB files;
+  physical probes are selectable, with source identities and data preserved.
+- Added separately located video attachments, nearby-video suggestions and
+  persistent source links. Manual alignment and verified frame-clock import
+  explicitly distinguish linked video from validated synchronization.
+- Embedded annotation in the video time strip. Drag to select a behavior or mark
+  its start/end during playback, then name it. Batch grouping and label schemes
+  open separately. The neural canvas and video keep their height when editing.
+- Set the initial neural/video allocation to 65/35, retained resizing, and added
+  temporary video enlargement. Restored a visible 2D Probe beside activity.
+- Fixed Allen catalog/Probe joins and source-coordinate handling, including zero
+  versus unknown depth. Added template-coordinate fallback for Kilosort. The
+  server display-cache preprocessing version is 3.1.0; database schema remains 3.
+- Added a restartable Windows launcher, local file-grant boundaries, direct-import
+  contract tests and browser acceptance with real Allen NWB/video. Head-fixed
+  validation does not establish behavior-classifier accuracy or final human UX
+  acceptance.
+
 ## [4.0.0-beta.2] - 2026-09-09
 
 - Added a bounded, resumable Allen VBN download manifest and source integrity

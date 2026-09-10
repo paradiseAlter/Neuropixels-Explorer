@@ -3,9 +3,19 @@
   "use strict";
   const A = window.NeuropixelsAnnotations;
   const D = window.NeuropixelsBehaviorDiscovery;
+  const clipColor = label => { let h=0; for(const c of label)h=(h*31+c.charCodeAt(0))>>>0;return ["#67aeb8","#ad86ca","#bc9650","#76a577","#ca8193","#729dd0"][h%6]; };
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const COPY = {
-    open: ["ANNOTATE · BETA", "行为标注 · BETA", "ANOTAR · BETA"],
+    open: ["Annotate", "标注行为", "Anotar"],
+    dragHint: ["Drag on the video strip to select a behavior, or mark its start and end while watching.", "在视频时间条上拖出一段行为，或播放时标记起点和终点。", "Arrastra en la barra del vídeo o marca inicio y fin mientras lo ves."],
+    compactStart: ["Mark start", "标记起点", "Marcar inicio"], compactEnd: ["Mark end", "标记终点", "Marcar fin"],
+    more: ["Clips & grouping…", "片段与分组…", "Clips y grupos…"],
+    labelHint: ["Name this behavior…", "给这段行为命名…", "Nombra esta conducta…"],
+    saveClip: ["Save label", "保存标注", "Guardar etiqueta"],
+    newClip: ["New interval", "标注下一段", "Nuevo intervalo"],
+    around: ["Around playhead · 10 s", "光标附近 · 10 秒", "Cerca del cursor · 10 s"],
+    whole: ["Whole video", "整个视频", "Vídeo completo"],
+    clipCount: ["clips", "段标注", "clips"],
     title: ["Behavior annotation", "行为标注", "Anotación de conducta"],
     close: ["Close annotation editor", "关闭标注编辑器", "Cerrar editor"],
     empty: ["Attach a video to annotate intervals on the shared neural timeline.", "请先关联视频，再在共享神经时间轴上标注区间。", "Adjunta un vídeo para anotar intervalos en el eje neural compartido."],
@@ -86,9 +96,15 @@
       this.store = new DraftStore(); this.doc = null; this.key = null; this.history = []; this.future = [];
       this.selected = new Set(); this.group = ""; this.page = 0; this.opened = false; this.loop = null;
       this.saveQueue = Promise.resolve(); this.storageStatus = "saved";
-      button.addEventListener("click", () => { this.opened = !this.opened; this.render(); if (this.opened) panel.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
+      this.home = panel.parentElement;
+      this.reviewDialog = document.createElement("dialog"); this.reviewDialog.className = "annotation-review-dialog";
+      document.body.append(this.reviewDialog);
+      this.reviewDialog.addEventListener("cancel", e => { e.preventDefault(); this.reviewMode = false; this.render(); });
+      this.stripObserver=new ResizeObserver(()=>this.drawTimeline(true));this.stripObserver.observe(strip);
+      button.addEventListener("click", () => { this.opened = !this.opened; this.render(); });
       panel.addEventListener("click", (e) => this.action(e));
       panel.addEventListener("change", (e) => this.onChange(e));
+      panel.addEventListener("input", e => { if(e.target.dataset.field) e.target.dataset.edited="true"; });
       strip.addEventListener("click", (e) => { const node = e.target.closest("[data-clip]"); if (node && !this.dragged) this.select(node.dataset.clip); this.dragged = false; });
       strip.addEventListener("keydown", (e) => { if (["Enter", " "].includes(e.key) && e.target.dataset.clip) { e.preventDefault(); this.select(e.target.dataset.clip); } });
       strip.addEventListener("pointerdown", (e) => this.dragStart(e));
@@ -96,7 +112,8 @@
       strip.addEventListener("pointerup", (e) => this.dragEnd(e));
       strip.addEventListener("pointercancel", () => { this.drag = null; this.drawTimeline(); });
       panel.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") { this.opened = false; this.render(); button.focus(); }
+        if (e.key === "Escape") { e.preventDefault(); if (this.reviewMode) this.reviewMode = false; else this.opened = false; this.render(); button.focus(); }
+        if (e.key === "Enter" && e.target.dataset.field === "label") { e.preventDefault(); this.panel.querySelector('[data-action="quick-save"]')?.click(); }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); this.downloadProject(); }
       });
       this.render();
@@ -112,7 +129,7 @@
       } : null;
       if ((context?.key || null) !== this.key) {
         this.abort?.abort(); this.persist();
-        this.key = context?.key || null; this.doc = null; this.history = []; this.future = []; this.selected.clear(); this.group = ""; this.page = 0; this.loop = null;
+        this.key = context?.key || null; this.doc = null; this.history = []; this.future = []; this.selected.clear(); this.group = ""; this.page = 0; this.loop = null; this.draft = null; this.reviewMode = false; this.window = null; this.activeTrack = null; this.pendingLabel = "";
         this.render();
         if (context) {
           const token = this.key;
@@ -158,6 +175,30 @@
       this.persist(); this.render();
     }
     render() {
+      if (this.reviewMode && this.opened) {
+        this.reviewDialog.append(this.panel); this.panel.classList.remove("is-compact");
+        if (!this.reviewDialog.open) this.reviewDialog.showModal();
+        this.renderFull(); return;
+      }
+      if(this.reviewDialog.open) this.panel.querySelectorAll("video").forEach(v=>{v.pause();v.removeAttribute("src");v.load();});
+      this.reviewDialog.close(); this.home.append(this.panel); this.panel.classList.add("is-compact");
+      this.button.textContent = tr("open"); this.button.setAttribute("aria-expanded", String(this.opened));
+      this.panel.hidden = !this.opened;
+      this.strip.hidden = !this.doc || (!this.opened && !this.doc.segments.length);
+      if (!this.opened || !this.doc) { this.panel.innerHTML = this.doc ? "" : `<p>${esc(tr("empty"))}</p>`; this.drawTimeline(true); return; }
+      const B = (a,k,x) => this.buttonHTML(a,k,x);
+      const active = this.selected.size === 1 ? this.doc.segments.find(s => this.selected.has(s.id)) : null;
+      const clip = active || this.draft;
+      const activeTrack=this.activeTrack?JSON.parse(this.activeTrack):["animal-1","behavior"];
+      const labels = [...new Set(this.doc.segments.map(s => A.label(this.doc,s)).filter(Boolean))];
+      const field = (key,value,type="text",extra="") => `<input data-field="${key}" aria-label="${esc(tr(key))}" type="${type}" ${type==="number"?'step="0.001" min="0"':'maxlength="200"'} value="${esc(value)}" ${extra}>`;
+      this.panel.innerHTML = `${clip && clip.end != null ? "" : `<p class="annotation-instruction">${esc(tr("dragHint"))}</p><div class="annotation-quick-actions">${B("quick-start","compactStart")}${B("quick-end","compactEnd",this.draft?.start == null ? "disabled" : "")}${B("range","useRange",this.getView().selectedInterval ? "" : "disabled")}</div>`}
+        ${clip && clip.end != null ? `<div class="annotation-quick-editor"><div class="annotation-range-fields">${field("start",clip.start.toFixed(3),"number")}<span>→</span>${field("end",clip.end.toFixed(3),"number")}<small>s</small></div><div class="annotation-name-row">${field("label",active ? A.label(this.doc,active) : this.pendingLabel||"","text",`list="behavior-label-names" placeholder="${esc(tr("labelHint"))}"`)}${B("quick-save","saveClip")}</div><datalist id="behavior-label-names">${labels.map(l=>`<option value="${esc(l)}">`).join("")}</datalist><input data-field="subject" type="hidden" value="${esc(clip.subject||activeTrack[0])}"><input data-field="track" type="hidden" value="${esc(clip.track||activeTrack[1])}">
+        <div class="annotation-context-actions">${B("quick-new",active?"newClip":"clear")}${active?B("split","split")+B("remove","remove"):""}${B("undo","undo",this.history.length?"":"disabled")}${B("review","more")}</div></div>` : this.draft ? `<p class="annotation-pending">${esc(tr("compactStart"))} ${this.draft.start.toFixed(3)} s → …</p>` : ""}
+        ${clip && clip.end != null ? "" : `<div class="annotation-compact-footer"><span>${this.doc.segments.length} ${esc(tr("clipCount"))}</span>${B("undo","undo",this.history.length?"":"disabled")}${B("save","save")}${B("review","more")}</div>`}<small data-storage>${esc(tr(this.storageStatus))}</small>`;
+      this.drawTimeline(true);
+    }
+    renderFull() {
       this.button.textContent = tr("open"); this.button.setAttribute("aria-expanded", String(this.opened));
       this.panel.hidden = !this.opened; this.strip.hidden = !this.doc;
       this.panel.querySelectorAll("video").forEach((v) => { v.pause(); v.removeAttribute("src"); v.load(); });
@@ -166,7 +207,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.0.0-beta.2</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.0.0-beta.3</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -223,32 +264,47 @@
         div.append(b); target.append(div);
       }
     }
+    videoRange() {
+      const total = this.doc?.context.duration || 1;
+      if (this.window) return this.window;
+      const range = this.getView().visibleRange;
+      const start = this.video.mapping.neuralToVideo(range.start), end = this.video.mapping.neuralToVideo(range.end);
+      return Number.isFinite(start) && Number.isFinite(end) && end > start
+        ? { start: Math.max(0,start), end: Math.min(total,end) } : {start:0,end:total};
+    }
     drawTimeline(force = false) {
-      if (!this.doc) { this.strip.innerHTML = ""; return; }
-      const view = this.getView(), range = view.visibleRange, duration = Math.max(.001, range.end - range.start);
-      const mapping = this.video.mapping;
-      const signature = JSON.stringify([range, this.doc.updatedAt, this.doc.activeSchemeId, [...this.selected]]);
-      const x = (videoTime) => (mapping.videoToNeural(videoTime) - range.start) / duration * 1000;
-      if (force || signature !== this.timelineSignature || mapping !== this.timelineMapping) {
-        this.timelineSignature = signature;
-        this.timelineMapping = mapping;
-        const visible = this.doc.segments.filter((s) => x(s.end) >= 0 && x(s.start) <= 1000);
-        const tracks = [...new Set(visible.map((s) => `${s.subject} / ${s.track}`))].slice(0, 5);
-        const height = Math.max(32, tracks.length * 30);
-        this.strip.innerHTML = `<div class="annotation-track-label">${esc(tr("title"))}<small>${esc(tr("seconds"))}</small></div><div class="annotation-track-plot"><svg style="height:${height}px" viewBox="0 0 1000 ${height}" preserveAspectRatio="none" role="group" aria-label="${esc(tr("table"))}">${visible.slice(0, 1000).map((s) => {
-          const row = tracks.indexOf(`${s.subject} / ${s.track}`); if (row < 0) return "";
-          const left = Math.max(0, x(s.start)), right = Math.min(1000, x(s.end)), selected = this.selected.has(s.id);
-          const name = A.label(this.doc, s) || this.shortGroup(A.groupKey(this.doc, s));
-          return `<g data-clip="${esc(s.id)}" tabindex="0" role="button" aria-label="${esc(`${name}: ${s.start.toFixed(3)}–${s.end.toFixed(3)}`)}" class="${selected ? "is-selected" : ""} ${A.reviewed(this.doc, s) ? "is-reviewed" : ""}"><title>${esc(`${s.subject} / ${s.track} · ${name} · ${tr(A.reviewed(this.doc, s) ? "reviewed" : "suggested")}`)}</title><rect x="${left}" y="${row * 30 + 3}" width="${Math.max(1, right - left)}" height="23" rx="2"/>${right - left > 55 ? `<text x="${left + 4}" y="${row * 30 + 19}">${esc(name.slice(0, Math.floor((right - left) / 7)))}</text>` : ""}${selected ? `<rect data-edge="start" data-id="${esc(s.id)}" class="annotation-edge" x="${left}" y="${row * 30 + 3}" width="7" height="23"/><rect data-edge="end" data-id="${esc(s.id)}" class="annotation-edge" x="${Math.max(left, right - 7)}" y="${row * 30 + 3}" width="7" height="23"/>` : ""}</g>`;
-        }).join("")}<line data-playhead y1="0" y2="${height}"/></svg></div>`;
-        this.strip.title = visible.length > 1000 ? tr("limited") : tr(mapping.verificationStatus === "verified" ? "verified" : "unverified");
+      if (!this.doc) { this.strip.innerHTML=""; return; }
+      this.strip.title=tr(this.doc.segments.length>1000?"limited":this.video.mapping.verificationStatus==="verified"?"verified":"unverified");
+      this.strip.hidden = !this.opened && !this.doc.segments.length;
+      const range=this.videoRange(), span=Math.max(.001,range.end-range.start);
+      const width=Math.max(1,this.strip.clientWidth-24);
+      const signature=JSON.stringify([this.activeTrack,width,range,this.doc.updatedAt,this.doc.activeSchemeId,[...this.selected],this.draft,this.opened]);
+      const x=t=>(t-range.start)/span*width;
+      if(force||this.timelineSignature!==signature) {
+        this.timelineSignature=signature;
+        const tracks=[...new Set(this.doc.segments.map(s=>JSON.stringify([s.subject,s.track])))];
+        if(!tracks.includes(this.activeTrack))this.activeTrack=tracks[0];
+        const clips=this.doc.segments.filter(s=>(!this.activeTrack||JSON.stringify([s.subject,s.track])===this.activeTrack)&&s.end>=range.start&&s.start<=range.end).slice(0,1000);
+        this.strip.innerHTML=`${tracks.length>1?`<label class="annotation-track-picker">${esc(tr("subject"))} / ${esc(tr("track"))}<select data-video-track>${tracks.map(t=>`<option value="${esc(t)}" ${t===this.activeTrack?"selected":""}>${esc(JSON.parse(t).join(" / "))}</option>`).join("")}</select></label>`:""}<div class="annotation-video-scale"><span>${range.start.toFixed(2)} s</span><button data-range-around>${esc(tr("around"))}</button><button data-range-whole>${esc(tr("whole"))}</button><span>${range.end.toFixed(2)} s</span></div><div class="annotation-track-plot"><svg viewBox="0 0 ${width} 46" preserveAspectRatio="none" role="group" aria-label="${esc(tr("table"))}"><rect class="annotation-track-background" x="0" y="0" width="${width}" height="46"/>${clips.map(s=>{const left=Math.max(0,x(s.start)),right=Math.min(width,x(s.end)),label=A.label(this.doc,s)||this.shortGroup(A.groupKey(this.doc,s));return `<g style="--clip-color:${clipColor(label)}" data-clip="${esc(s.id)}" tabindex="0" role="button" aria-label="${esc(label)} ${s.start.toFixed(3)}–${s.end.toFixed(3)}" class="${this.selected.has(s.id)?"is-selected":""} ${A.reviewed(this.doc,s)?"is-reviewed":""}"><title>${esc(label)} · ${s.start.toFixed(3)}–${s.end.toFixed(3)} s</title><rect x="${left}" y="10" width="${Math.max(2,right-left)}" height="28" rx="3"/>${right-left>70?`<text x="${left+5}" y="29">${esc(label.slice(0,Math.floor((right-left)/8)))}</text>`:""}${this.selected.has(s.id)?`<rect data-edge="start" data-id="${s.id}" class="annotation-edge" x="${left}" y="8" width="9" height="32"/><rect data-edge="end" data-id="${s.id}" class="annotation-edge" x="${Math.max(left,right-9)}" y="8" width="9" height="32"/>`:""}</g>`;}).join("")}<rect data-draft class="annotation-draft" x="0" y="3" width="0" height="40"/><line data-playhead y1="0" y2="46"/></svg></div>`;
+        const picker=this.strip.querySelector("[data-video-track]");if(picker)picker.onchange=()=>{this.activeTrack=picker.value;this.drawTimeline(true);};
+        this.strip.querySelector("[data-range-around]").onclick=()=>{const at=this.video.currentVideoTime;this.focusVideoRange({start:Math.max(0,at-5),end:Math.min(this.doc.context.duration,at+5)});};
+        this.strip.querySelector("[data-range-whole]").onclick=()=>{this.window={start:0,end:this.doc.context.duration};this.setView({visibleRange:{start:0,end:this.getRecording().duration}});this.drawTimeline(true);};
       }
-      const playhead = this.strip.querySelector("[data-playhead]");
-      if (playhead) { const pos = (view.cursorTime - range.start) / duration * 1000; playhead.setAttribute("x1", pos); playhead.setAttribute("x2", pos); }
+      const head=this.strip.querySelector("[data-playhead]"), pos=x(this.video.currentVideoTime);
+      head?.setAttribute("x1",pos);head?.setAttribute("x2",pos);
+      const draft=this.strip.querySelector("[data-draft]");
+      if(draft&&this.draft) { const left=x(this.draft.start),right=x(this.draft.end??this.video.currentVideoTime);draft.setAttribute("x",Math.min(left,right));draft.setAttribute("width",Math.abs(right-left)); }
+    }
+    focusVideoRange(range) {
+      this.window=range;
+      const start=this.video.mapping.videoToNeural(range.start),end=this.video.mapping.videoToNeural(range.end);
+      if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)this.setView({visibleRange:{start:Math.max(0,start),end:Math.min(this.getRecording().duration,end)}});
+      this.drawTimeline(true);
     }
     select(id) {
       const s = this.doc?.segments.find((v) => v.id === id); if (!s) return;
-      this.selected = new Set([id]); this.opened = true; this.loop = null;
+      this.activeTrack=JSON.stringify([s.subject,s.track]);
+      this.selected = new Set([id]); this.opened = true; this.loop = null; this.draft = null;
       const mapping = this.video.mapping;
       const start = mapping.videoToNeural(s.start), end = mapping.videoToNeural(s.end);
       this.video.pause();
@@ -274,7 +330,11 @@
     one() { if (this.selected.size !== 1) throw new Error(tr("selectOne")); return [...this.selected][0]; }
     ids() { if (!this.selected.size) throw new Error(tr("chooseClips")); return [...this.selected]; }
     input(key) { return this.panel.querySelector(`[data-field="${key}"]`); }
-    values() { return { start: Number(this.input("start").value), end: Number(this.input("end").value), label: this.input("label").value.trim(), subject: this.input("subject").value.trim(), track: this.input("track").value.trim() }; }
+    values() {
+      const clip=this.selected.size===1?this.doc.segments.find(s=>this.selected.has(s.id)):this.draft;
+      const time=key=>!this.reviewMode&&clip?.[key]!=null&&!this.input(key).dataset.edited ? clip[key] : Number(this.input(key).value);
+      return { start:time("start"),end:time("end"),label:this.input("label").value.trim(),subject:this.input("subject").value.trim(),track:this.input("track").value.trim() };
+    }
     async onChange(e) {
       try {
         if (e.target.hasAttribute("data-scheme")) { this.commit(A.change(this.doc, (d) => { d.activeSchemeId = e.target.value; })); this.selected.clear(); this.group = ""; this.render(); }
@@ -292,8 +352,20 @@
       const selected = e.target.closest("[data-select]"); if (selected) { this.select(selected.dataset.select); return; }
       const action = e.target.closest("[data-action]")?.dataset.action; if (!action) return;
       try {
-        if (action === "close") { this.opened = false; this.render(); this.button.focus(); return; }
+        if (action === "close") { if (this.reviewMode) this.reviewMode=false; else this.opened = false; this.render(); this.button.focus(); return; }
         if (!this.doc) return;
+        if (action === "review") { this.reviewMode=true; this.render(); return; }
+        if (action === "quick-start") { this.selected.clear(); this.draft={start:this.video.currentVideoTime,end:null}; this.render(); return; }
+        if (action === "quick-end") { this.draft.end=this.video.currentVideoTime; if(this.draft.end<=this.draft.start)throw new Error("End must follow start"); this.video.pause(); this.syncDraft(); this.render(); this.input("label")?.focus(); return; }
+        if (action === "quick-new") { this.selected.clear(); this.draft=null; this.render(); return; }
+        if (action === "quick-save") { const values=this.values(); if(!values.label) {this.input("label").focus();return;} this.pendingLabel=values.label;
+          let next;
+          if(this.selected.size===1) {
+            const id=this.one(),clip=this.doc.segments.find(s=>s.id===id);
+            const delta=Object.fromEntries(Object.entries(values).filter(([key,value])=>key==="label"||clip[key]!==value));
+            next=A.assign(A.edit(this.doc,id,delta),[id],values.label,true);
+          } else next=A.add(this.doc,values);
+          this.draft=null; this.commit(next); this.selected.clear(); this.render(); return; }
         if (action === "save") this.downloadProject();
         if (action === "csv") this.download(A.toCSV(this.doc, this.video.mapping), "annotations.csv", "text/csv");
         if (action === "import") this.panel.querySelector("[data-import]").click();
@@ -301,7 +373,9 @@
         if (action === "redo" && this.future.length) { this.history.push(this.doc); this.doc = this.future.pop(); this.loop = null; this.selected.clear(); this.persist(); this.render(); }
         if (action === "scheme") this.commit(A.addScheme(this.doc, this.panel.querySelector("[data-new-scheme]").value));
         if (["start", "end"].includes(action)) this.input(action).value = this.video.currentVideoTime.toFixed(3);
-        if (action === "range") { const r = this.getView().selectedInterval; if (!r) throw new Error(tr("useRange")); const start = this.video.mapping.neuralToVideo(r.start), end = this.video.mapping.neuralToVideo(r.end); if (!Number.isFinite(start) || !Number.isFinite(end)) throw new Error(this.video.t("video.outsideClock")); this.input("start").value = Math.max(0, start).toFixed(3); this.input("end").value = Math.min(this.doc.context.duration, end).toFixed(3); }
+        if (action === "range") { const r = this.getView().selectedInterval; if (!r) throw new Error(tr("useRange")); const start = this.video.mapping.neuralToVideo(r.start), end = this.video.mapping.neuralToVideo(r.end); if (!Number.isFinite(start) || !Number.isFinite(end)) throw new Error(this.video.t("video.outsideClock"));
+          if(!this.reviewMode) {this.selected.clear();this.draft={start:Math.max(0,start),end:Math.min(this.doc.context.duration,end)};this.render();this.input("label")?.focus();}
+          else {this.input("start").value=Math.max(0,start).toFixed(3);this.input("end").value=Math.min(this.doc.context.duration,end).toFixed(3);} }
         if (action === "add") this.commit(A.add(this.doc, this.values()));
         if (action === "edit") this.commit(A.edit(this.doc, this.one(), this.values()));
         if (action === "split") this.commit(A.split(this.doc, this.one(), this.video.currentVideoTime));
@@ -324,26 +398,36 @@
       const url = URL.createObjectURL(new Blob([content], { type })); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
     dragStart(e) {
-      const edge = e.target.closest("[data-edge]"); if (!edge) return;
+      this.dragged = false;
+      const edge = e.target.closest("[data-edge]");
+      if (!edge) {
+        if(!this.opened||!e.target.closest("svg")||e.target.closest("[data-clip]"))return;
+        e.preventDefault(); this.video.pause(); this.selected.clear(); this.brush={anchor:this.pointerTime(e)};
+        this.draft={start:this.brush.anchor,end:this.brush.anchor};this.strip.setPointerCapture(e.pointerId);return;
+      }
       e.preventDefault(); e.stopPropagation(); this.dragged = false;
       const s = this.doc.segments.find((v) => v.id === edge.dataset.id);
       this.drag = { id: s.id, edge: edge.dataset.edge, value: s[edge.dataset.edge] }; this.strip.setPointerCapture(e.pointerId);
     }
     dragMove(e) {
+      if(this.brush) {const t=this.pointerTime(e);this.draft={start:Math.min(t,this.brush.anchor),end:Math.max(t,this.brush.anchor)};this.dragged=true;this.drawTimeline();return;}
       if (!this.drag) return; this.dragged = true;
-      const rect = this.strip.querySelector("svg").getBoundingClientRect(), r = this.getView().visibleRange;
-      const neural = r.start + Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * (r.end - r.start);
       const s = this.doc.segments.find((v) => v.id === this.drag.id);
-      const time = this.video.mapping.neuralToVideo(neural);
+      const time = this.pointerTime(e);
       this.drag.value = this.drag.edge === "start" ? Math.max(0, Math.min(s.end - .001, time)) : Math.min(this.doc.context.duration, Math.max(s.start + .001, time));
       const input = this.input(this.drag.edge); if (input) input.value = this.drag.value.toFixed(3);
     }
     dragEnd(e) {
+      if(this.brush) {this.brush=null;if(this.strip.hasPointerCapture(e.pointerId))this.strip.releasePointerCapture(e.pointerId);
+        if(this.draft.end-this.draft.start<.001){this.video.seekVideo(this.draft.start);this.draft=null;}else this.syncDraft();
+        this.render();this.input("label")?.focus();return;}
       if (!this.drag) return;
       const d = this.drag; this.drag = null;
       if (this.strip.hasPointerCapture(e.pointerId)) this.strip.releasePointerCapture(e.pointerId);
       try { this.commit(A.edit(this.doc, d.id, { [d.edge]: d.value })); } catch (error) { this.toast(error.message); }
     }
+    pointerTime(e) {const rect=this.strip.querySelector("svg").getBoundingClientRect(),r=this.videoRange();return Math.max(0,Math.min(this.doc.context.duration,r.start+Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width))*(r.end-r.start)));}
+    syncDraft() {const start=this.video.mapping.videoToNeural(this.draft.start),end=this.video.mapping.videoToNeural(this.draft.end);this.setView({selectedInterval:Number.isFinite(start)&&Number.isFinite(end)?{start,end}:null});this.video.seekVideo(this.draft.start);}
     async analyze() {
       if (this.abort) return;
       if (this.video.source?.kind === "synthetic") throw new Error(tr("autoVideo"));
@@ -386,7 +470,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.0.0-beta.2", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.0.0-beta.3", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

@@ -7,11 +7,14 @@ results. It does not ship a universal behavior classifier or a standard ethogram
 
 ## Use in Explorer
 
-1. Open a recording and attach its behavior video. Open **Annotate · Beta**.
-2. For manual intervals, brush the neural canvas and choose **Use shared
-   selection**, or set the start and end at the video cursor. Enter a behavior
-   name, subject and track, then **Add interval**.
-3. For automatic suggestions, open **Experimental grouping** and choose the
+1. Open a neural recording and add its video from any folder. Choose **Annotate**
+   beneath the video. The main neural canvas and video keep their height.
+2. Drag on the video time strip, or choose **Mark start** and **Mark end** while
+   watching. Enter the laboratory's behavior name and **Save label**. Click a
+   saved clip to change its boundaries, split or remove it. Numeric boundaries
+   support precise keyboard editing. **Around playhead** focuses both views on
+   ten seconds; **Whole video** restores the overview.
+3. For automatic suggestions, open **Clips & grouping**, then **Experimental grouping** and choose the
    target group count and short-bout merge threshold. **Group this video** runs
    locally; **Cancel** stops decoding or the clustering worker.
 4. Choose a review group. Watch typical, distant and temporally distributed
@@ -36,8 +39,9 @@ results. It does not ship a universal behavior classifier or a standard ethogram
    with a spreadsheet formula marker is apostrophe-prefixed in CSV; JSON keeps
    the exact label text.
 
-For a long list, review 20 clips per page. At most 1,000 intervals and five tracks
-are drawn in the compact timeline; all intervals remain in the editor/export.
+For a long list, review 20 clips per page. The video time strip displays up to
+1,000 visible intervals from the selected subject/track. A track selector appears
+when multiple tracks exist; all intervals remain in batch review and exports.
 Keyboard controls include Tab/Enter, Escape to close, and Ctrl/Cmd+S to save the
 project while the editor has focus. Numeric boundaries provide a keyboard
 alternative to dragging. The underlying source videos and neural arrays are
@@ -53,11 +57,11 @@ not an inferred negative behavior.
 
 Each segment keeps its immutable original run/group/boundaries. Each imported
 run retains its original candidate rows, even after a user removes a clip.
-Human curation is recorded separately. The browser uses the existing affine
-`TimeMapping` to display `neural = offset + scale * video`; JSON/CSV export also
-records that mapping and its verification status. A manual offset or declared
-FPS does not establish alignment accuracy. This beta does not implement an
-irregular acquisition-frame-to-neural clock synchronizer.
+Human curation is recorded separately. The browser and JSON/CSV exports use the same `TimeMapping`: affine mappings or
+measured piecewise frame-clock anchors. Frame clocks preserve dropped-frame
+corrections and never extrapolate beyond their measured range. A manual offset
+or declared FPS does not establish alignment accuracy; changing the alignment
+removes verified status. The original candidate boundaries remain available.
 
 The candidate importer checks schema, video name, available byte size, duration,
 interval ranges, unique run IDs and an explicit timebase before changing the

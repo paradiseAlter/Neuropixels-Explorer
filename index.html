@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="A local-first interactive explorer for Neuropixels units, signals, physical probes, and brain regions.">
-  <title>Neuropixels Explorer 4.0.0-beta.2</title>
-  <script src="./scripts/i18n.js?v=4.0.0-beta.2"></script>
-  <script src="./scripts/theme.js?v=4.0.0-beta.2"></script>
+  <title>Neuropixels Explorer 4.0.0-beta.3</title>
+  <script src="./scripts/i18n.js?v=4.0.0-beta.3"></script>
+  <script src="./scripts/theme.js?v=4.0.0-beta.3"></script>
   <script>
     window.neuropixelsLanguageController = new window.NeuropixelsI18n.LanguageController({
       root: document.documentElement,
@@ -20,15 +20,18 @@
       matchMedia: window.matchMedia.bind(window)
     });
   </script>
-  <link rel="stylesheet" href="./styles/app.css?v=4.0.0-beta.2">
-  <link rel="stylesheet" href="./styles/annotations.css?v=4.0.0-beta.2">
+  <link rel="stylesheet" href="./styles/app.css?v=4.0.0-beta.3">
+  <link rel="stylesheet" href="./styles/annotations.css?v=4.0.0-beta.3">
+  <link rel="stylesheet" href="./styles/workspace-beta.css?v=4.0.0-beta.3">
 </head>
 <body>
   <div class="app-shell" id="app-shell">
     <header class="app-bar">
+      <div class="open-control"><button class="primary-button" id="open-folder-button" type="button" aria-expanded="false">OPEN / ADD</button><div id="open-menu" hidden></div></div>
+      <button id="home-button" class="quiet-button" type="button" aria-label="Home">⌂</button>
       <div class="app-title">
         <strong data-i18n="app.title">NEUROPIXELS EXPLORER</strong>
-        <span id="version-label">4.0.0-beta.2</span>
+        <span id="version-label">4.0.0-beta.3</span>
       </div>
       <div class="dataset-title" id="dataset-title" data-i18n="app.noFolder">No folder loaded</div>
       <div class="app-actions">
@@ -36,18 +39,12 @@
         <label class="preference-picker" for="theme-select"><span data-i18n="app.theme">THEME</span><select id="theme-select" aria-label="Explorer theme" data-i18n-aria-label="app.themeAria"><option value="dark" data-i18n="theme.dark">Dark</option><option value="light" data-i18n="theme.light">Light</option><option value="contrast" data-i18n="theme.contrast">High Contrast</option><option value="system" data-i18n="theme.system">System</option></select></label>
         <button class="quiet-button" id="help-button" type="button" aria-haspopup="dialog" aria-controls="help-drawer" data-i18n="app.help">HELP</button>
         <button class="quiet-button" id="data-details-button" type="button" disabled data-i18n="app.dataDetails">DATA DETAILS</button>
-        <button class="primary-button" id="open-folder-button" type="button" data-i18n="app.openFolder">OPEN FOLDER</button>
       </div>
     </header>
 
     <main class="main-content">
       <section class="empty-view" id="empty-view">
-        <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="Drop or choose a Neuropixels data folder" data-i18n-aria-label="empty.aria">
-          <div class="folder-mark" aria-hidden="true"><span></span></div>
-          <strong data-i18n="empty.drop">DROP SESSION FOLDER</strong>
-          <p data-i18n="empty.description">KiloSort recordings and physical Probe groups are detected automatically.</p>
-          <button class="secondary-button" id="empty-open-button" type="button" data-i18n="empty.choose">CHOOSE FOLDER</button>
-        </div>
+        <div class="drop-zone start-workspace" id="drop-zone"><div id="start-content"></div><button id="empty-open-button" type="button" hidden>Open folder</button></div>
       </section>
 
       <section class="loading-view" id="loading-view" hidden aria-live="polite">
@@ -91,7 +88,6 @@
                   <div class="find-unit-results" id="find-unit-results" role="listbox" aria-label="Matching Units" data-i18n-aria-label="workspace.findUnitResults"></div>
                 </div>
               </div>
-              <button class="quiet-button" id="annotation-toggle" type="button" aria-expanded="false" aria-controls="annotation-panel">ANNOTATE · BETA</button>
               <button class="quiet-button" id="inspect-unit-button" type="button" disabled data-i18n="workspace.inspectUnit">INSPECT UNIT</button>
             </div>
           </header>
@@ -108,9 +104,12 @@
                 </div>
               </header>
               <div class="activity-canvas-frame" id="activity-canvas-frame">
+                <aside id="mini-probe" class="mini-probe"></aside>
+                <div class="activity-plot-wrap">
                 <canvas id="activity-anatomy-canvas" tabindex="0" aria-label="Recording-wide Unit activity with aligned shank, depth, and brain region" data-i18n-aria-label="workspace.canvasAria"></canvas>
                 <div class="activity-tooltip" id="activity-tooltip" role="status" hidden></div>
                 <div class="activity-empty" id="activity-empty" data-i18n="workspace.activityEmpty">No activity overview is available.</div>
+                </div>
               </div>
               <footer class="activity-hint" data-i18n="workspace.hint">CLICK a group to focus or Unit to expand · CLICK anatomy to emphasize · DRAG time to select · WHEEL to zoom · DOUBLE CLICK to reset</footer>
               <div class="annotation-timeline" id="annotation-timeline" hidden></div>
@@ -184,6 +183,8 @@
                     <strong id="video-source-label" data-i18n="video.sourcePrompt">No video source attached</strong>
                   </div>
                   <div class="video-sync-header-actions">
+                    <button id="replace-video" type="button" class="quiet-button">Change video</button>
+                    <button id="expand-video" type="button" class="quiet-button" aria-pressed="false">⛶</button>
                     <span class="video-sync-status" id="video-sync-status" data-status="empty" data-i18n="video.noSource">NO SOURCE</span>
                     <button class="video-collapse" id="video-collapse-button" type="button" aria-controls="video-sync-body" aria-expanded="true" title="Collapse video" data-i18n-title="video.collapse">−</button>
                   </div>
@@ -214,6 +215,7 @@
                     <label class="video-speed"><span data-i18n="video.speed">SPEED</span><select id="video-speed-select" aria-label="Playback speed" data-i18n-aria-label="video.speedAria"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
                     <label class="video-follow"><input id="video-follow" type="checkbox" checked><span data-i18n="video.follow">FOLLOW SIGNAL</span></label>
                   </div>
+                  <div class="video-tools"><button class="quiet-button" id="annotation-toggle" type="button" aria-expanded="false" aria-controls="annotation-panel">Annotate</button><button id="video-alignment" class="quiet-button" type="button">Alignment</button><span id="video-link-note"></span></div>
                   <div class="video-mapping" id="video-mapping" hidden>
                     <div><span data-i18n="video.frame">FRAME</span><strong id="video-frame-number">0000000</strong></div>
                     <div><span data-i18n="video.neuralTime">NEURAL TIME</span><strong id="video-neural-time">0.000 s</strong></div>
@@ -344,20 +346,22 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="./scripts/kilosort-core.js?v=4.0.0-beta.2" defer></script>
+  <script src="./scripts/kilosort-core.js?v=4.0.0-beta.3" defer></script>
   <script src="./scripts/region-core.js" defer></script>
-  <script src="./scripts/help-content.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/data-status.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/stream-contracts.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/video-sync.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/activity-overview.js?v=4.0.0-beta.2" defer></script>
+  <script src="./scripts/help-content.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/data-status.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/stream-contracts.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/video-sync.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/activity-overview.js?v=4.0.0-beta.3" defer></script>
   <script src="./scripts/plots.js" defer></script>
-  <script src="./scripts/probe-view.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/database-client.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/workspace-layout.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/annotation-core.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/behavior-discovery.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/annotation-ui.js?v=4.0.0-beta.2" defer></script>
-  <script src="./scripts/app.js?v=4.0.0-beta.2" defer></script>
+  <script src="./scripts/probe-view.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/database-client.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/workspace-layout.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/annotation-core.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/behavior-discovery.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/annotation-ui.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/mini-probe.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/project-ui.js?v=4.0.0-beta.3" defer></script>
+  <script src="./scripts/app.js?v=4.0.0-beta.3" defer></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import mimetypes
 import re
@@ -34,6 +35,7 @@ from .activity_cache import (
 from .ingest import IncrementalIngestManager, IngestError
 from .migrations import SCHEMA_VERSION, validate_schema
 from .paths import RuntimePaths
+from .local_projects import LocalProjects
 
 
 SERVICE_VERSION = __version__
@@ -161,6 +163,7 @@ class CatalogService:
             paths,
             on_commit=self.invalidate_recordings,
         )
+        self.local_projects = LocalProjects(self)
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
@@ -184,6 +187,7 @@ class CatalogService:
         return {
             "status": "ok" if integrity == "ok" else "error",
             "serviceVersion": SERVICE_VERSION,
+            "runtimeId": hashlib.sha256(str(self.database_path).lower().encode("utf-8")).hexdigest()[:16],
             "databaseIntegrity": integrity,
             "dataset": dataset,
             "cache": self.cache_status(),
@@ -523,6 +527,12 @@ class CatalogService:
         return [dict(row) for row in rows]
 
     def _channel_probe_ids(self, recording_id: str, channel_count: int) -> np.ndarray:
+        selected_groups = self._asset_paths(recording_id).get("channel_probe_groups")
+        if selected_groups:
+            groups = np.load(selected_groups, allow_pickle=False).reshape(-1)
+            if groups.size != channel_count or groups.dtype.kind not in "iu":
+                raise ValueError("Channel shank assignments must be integer IDs matching channel positions")
+            return groups.astype(np.int16)
         result = np.full(max(0, channel_count), -1, dtype=np.int16)
         with self.connect() as connection:
             rows = connection.execute(
@@ -553,6 +563,7 @@ class CatalogService:
         spike_templates: np.ndarray | None,
         templates: np.ndarray | None,
         channel_probe_ids: np.ndarray,
+        channel_positions: np.ndarray | None = None,
     ) -> list[dict[str, Any]]:
         cluster_values = np.asarray(clusters, dtype=np.int64).reshape(-1)
         cluster_ids, inverse = np.unique(cluster_values, return_inverse=True)
@@ -583,7 +594,7 @@ class CatalogService:
 
         peak_by_template: dict[int, int] = {}
         if templates is not None and templates.ndim == 3:
-            needed = sorted({template_id for template_id in dominant_templates.values() if 0 <= template_id < templates.shape[0]})
+            needed = sorted({template_id for template_id in (dominant_templates.values() if dominant_templates else cluster_ids) if 0 <= template_id < templates.shape[0]})
             if needed:
                 selected = np.asarray(templates[needed])
                 peaks = np.argmax(np.ptp(selected, axis=1), axis=1)
@@ -593,6 +604,11 @@ class CatalogService:
         for index, cluster_id in enumerate(cluster_ids):
             template_id = dominant_templates.get(int(cluster_id), int(cluster_id))
             peak_channel = peak_by_template.get(template_id)
+            if peak_channel is not None and channel_positions is not None and peak_channel < len(channel_positions):
+                if not np.isfinite(mean_x[index]):
+                    mean_x[index] = channel_positions[peak_channel, 0]
+                if not np.isfinite(mean_y[index]):
+                    mean_y[index] = channel_positions[peak_channel, 1]
             physical_probe_id = int(channel_probe_ids[peak_channel]) if peak_channel is not None and 0 <= peak_channel < channel_probe_ids.size and channel_probe_ids[peak_channel] >= 0 else None
             rows.append(
                 {
@@ -691,8 +707,35 @@ class CatalogService:
                 }
         geometry = np.asarray(channel_positions[:, :2], dtype=np.float32).reshape(-1) if channel_positions is not None and channel_positions.ndim == 2 else np.array([], dtype=np.float32)
         channel_probe_ids = self._channel_probe_ids(unit["recording_id"], int(channel_positions.shape[0]) if channel_positions is not None and channel_positions.ndim == 2 else 0)
-        unit_locations = self._unit_locations(clusters, positions, spike_templates, templates, channel_probe_ids)
+        unit_locations = self._unit_locations(clusters, positions, spike_templates, templates, channel_probe_ids, channel_positions)
         physical_probe_id = int(channel_probe_ids[peak_channel]) if peak_channel is not None and peak_channel < channel_probe_ids.size and channel_probe_ids[peak_channel] >= 0 else None
+
+        # Catalog coordinates are the original source's explicit unit location.
+        # Allen NWB does not supply Kilosort templates; do not replace its peak
+        # electrode coordinates with null (or a frontend numeric zero).
+        with self.connect() as connection:
+            locations = connection.execute("""
+                SELECT u.cluster_id, ul.x_um, ul.y_um, ul.probe_depth_um,
+                       ul.shank_id, c.recording_channel
+                FROM units u JOIN unit_locations ul USING (unit_id)
+                LEFT JOIN channels c ON c.channel_id = ul.peak_channel_id
+                WHERE u.recording_id = ?
+            """, (unit["recording_id"],)).fetchall()
+        by_id = {int(item["id"]): item for item in unit_locations}
+        for location in locations:
+            item = by_id.setdefault(int(location["cluster_id"]), {"id": int(location["cluster_id"])})
+            depth = location["probe_depth_um"] if location["probe_depth_um"] is not None else location["y_um"]
+            for key, value in (("x", location["x_um"]), ("y", depth), ("shankId", location["shank_id"])):
+                if value is not None:
+                    item[key] = value
+            if int(location["cluster_id"]) == cluster_id:
+                if depth is not None:
+                    peak_position = {"x": location["x_um"], "y": depth}
+                if location["shank_id"] is not None:
+                    physical_probe_id = int(location["shank_id"])
+                if location["recording_channel"] is not None:
+                    peak_channel = int(location["recording_channel"])
+        unit_locations = list(by_id.values())
 
         result = {
             "unitId": unit_id,
@@ -748,9 +791,10 @@ class CatalogService:
             rows = connection.execute(
                 """
                 SELECT u.cluster_id, u.spike_count, u.unit_firing_rate_hz,
-                       uc.probe_depth_um, uc.shank_id
+                       uc.probe_depth_um, uc.shank_id, ul.x_um
                 FROM units u
                 LEFT JOIN unit_catalog uc USING (unit_id)
+                LEFT JOIN unit_locations ul USING (unit_id)
                 WHERE u.recording_id = ?
                 ORDER BY u.cluster_id
                 """,
@@ -803,27 +847,27 @@ class CatalogService:
         channel_probe_ids = self._channel_probe_ids(recording_id, channel_count)
         locations = {
             int(location["id"]): location
-            for location in self._unit_locations(clusters, positions, spike_templates, templates, channel_probe_ids)
+            for location in self._unit_locations(clusters, positions, spike_templates, templates, channel_probe_ids, channel_positions)
         }
         unit_x: list[float] = []
         unit_depths: list[float] = []
         unit_shanks: list[int] = []
         for row in unit_rows:
             location = locations.get(int(row["cluster_id"]), {})
-            unit_x.append(float(location["x"]) if location.get("x") is not None else np.nan)
+            unit_x.append(float(row["x_um"]) if row["x_um"] is not None else float(location["x"]) if location.get("x") is not None else np.nan)
             unit_depths.append(
-                float(location["y"])
-                if location.get("y") is not None
-                else float(row["probe_depth_um"])
+                float(row["probe_depth_um"])
                 if row["probe_depth_um"] is not None
+                else float(location["y"])
+                if location.get("y") is not None
                 else np.nan
             )
             location_shank = location.get("shankId")
             unit_shanks.append(
-                int(location_shank)
-                if location_shank is not None
-                else int(row["shank_id"])
+                int(row["shank_id"])
                 if row["shank_id"] is not None
+                else int(location_shank)
+                if location_shank is not None
                 else -1
             )
         cache_arrays: dict[str, np.ndarray] = {
@@ -1129,6 +1173,8 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
         return payload
 
     def _ingest_error(self, error: Exception) -> None:
+        if isinstance(error, ConnectionError):
+            return  # Browser cancelled a seek, overview fetch, or closed its tab.
         if isinstance(error, IngestError):
             self._json(error.payload(), error.status)
         elif isinstance(error, KeyError):
@@ -1140,6 +1186,9 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
 
     def _static(self, requested_path: str) -> None:
         relative = "index.html" if requested_path in {"", "/"} else unquote(requested_path.lstrip("/"))
+        if any(part.startswith(".") for part in Path(relative).parts) or Path(relative).parts[0] in {"runtime", "data", "datasets", "private", "recordings"}:
+            self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+            return
         candidate = (self.server.static_root / relative).resolve()
         if not candidate.is_relative_to(self.server.static_root) or not candidate.is_file():
             self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
@@ -1209,7 +1258,14 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         try:
-            if parsed.path == "/api/health":
+            if parsed.path == "/api/local/projects":
+                self._json(self.server.service.local_projects.recent())
+            elif (match := re.fullmatch(r"/api/local/jobs/([0-9a-f]+)", parsed.path)):
+                self._json(self.server.service.local_projects.job(match.group(1)))
+            elif (match := re.fullmatch(r"/api/local/media/([0-9a-f]{32})", parsed.path)):
+                path = self.server.service.paths.resolve_asset("@local/" + match.group(1))
+                self._media(path, mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+            elif parsed.path == "/api/health":
                 self._json(self.server.service.health())
             elif parsed.path == "/api/catalog":
                 self._json(self.server.service.catalog())
@@ -1242,6 +1298,11 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:
         parsed = urlparse(self.path)
         try:
+            local = re.fullmatch(r"/api/local/media/([0-9a-f]{32})", parsed.path)
+            if local:
+                path = self.server.service.paths.resolve_asset("@local/" + local.group(1))
+                self._media(path, mimetypes.guess_type(path.name)[0] or "application/octet-stream", head_only=True)
+                return
             match = re.fullmatch(r"/api/videos/([^/]+)/media", parsed.path)
             if not match:
                 self.send_response(HTTPStatus.NOT_FOUND)
@@ -1255,6 +1316,22 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         try:
+            if parsed.path.startswith("/api/local/"):
+                # Native dialogs and persistent source links are local UI actions.
+                # Reject cross-origin form submissions and DNS-rebinding hosts.
+                host = self.headers.get("Host", "")
+                origin = self.headers.get("Origin")
+                if host.split(":")[0] not in {"localhost", "127.0.0.1"} or (origin and origin != "http://" + host) or not self.headers.get("Content-Type", "").startswith("application/json"):
+                    self._json({"message": "Local project actions require the Explorer's own window"}, HTTPStatus.FORBIDDEN)
+                    return
+                payload = self._read_json()
+                if parsed.path == "/api/local/attach":
+                    self._json(self.server.service.local_projects.attach_granted(payload["recordingId"], payload["token"]))
+                elif parsed.path == "/api/local/actions":
+                    self._json(self.server.service.local_projects.start(payload["kind"], payload), HTTPStatus.ACCEPTED)
+                else:
+                    self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+                return
             match = re.fullmatch(r"/api/recordings/([^/]+)/activity-overview-builds", parsed.path)
             if match:
                 payload = self._read_json()

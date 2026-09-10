@@ -1,6 +1,4 @@
 /* SPDX-License-Identifier: MIT */
-.experiment-workspace:has(.annotation-panel:not([hidden])) { grid-template-rows: 56px minmax(220px, 1fr) minmax(240px, 46vh); }
-.activity-workspace:has(.annotation-timeline:not([hidden])) { grid-template-rows: 43px minmax(0, 1fr) 25px auto; }
 .annotation-panel { overflow: auto; min-height: 0; padding: 12px 18px 16px; background: var(--panel); border-top: 1px solid var(--line); color: var(--text-soft); font-size: 12px; scrollbar-color: var(--scrollbar) transparent; }
 .annotation-panel[hidden], .annotation-timeline[hidden] { display: none; }
 .annotation-panel button, .annotation-panel input, .annotation-panel select { min-height: 30px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-control); color: var(--text); font: inherit; padding: 5px 8px; }
@@ -51,7 +49,7 @@
 .annotation-sample button { text-align: left; }
 .annotation-footer { margin-top: 12px; color: var(--muted); font-size: 10px; }
 .annotation-footer[data-failed=true] { color: var(--error); }
-.annotation-timeline { display: grid; grid-template-columns: 276px minmax(0, 1fr); min-width: 0; border-top: 1px solid var(--line); background: var(--surface-low); touch-action: none; }
+.annotation-timeline { display: grid; min-width: 0; padding: 0 12px 8px; background: var(--surface-low); touch-action: none; }
 .annotation-track-label { display: grid; align-content: center; padding: 4px 10px; font-size: 10px; color: var(--text-soft); }
 .annotation-track-label small { font-size: 9px; color: var(--muted); }
 .annotation-track-plot { min-width: 0; overflow: hidden; }
@@ -67,9 +65,41 @@
 @media (max-width: 1650px) { .annotation-fields { grid-template-columns: repeat(3, minmax(90px, 1fr)); } }
 @media (max-width: 1050px) { .annotation-content { grid-template-columns: 1fr; } .annotation-samples > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-/* Keep the main video controls visible while the annotation editor takes space. */
-.experiment-workspace:has(.annotation-panel:not([hidden])) .experiment-video-region .video-sync-panel.has-source:not(.is-collapsed) { display: flex; flex-direction: column; }
-.experiment-workspace:has(.annotation-panel:not([hidden])) .video-sync-panel.has-source:not(.is-collapsed) .video-sync-body { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; flex: 1; min-height: 0; }
-.experiment-workspace:has(.annotation-panel:not([hidden])) .experiment-video-region .video-sync-panel.has-source .video-stage { min-height: 0; }
-.experiment-workspace:has(.annotation-panel:not([hidden])) .experiment-video-region .video-sync-panel.has-source .video-stage video,
-.experiment-workspace:has(.annotation-panel:not([hidden])) .experiment-video-region .video-sync-panel.has-source .video-stage canvas { height: 100%; min-height: 0; max-height: 100%; }
+.annotation-review-dialog { width: min(1150px, 94vw); max-height: 88vh; padding: 0; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.annotation-review-dialog::backdrop { background: #0009; }
+.annotation-review-dialog .annotation-panel { padding: 24px; }
+.annotation-panel.is-compact { padding: 12px; overflow: visible; border: 0; }
+.annotation-instruction { margin: 0 0 10px; color: var(--text-soft); font-size: 12px; }
+.annotation-quick-actions, .annotation-context-actions, .annotation-compact-footer { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.annotation-quick-actions button, .annotation-context-actions button { font-size: 11px; }
+.annotation-quick-editor { margin: 12px 0; padding: 10px; border-radius: 5px; background: var(--surface-active); }
+.annotation-range-fields { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.annotation-range-fields input { width: 110px; font-family: Consolas, monospace; }
+.annotation-name-row { display: flex; gap: 6px; }
+.annotation-name-row input { width: 100%; flex: 1; }
+.annotation-name-row button { background: var(--primary-bg); color: var(--primary-text); border-color: var(--primary-border); }
+.annotation-context-actions { margin-top: 8px; }
+.annotation-compact-footer { margin: 12px 0 8px; }
+.annotation-compact-footer span { flex: 1; color: var(--muted); }
+.annotation-compact-footer button { padding: 4px 7px; font-size: 11px; }
+.annotation-panel.is-compact > small { display: block; font-size: 10px; color: var(--muted); }
+.annotation-video-scale { display: flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font: 10px Consolas, monospace; }
+.annotation-video-scale span:first-child { margin-right: auto; }
+.annotation-video-scale span:last-child { margin-left: auto; }
+.annotation-video-scale button { padding: 4px; background: transparent; border: 0; color: var(--text-soft); cursor: pointer; font-size: 10px; }
+.annotation-video-scale button:hover { color: var(--accent); }
+.annotation-track-plot svg { height: 46px; cursor: crosshair; border: 1px solid var(--line-soft); border-radius: 4px; }
+.annotation-track-plot .annotation-track-background { fill: var(--surface-control); stroke: none; }
+.annotation-track-plot .annotation-draft { fill: var(--canvas-selection); stroke: var(--accent); stroke-dasharray: none; pointer-events: none; }
+.annotation-track-plot .is-reviewed rect { fill: var(--good); fill-opacity: .3; }
+.annotation-track-plot text { font-size: 12px; }
+.annotation-quick-editor { margin: 0 0 6px; padding: 8px; }
+.annotation-range-fields { margin-bottom: 6px; }
+.annotation-range-fields input { min-height: 25px; padding-block: 3px; }
+.annotation-context-actions { margin-top: 6px; }
+.annotation-context-actions button { min-height: 26px; padding: 3px 6px; }
+.annotation-track-picker { display: flex; gap: 8px; align-items: center; padding-top: 6px; color: var(--muted); font-size: 11px; }
+.annotation-track-picker select { max-width: 200px; padding: 4px; background: var(--field); color: var(--text); border: 1px solid var(--line); }
+.annotation-track-plot g > rect { fill: var(--clip-color, var(--accent)); fill-opacity: .3; stroke: var(--clip-color, var(--accent)); }
+.annotation-track-plot .is-selected > rect { stroke: var(--text); stroke-width: 2; }
+.annotation-track-plot .annotation-edge { fill-opacity: .9; }

@@ -26,6 +26,7 @@ const { TimeMapping } = require("../scripts/video-sync.js");
     assert(Math.abs(parseFloat(await page.locator("#video-neural-time").innerText()) - mapping.videoToNeural(30)) < .001);
     assert.equal(await page.locator("#video-neural-time").innerText(), await page.locator("#experiment-time-readout").innerText());
     await page.locator("#annotation-toggle").click();
+    await page.locator('[data-action="review"]').click();
     await page.locator('[data-field="start"]').fill("30");
     await page.locator('[data-field="end"]').fill("32");
     await page.locator('[data-field="label"]').fill("QA review interval");
@@ -59,6 +60,7 @@ const { TimeMapping } = require("../scripts/video-sync.js");
     await page.locator("#explorer-view").waitFor({ state: "visible", timeout: 60000 });
     await page.waitForFunction(() => document.querySelector("#behavior-video")?.readyState >= 2);
     await page.locator("#annotation-toggle").click();
+    await page.locator('[data-action="review"]').click();
     await page.waitForFunction(() => document.querySelector("[data-group]")?.options.length > 2);
     assert.deepEqual(errors, []);
     const summary = { status: "PASS", candidateSegments: candidates.length, groups: new Set(candidates.map(s => s.groupId)).size,

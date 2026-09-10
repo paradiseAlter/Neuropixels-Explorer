@@ -38,7 +38,7 @@ def insert(connection, table, **values):
     connection.execute(f"INSERT INTO {table} ({','.join(values)}) VALUES ({','.join('?' for _ in values)})", tuple(values.values()))
 
 
-def import_probe(nwb, root: Path, database: Path, probe_name: str, video: Path = None, clock_path: Path = None):
+def import_probe(nwb, root: Path, database: Path, probe_name: str, video: Path = None, clock_path: Path = None, *, output_subdir="derived"):
     root = root.resolve()
     now = datetime.now(timezone.utc).isoformat()
     with h5py.File(nwb, "r") as source:
@@ -50,7 +50,9 @@ def import_probe(nwb, root: Path, database: Path, probe_name: str, video: Path =
         if not np.isfinite(rate) or rate <= 0:
             raise ValueError("Invalid probe sample rate")
         recording_id = f"allen-{session}-{probe_name}"
-        folder = root / "derived" / session / probe_name
+        folder = root / output_subdir / session / probe_name
+        if not folder.resolve().is_relative_to(root):
+            raise ValueError("Import output must remain inside the managed data root")
         manifest_path = folder / "explorer-import.json"
         if manifest_path.exists():
             raise ValueError("This probe already has a completed import; use its existing catalog")

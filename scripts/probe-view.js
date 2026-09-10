@@ -40,7 +40,7 @@
   const UNIT_HIT_RADIUS = 10;
   const UNIT_GROUP_DISTANCE = 9;
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
-  const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+  const finite = (value) => value == null || value === "" ? null : Number.isFinite(Number(value)) ? Number(value) : null;
   const shankIdOf = (value) => finite(value?.shankId ?? value?.physicalProbeId);
 
   function setProbeTheme(theme = {}) {

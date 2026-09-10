@@ -25,6 +25,7 @@
   class TimeMapping {
     constructor({
       method = "unknown",
+      mapping_method,
       offsetSeconds = 0,
       offset_s,
       scale = 1,
@@ -40,7 +41,7 @@
     } = {}) {
       const normalizedScale = Number(scale);
       if (!Number.isFinite(normalizedScale) || !(normalizedScale > 0)) throw new RangeError("TimeMapping scale must be greater than zero");
-      this.method = String(method || "unknown");
+      this.method = String(mapping_method || method || "unknown");
       this.offsetSeconds = Number(offset_s ?? offsetSeconds) || 0;
       this.scale = normalizedScale;
       this.driftPpm = Number.isFinite(Number(drift_ppm ?? driftPpm)) ? Number(drift_ppm ?? driftPpm) : null;
@@ -259,6 +260,10 @@
       this.source.duration = Math.max(0, duration);
       this.source.fps = Number(this.source.fps || DEFAULT_FPS);
       this._configureDuration(this.source.duration);
+      const firstExposedFrame = this.mapping.frameClock?.video_s[0];
+      if (firstExposedFrame != null && this.elements.video.currentTime < firstExposedFrame) {
+        this.elements.video.currentTime = firstExposedFrame;
+      }
       this._syncFromRealVideo();
       this._renderStatus();
       this._emitState();

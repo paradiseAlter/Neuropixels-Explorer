@@ -162,6 +162,9 @@
   };
 
   elements.videoHost?.append(elements.videoPanel);
+  // The editor and time strip belong to the video, not a new workspace row.
+  elements.videoTransport.after(document.getElementById("annotation-timeline"));
+  elements.videoBody.append(document.getElementById("annotation-panel"));
 
   const state = {
     dataMode: "folder",
@@ -199,7 +202,7 @@
     activityOverviewCache: new Map(),
     activeActivityOverview: null,
     activityLayoutSummary: null,
-    videoSplitPercent: 26,
+    videoSplitPercent: 35,
     pendingVideoCursorTime: null,
     experimentView: {
       visibleRange: { start: 0, end: 0 },
@@ -215,7 +218,7 @@
   };
 
   function setVideoSplitPercent(value) {
-    const percentValue = Math.max(20, Math.min(42, Number(value) || 26));
+    const percentValue = Math.max(25, Math.min(50, Number(value) || 35));
     state.videoSplitPercent = percentValue;
     elements.experimentBody?.style.setProperty("--video-region-width", `${percentValue}%`);
     elements.videoSplitter?.setAttribute("aria-valuenow", String(Math.round(percentValue)));
@@ -225,8 +228,8 @@
     const splitter = elements.videoSplitter;
     const body = elements.experimentBody;
     if (!splitter || !body) return;
-    splitter.setAttribute("aria-valuemin", "20");
-    splitter.setAttribute("aria-valuemax", "42");
+    splitter.setAttribute("aria-valuemin", "25");
+    splitter.setAttribute("aria-valuemax", "50");
     splitter.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       splitter.classList.add("is-dragging");
@@ -243,13 +246,13 @@
     };
     splitter.addEventListener("pointerup", finish);
     splitter.addEventListener("pointercancel", finish);
-    splitter.addEventListener("dblclick", () => setVideoSplitPercent(26));
+    splitter.addEventListener("dblclick", () => setVideoSplitPercent(35));
     splitter.addEventListener("keydown", (event) => {
       if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
       event.preventDefault();
-      setVideoSplitPercent(event.key === "Home" ? 26 : state.videoSplitPercent + (event.key === "ArrowLeft" ? 2 : -2));
+      setVideoSplitPercent(event.key === "Home" ? 35 : state.videoSplitPercent + (event.key === "ArrowLeft" ? 2 : -2));
     });
-    setVideoSplitPercent(26);
+    setVideoSplitPercent(35);
   }
 
   installVideoSplitter();
@@ -269,6 +272,8 @@
   });
 
   let videoController = null;
+  let projectUI = null;
+  let miniProbe = null;
   let annotationController = null;
 
   const plots = new PlotManager({
@@ -389,6 +394,13 @@
     setView: (patch, options) => setExperimentView(patch, options),
     toast: (message) => showToast(message)
   });
+
+  miniProbe = new window.NeuropixelsMiniProbe(document.getElementById("mini-probe"), selectActivityUnit, (region) => {
+    setExperimentView({ selectedRegion: region, selectedShank: null, selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, groupFocusPath: [] });
+  });
+  projectUI = new window.NeuropixelsProjectUI({state, video:videoController,
+    openCatalog:openDatabaseCatalog, home:()=>showOnly("empty"), resume:()=>showOnly("explorer"),
+    toast:showToast, folderFallback:openPicker});
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
   const number = (value) => Number(value || 0).toLocaleString();
@@ -795,7 +807,7 @@
   }
 
   function experimentNumber(recording) {
-    return regionCore.experimentNumber(recording?.name || recording?.key || "");
+    return recording?.recordingIndex ?? regionCore.experimentNumber(recording?.name || recording?.key || "");
   }
 
   function regionFor(recording, clusterId) {
@@ -838,7 +850,7 @@
         id,
         count: Number(result.unitCounts?.[sourceIndex] || 0),
         rateHz: Number(result.unitRateHz?.[sourceIndex] || 0),
-        x: Number.isFinite(Number(result.unitX?.[sourceIndex])) ? Number(result.unitX[sourceIndex]) : null,
+        x: nullableNumber(result.unitX?.[sourceIndex]),
         depthUm,
         shankId,
         region: region?.region || catalog?.brain_region || t("units.unmapped"),
@@ -866,6 +878,8 @@
   }
 
   function renderExperimentHeader() {
+    miniProbe?.update(state.activeActivityOverview, state.experimentView);
+    projectUI?.syncVideo();
     annotationController?.update();
     const recording = state.activeRecording;
     if (!recording) {
@@ -955,6 +969,7 @@
   function setExperimentView(patch, { seekVideo = false } = {}) {
     state.experimentView = { ...state.experimentView, ...(patch || {}) };
     activityCanvas.setViewState(state.experimentView);
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "visibleRange")) scheduleActivityLevelForRange(state.experimentView.visibleRange);
     if (seekVideo && Number.isFinite(Number(patch?.cursorTime))) videoController?.seekNeural(Number(patch.cursorTime));
     renderExperimentHeader();
   }
@@ -1660,6 +1675,7 @@
     renderRecordings();
     renderUnitList();
     videoController?.setRecording(recording, state.databaseCatalog?.videos || []);
+    projectUI?.recordingChanged(recording);
     refreshExperimentWorkspace(recording);
   }
 
@@ -1785,7 +1801,7 @@
     showToast(t("toast.recordingsReady", { count: state.recordings.length }));
   }
 
-  async function openDatabaseCatalog() {
+  async function openDatabaseCatalog(recordingIds = null) {
     state.datasetToken += 1;
     state.selectionToken += 1;
     state.dataMode = "database";
@@ -1795,11 +1811,12 @@
     if (!catalog.recordings.length) throw new Error("The database does not contain a readable Recording");
     state.databaseCatalog = catalog;
     state.files = new Array(Number(catalog.summary?.asset_count || 0));
-    state.rootName = catalog.dataset?.dataset_name || catalog.dataset?.dataset_id || "Neuropixels database";
-    state.recordings = catalog.recordings;
+    state.rootName = recordingIds ? catalog.recordings.find(r => recordingIds.includes(r.databaseId))?.name || "Neuropixels" : catalog.dataset?.dataset_name || catalog.dataset?.dataset_id || "Neuropixels";
+    state.recordings = recordingIds ? catalog.recordings.filter(r => recordingIds.includes(r.databaseId)) : catalog.recordings;
+    if (!state.recordings.length) throw new Error("This project's linked recording is unavailable in the current local catalog");
     state.errors = [];
     state.regionResult = catalog.regionResult;
-    elements.datasetTitle.textContent = `${state.rootName} · DATABASE`;
+    elements.datasetTitle.textContent = state.rootName;
     elements.loadingProgress.style.width = "82%";
     elements.loadingMessage.textContent = t("loading.databaseIndexed", { recordings: state.recordings.length, units: number(state.recordings.reduce((sum, item) => sum + item.clusterLabels.length, 0)) });
     renderSummary();
@@ -1983,7 +2000,6 @@
     elements.folderInput.click();
   }
 
-  elements.openFolder.addEventListener("click", openPicker);
   elements.emptyOpen.addEventListener("click", openPicker);
   elements.themeSelect.value = themeSnapshot.preference;
   elements.themeSelect.addEventListener("change", () => themeController.setPreference(elements.themeSelect.value));

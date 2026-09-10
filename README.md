@@ -1,85 +1,91 @@
 # Neuropixels Explorer
 
-Neuropixels Explorer is a local-first browser interface for reviewing KiloSort
-recordings, Units, signals, physical Probe positions, and optional brain-region
-metadata. The default workflow runs directly in Chrome: selected files remain
-on the local machine and no upload or localhost service is required. An
-optional indexed service is included in the same product repository for larger
-managed collections.
+A local application for exploring processed neural spikes alongside behavior
+video. The main workspace links time, neural activity, individual Units, 2D Probe
+positions, original brain-region labels, and laboratory-defined behavior labels.
 
-## Annotation beta
+The current prerelease is **v4.0.0-beta.3**. Previous releases remain available as
+Git tags. The source uses the [MIT license](LICENSE); datasets, videos, and model
+weights retain their own licenses and are not included in this repository.
 
-Open a recording, attach its behavior video, and choose **Annotate · Beta**.
-Create/edit intervals on the shared neural timeline, review motion groups,
-name them using independent laboratory label schemes, and save portable JSON
-or CSV. Automatic results remain suggestions until reviewed. Browser drafts
-are saved locally. The built-in motion grouping is experimental and is not a
-validated grooming/sniffing classifier.
+## Start on Windows
 
-See [behavior annotation usage and results](docs/BEHAVIOR_ANNOTATION.md) and
-[third-party method notices](THIRD_PARTY_NOTICES.md). The project uses the
-[MIT license](LICENSE). Videos, datasets and model weights are not distributed.
+Install the checkout once with `python -m pip install -e ".[allen]"`, then
+double-click **[Start-Explorer.cmd](Start-Explorer.cmd)**. The launcher starts the
+local service, opens the start screen, and reuses a healthy matching instance.
+It restarts an older Explorer serving the same catalog. Re-run the launcher after
+a reboot; a localhost URL by itself does not start the application.
+
+By default, project metadata and derived caches live under the current user's
+local application-data directory. Existing collections can supply `-DataRoot`,
+`-Database`, `-Python`, and `-Port` to `Start-Explorer.ps1`. `-NoBrowser` checks or
+starts the service without opening a browser window.
+
+## Open your recording
+
+Use **Open / add data** at the top left or either button on the start screen:
+
+- **Open recording folder** detects Kilosort results, including nested recording
+  folders. `spike_times.npy` and `spike_clusters.npy` are required. The original
+  sampling rate is read from `params.py`; if missing, the picker asks for it.
+  Templates, spike positions, channel positions and shank IDs are optional.
+- **Open Allen NWB** reads processed units and lets you select a physical probe.
+  The supported Allen ecephys schema includes unit spike times, peak channels and
+  device metadata. Original IDs, spike timing, quality labels and peak-channel
+  anatomy are preserved. Adapted arrays are written into the managed data root;
+  the NWB source stays unchanged.
+
+In the video region, choose **Add video to this recording** from any folder.
+Nearby videos are suggested when found; **Change video** remains available.
+There is no required common parent folder for neural data and video. Linked
+sources and recent projects are saved automatically on this computer. Changed
+source files are detected; an existing grant cannot silently point at new data.
+
+**Linked** does not mean synchronized. Use **Alignment** to match a known event,
+or import an Allen frame-clock JSON with the matching video's SHA-256 identity.
+Manual alignment remains unverified. Verified clocks retain dropped-frame
+corrections; times outside their measured range are not extrapolated.
+
+## Explore and annotate
+
+The neural workspace starts with about 65% of the content width and video with
+35%. Drag their divider to resize them. The 2D Probe stays beside neural activity;
+select a Unit or Probe marker to follow its position and original region. Missing
+coordinates remain unknown. Unit details retain the waveform, raster and legacy
+Probe inspector. The video can be enlarged temporarily.
+
+Choose **Annotate** underneath the video. Drag an interval on its time strip, or
+use **Mark start** and **Mark end** during playback. Name the behavior and choose
+**Save label**. Clicking an existing clip reveals its boundaries and editing
+controls. Annotation does not reduce the neural canvas or video height.
+
+**Clips & grouping** opens batch review, independent laboratory label schemes,
+undo/redo, import/export, and experimental motion grouping. Candidate groups
+require human review; the motion baseline is not a validated behavior classifier.
+JSON exports preserve every scheme, source run and interval; CSV exports the
+current scheme and exact neural/video time mapping. Annotation drafts are saved
+in the current browser/origin, separately from local source links. Export JSON
+for a portable annotation backup.
+
+See [annotation contracts and methods](docs/BEHAVIOR_ANNOTATION.md),
+[Beta 3 implementation and acceptance](docs/beta3-workspace.md), and
+[third-party notices](THIRD_PARTY_NOTICES.md). No fixed ethogram is imposed.
 
 ## Allen public data
 
-[Allen VBN download, import and validation](docs/ALLEN_VBN_VALIDATION.md) provides
-an explicit 60.19 GB manifest, matched-video frame clocks, a physical-probe NWB
-adapter, an official V1 PSTH positive control, and a published ripple-table
-reuse example. Data remains in a user-selected external directory. Install the
-optional analysis dependencies with `python -m pip install -e ".[allen]"`.
+[Allen VBN download, import and validation](docs/ALLEN_VBN_VALIDATION.md) documents
+a bounded 60.19 GB corpus, matched full-video clocks, an official V1 PSTH positive
+control and a published ripple-table reuse example. These are head-fixed task
+recordings, not validation of freely moving behavior recognition.
 
-## Quick start
+## Browser-only alternative
 
-1. Open [`index.html`](index.html) in Chrome.
-2. Choose or drop a complete project/session folder containing the KiloSort
-   outputs to inspect.
-
-No Unit is selected automatically. Click a Unit to open it by itself,
-Ctrl-click to add it to the current view, or right-click for open, add, remove,
-and Probe-location actions. Clicking an open signal focuses the same Unit in
-the list, Probe view, and Inspector.
-
-Cursor, Zoom, and Pan are explicit plot modes. Zoom and Pan work across the
-whole signal canvas. In Zoom, the wheel scales around the pointer; in Pan,
-wheel-down moves toward later time and wheel-up toward earlier time. Wheel
-events outside a signal, and all wheel events in Cursor mode, keep their normal
-page-scrolling behavior. Linked time applies a navigation change to every open
-Unit; Independent time limits it to the focused signal.
-
-The center workspace places behavior video directly above the aligned Unit
-signals. A detected local video can be opened directly, or **Generate validation
-video** creates a deterministic mouse-arena stream whose frame clock exactly
-matches neural time. Play, seek, frame-step, playback speed, signal-follow, and
-manual offset controls all drive one shared neural-time playhead. Clicking a
-signal in Cursor mode seeks the video back to that neural time.
-
-The Units and Probe Inspector boundaries are adjustable. Drag either divider,
-use its Left/Right arrow keys for precise changes, or hold Shift for larger
-keyboard steps. Double-click a divider (or press Home) to restore the default
-layout. The small chevron collapses or expands its side panel. Layout choices
-are saved on the current device and restored on the next visit.
-
-The compact Data status control summarizes complete and missing core inputs.
-Open it to inspect available, missing, invalid, optional, and stream/extension
-interfaces. Raw voltage is deliberately not rendered: a versioned provider and
-window-reader contract is exposed for a future AP/LFP implementation, while the
-current UI reports that no provider is registered. Dark, Light, High Contrast,
-and System themes share one palette
-across the interface, signal canvases, Probe display, selections, and Unit
-colors. The theme preference is saved on the current device.
-
-English, Simplified Chinese, and Spanish share one checked-in translation
-dictionary and professional terminology glossary. Subtle question-mark
-controls explain what a feature is, how to interpret it, and when to use it;
-they work with both pointer hover and keyboard focus. The Help drawer follows
-the active language. Its three Markdown sources are precompiled into a local
-asset, so Help remains available when the Explorer is opened through
-`file://` without a CDN or online Markdown service.
-
-The current prerelease is **v4.0.0-beta.2** (annotation with verified Allen data access). Earlier v3.x
-states remain available through their Git tags. The `main` branch contains only the current
-application tree; earlier releases are retained in Git history and release
-tags instead of duplicated version directories.
+Opening `index.html` in Chrome still supports selecting or dropping Kilosort
+folders and attaching browser-local videos. NWB adaptation and persistent source
+links require the local launcher. Dark, Light, High Contrast and System themes,
+English/Simplified Chinese/Spanish, contextual help, and Unit detail controls
+remain available. The raw-voltage extension contract is retained for future
+AP/LFP providers.
 
 ## Repository layout
 
@@ -107,11 +113,10 @@ include the reusable service implementation, schema migrations, and synthetic
 contract tests. No scientific inference or biological result is shipped with
 this codebase.
 
-## Optional indexed service
+## Indexed service commands
 
-The browser-only path remains the default. To use an existing catalog for a
-larger local collection, install this checkout and provide every runtime path
-explicitly:
+To serve an existing catalog directly, install this checkout and provide its
+runtime paths explicitly:
 
 ```powershell
 python -m pip install -e .
@@ -132,7 +137,8 @@ neuropixels-explorer init-db --database <new-catalog.sqlite>
 SQLite stores metadata and relative references only. KiloSort arrays, raw
 voltage, and video payloads stay outside SQLite and outside Git. In database
 mode, video media is streamed from its registered runtime asset using bounded
-HTTP byte-range requests; the browser never receives a machine-specific path.
+HTTP byte-range requests; media URLs contain opaque file IDs; source paths are only displayed as local
+project context.
 Data Status can supplement a missing file or Recording folder. The local
 service stages and validates the selection, records it in one transaction, and
 rolls back database rows and managed-file moves together on failure. Existing

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import re
 from pathlib import Path
 
 from .activity_cache import default_activity_cache_root
@@ -45,6 +47,19 @@ class RuntimePaths:
             raise FileNotFoundError(f"Explorer static root is invalid: {self.static_root}")
 
     def resolve_asset(self, relative_path: str) -> Path:
+        if relative_path.startswith("@local/"):
+            token = relative_path.removeprefix("@local/")
+            if not re.fullmatch(r"[0-9a-f]{32}", token):
+                raise ValueError("Invalid selected-file token")
+            registry = json.loads((self.data_root / ".explorer-local.json").read_text(encoding="utf-8"))
+            grant = registry["assets"].get(token)
+            if not grant:
+                raise ValueError("File was not selected in this project")
+            path = Path(grant["path"]).resolve(strict=True)
+            stat = path.stat()
+            if stat.st_size != grant["size"] or stat.st_mtime_ns != grant["mtime_ns"]:
+                raise ValueError("A linked source has changed. Open it again to review the new version: " + path.name)
+            return path
         candidate = (self.data_root / Path(relative_path)).resolve()
         if not candidate.is_relative_to(self.data_root):
             raise ValueError(f"Asset path escapes the configured data root: {relative_path}")
