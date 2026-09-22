@@ -343,7 +343,9 @@
     previous: elements.videoPrevious,
     next: elements.videoNext,
     seek: elements.videoSeek,
+    seekSeconds: document.getElementById("video-seek-seconds"),
     speed: elements.videoSpeed,
+    customSpeed: document.getElementById("video-custom-speed"),
     follow: elements.videoFollow,
     current: elements.videoCurrent,
     duration: elements.videoDuration,
@@ -392,6 +394,16 @@
     getRecording: () => state.activeRecording,
     getView: () => state.experimentView,
     setView: (patch, options) => setExperimentView(patch, options),
+    onAnnotations: (intervals) => {
+      activityCanvas.setAnnotations(intervals);
+      const legend = document.getElementById("annotation-color-legend");
+      if (legend) {
+        legend.replaceChildren();
+        for (const [label, color] of new Map(intervals.filter(s => s.label).map(s => [s.label, s.color]))) {
+          const item = document.createElement("span"); item.textContent = label; item.style.setProperty("--label-color", color); legend.append(item);
+        }
+      }
+    },
     toast: (message) => showToast(message)
   });
 
@@ -878,7 +890,7 @@
   }
 
   function renderExperimentHeader() {
-    miniProbe?.update(state.activeActivityOverview, state.experimentView);
+    miniProbe?.update(state.activeActivityOverview, state.experimentView, state.activeRecording);
     projectUI?.syncVideo();
     annotationController?.update();
     const recording = state.activeRecording;

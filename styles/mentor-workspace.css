@@ -1,0 +1,49 @@
+/* Video annotation is a reversible workspace mode; the source image is never cropped. */
+.video-custom-rate { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--text-soft); grid-column:1 / -1; justify-content:flex-end; }
+.video-custom-rate input { width:76px; padding:5px; border:1px solid var(--line); border-radius:4px; color:var(--text); background:var(--field); }
+.video-jump { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--text-soft); grid-column:1 / -1; justify-content:flex-end; }
+.video-jump input { width:90px; padding:5px; border:1px solid var(--line); border-radius:4px; color:var(--text); background:var(--field); }
+.annotation-shortcuts, .annotation-panel [data-sync-note] { display:block; margin-top:12px; font-size:10px; line-height:1.5; color:var(--muted); }
+#annotation-color-legend { display:flex; flex-wrap:wrap; gap:6px 12px; width:100%; max-height:70px; overflow:auto; font-size:11px; }
+#annotation-color-legend:empty { display:none; }
+#annotation-color-legend span { margin:0; color:var(--text-soft); }
+#annotation-color-legend span::before { content:""; display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; background:var(--label-color); }
+.annotation-track-plot svg g[data-clip] > rect:not(.annotation-edge),
+.annotation-track-plot svg g.is-reviewed > rect:not(.annotation-edge) { fill:var(--clip-color); fill-opacity:.4; stroke:var(--clip-color); }
+.annotation-track-plot svg g.is-selected > rect:not(.annotation-edge) { fill-opacity:.7; stroke:var(--text); }
+#experiment-video-region.annotation-focus { position:fixed; inset:0; width:auto; height:auto; z-index:95; background:var(--panel); box-shadow:none; }
+#experiment-video-region.annotation-focus .video-sync-panel { display:grid; grid-template-columns:minmax(0,1fr) clamp(190px,16vw,280px); grid-template-rows:52px auto auto auto minmax(0,1fr); height:100%; border:0; border-radius:0; overflow:hidden; }
+#experiment-video-region.annotation-focus .video-sync-body { display:contents; }
+#experiment-video-region.annotation-focus .video-stage { grid-column:1; grid-row:1 / 6; height:100%; width:100%; aspect-ratio:auto; min-height:0; max-height:none; }
+#experiment-video-region.annotation-focus .video-stage video,
+#experiment-video-region.annotation-focus .video-stage canvas { width:100%; height:100%; object-fit:contain; }
+#experiment-video-region.annotation-focus .video-sync-header { grid-column:2; grid-row:1; padding:8px; overflow:hidden; border-left:1px solid var(--line); }
+#experiment-video-region.annotation-focus .video-sync-header-actions { display:none; }
+#experiment-video-region.annotation-focus .video-tools { grid-column:2; grid-row:2; padding:10px; }
+#experiment-video-region.annotation-focus #annotation-toggle { width:100%; padding:10px; color:var(--primary-text); background:var(--primary-bg); }
+#experiment-video-region.annotation-focus #video-link-note { display:none; }
+#experiment-video-region.annotation-focus .video-transport { grid-column:2; grid-row:3; display:flex; flex-wrap:wrap; justify-content:space-between; padding:10px; gap:8px; }
+#experiment-video-region.annotation-focus .video-time-readout { order:-1; width:100%; justify-content:flex-start; }
+#experiment-video-region.annotation-focus .video-custom-rate { width:100%; justify-content:space-between; }
+#experiment-video-region.annotation-focus .video-jump { width:100%; justify-content:space-between; }
+#experiment-video-region.annotation-focus #annotation-timeline { grid-column:2; grid-row:4; min-width:0; padding:8px; }
+#experiment-video-region.annotation-focus .annotation-video-scale { display:flex; flex-wrap:wrap; gap:5px; }
+#experiment-video-region.annotation-focus .annotation-video-scale button { font-size:10px; }
+#experiment-video-region.annotation-focus #annotation-panel { grid-column:2; grid-row:5; min-height:0; margin:0; padding:12px; overflow:auto; border-left:1px solid var(--line); }
+#experiment-video-region.annotation-focus .annotation-instruction { font-size:12px; line-height:1.6; }
+#experiment-video-region.annotation-focus .annotation-quick-actions,
+#experiment-video-region.annotation-focus .annotation-name-row,
+#experiment-video-region.annotation-focus .annotation-compact-footer { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+#experiment-video-region.annotation-focus .annotation-range-fields input { width:70px; min-width:0; }
+#experiment-video-region.annotation-focus .annotation-name-row input { width:100%; min-width:0; }
+#experiment-video-region.annotation-focus .annotation-context-actions { display:flex; flex-wrap:wrap; }
+#experiment-video-region.annotation-focus [data-storage] { display:block; line-height:1.5; margin-top:14px; }
+.annotation-review-dialog { z-index:110; }
+.probe-interval-toggle { margin:8px 0; }
+.activity-canvas-frame:has(.probe-expanded) { grid-template-columns:260px minmax(0,1fr); }
+.probe-interval { font-size:11px; line-height:1.5; }
+.probe-interval p { margin:6px 0; }
+.probe-interval [data-rates] { max-height:180px; overflow:auto; }
+.probe-interval [data-rates] button { display:block; width:100%; text-align:left; margin:3px 0; }
+.probe-interval small { color:var(--muted); }
+.probe-rate-bar { display:block; height:3px; margin-top:4px; background:var(--accent); }

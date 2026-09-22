@@ -4,9 +4,14 @@ A local application for exploring processed neural spikes alongside behavior
 video. The main workspace links time, neural activity, individual Units, 2D Probe
 positions, original brain-region labels, and laboratory-defined behavior labels.
 
-The current prerelease is **v4.0.0-beta.3**. Previous releases remain available as
+The current prerelease is **v4.1.0-beta.1**. Previous releases remain available as
 Git tags. The source uses the [MIT license](LICENSE); datasets, videos, and model
 weights retain their own licenses and are not included in this repository.
+
+In this version, **Annotate** opens the large-video workspace; **Signals / Esc**
+returns to the neural view. Playback starts at **0.25×**; enter a custom speed or
+video time and press Enter. **Interval distribution** expands the Probe view for
+the selected clip or neural interval. [Changes and validation](docs/mentor-workspace-4.1.md).
 
 ## Start on Windows
 

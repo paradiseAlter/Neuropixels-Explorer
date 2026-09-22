@@ -36,6 +36,31 @@
     return own(s.labels, segment.id) ? s.labels[segment.id] : s.mappings[groupKey(doc, segment)] || "";
   }
   function reviewed(doc, segment) { return scheme(doc).reviewed[segment.id] === true; }
+  const PALETTE = ["#67c3cf", "#d99bea", "#edbd62", "#8acb91", "#ee90ab", "#8dabee", "#e49b72", "#bccb6d"];
+  function ensureColors(doc) {
+    doc.labelColors ||= {};
+    for (const s of doc.schemes) {
+      for (const value of [...Object.values(s.labels), ...Object.values(s.mappings)]) {
+        if (!value || own(doc.labelColors, value)) continue;
+        const used = new Set(Object.values(doc.labelColors));
+        let index = used.size, color;
+        do {
+          color = PALETTE[index] || `hsl(${(index * 137.508 % 360).toFixed(3)} 65% 68%)`;
+          index++;
+        } while (used.has(color));
+        Object.defineProperty(doc.labelColors, value, { value: color, enumerable: true, writable: true, configurable: true });
+      }
+    }
+    return doc;
+  }
+  function color(doc, value) { return own(doc.labelColors || {}, value) ? doc.labelColors[value] : "#86929f"; }
+  function project(doc, mapping, track = null) {
+    if (!doc) return [];
+    return doc.segments.filter(s => !track || JSON.stringify([s.subject, s.track]) === track).map(s => ({
+      id: s.id, label: label(doc, s), color: color(doc, label(doc, s)), subject: s.subject, track: s.track,
+      start: mapping.videoToNeural(s.start), end: mapping.videoToNeural(s.end)
+    })).filter(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start);
+  }
   function validate(doc, context) {
     check(doc?.schema === SCHEMA, "Unsupported annotation project version");
     check(doc.context?.key === context.key, "This project belongs to a different recording or video");
@@ -68,7 +93,13 @@
       }
     });
     check(schemes.has(doc.activeSchemeId), "Unknown active label scheme");
-    return clone(doc);
+    if (doc.labelColors != null) {
+      check(typeof doc.labelColors === "object" && !Array.isArray(doc.labelColors), "Invalid label palette");
+      const colors = Object.values(doc.labelColors);
+      check(colors.every(c => typeof c === "string" && (/^#[a-f\d]{6}$/i.test(c) || /^hsl\(\d+(?:\.\d+)? 65% 68%\)$/.test(c))), "Invalid label color");
+      check(new Set(colors).size === colors.length, "Label colors must be distinct");
+    }
+    return ensureColors(clone(doc));
   }
   function change(doc, fn) {
     const next = clone(doc);
@@ -221,6 +252,6 @@
     }
     return rows.map((row) => row.map(cell).join(",")).join("\r\n");
   }
-  return { SCHEMA, CANDIDATE_SCHEMA, create, validate, change, clone, scheme, groupKey, label, reviewed,
+  return { SCHEMA, CANDIDATE_SCHEMA, create, validate, change, clone, scheme, groupKey, label, reviewed, ensureColors, color, project,
     importCandidates, add, edit, remove, split, merge, assign, nameGroup, regroup, addScheme, groups, samples, toCSV };
 });

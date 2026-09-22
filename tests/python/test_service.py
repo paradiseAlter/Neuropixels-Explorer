@@ -248,6 +248,18 @@ class ServiceTests(unittest.TestCase):
         self.service.close()
         self.temporary.cleanup()
 
+    def test_exact_interval_activity_coverage_and_index_reuse(self) -> None:
+        result = self.service.interval_activity("rec_01", 1, 3)
+        self.assertEqual([u["spikeCount"] for u in result["units"]], [1, 1])
+        self.assertAlmostEqual(result["units"][0]["rateHz"], .5)
+        self.assertFalse(result["indexCacheHit"])
+        self.assertTrue(self.service.interval_activity("rec_01", 2, 4)["indexCacheHit"])
+        partial = self.service.interval_activity("rec_01", -1, .01)
+        self.assertEqual(partial["covered"], {"start": 0, "end": .01})
+        self.assertEqual(partial["units"][0]["spikeCount"], 1)
+        with self.assertRaises(ValueError):
+            self.service.interval_activity("rec_01", 1000, 1001)
+
     def test_catalog_and_review_match_the_frontend_contract(self) -> None:
         catalog = self.service.catalog()
         self.assertEqual(catalog["dataset"]["dataset_id"], "fixture")

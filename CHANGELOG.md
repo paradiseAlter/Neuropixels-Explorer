@@ -3,6 +3,21 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.1.0-beta.1] - 2026-09-23
+
+- Default new language preferences to English; retain explicitly saved choices.
+- Open a reversible, full-workspace annotation mode with an uncropped video and
+  a compact control rail. Add video-time entry and Space / I / O shortcuts.
+- Default playback to 0.25×, add 0.01× / 0.05× / 0.1× presets and custom
+  0.01–4× speed. Very slow playback advances frames against elapsed time.
+- Persist distinct label colors in annotation projects and project the active
+  subject/track onto neural activity using the existing video clock mapping.
+- Expand Probe interval distribution on demand. Exact counts use a reusable
+  per-Unit time index and divide by covered recording seconds, including partial
+  coverage. This spatial activity view does not imply multichannel waveforms.
+- Validate the running application with real Allen video/spikes, portable tests,
+  and 1280×800 / 1440×900 annotation layouts. See the [review note](docs/mentor-workspace-4.1.md).
+
 ## [4.0.0-beta.3] - 2026-09-11
 
 - Made opening data a persistent top-left action and added a start screen with

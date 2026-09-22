@@ -3,7 +3,6 @@
   "use strict";
   const A = window.NeuropixelsAnnotations;
   const D = window.NeuropixelsBehaviorDiscovery;
-  const clipColor = label => { let h=0; for(const c of label)h=(h*31+c.charCodeAt(0))>>>0;return ["#67aeb8","#ad86ca","#bc9650","#76a577","#ca8193","#729dd0"][h%6]; };
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const COPY = {
     open: ["Annotate", "标注行为", "Anotar"],
@@ -91,8 +90,8 @@
     }
   }
   class AnnotationController {
-    constructor({ panel, strip, button, video, getRecording, getView, setView, toast }) {
-      Object.assign(this, { panel, strip, button, video, getRecording, getView, setView, toast });
+    constructor({ panel, strip, button, video, getRecording, getView, setView, toast, onAnnotations = () => {} }) {
+      Object.assign(this, { panel, strip, button, video, getRecording, getView, setView, toast, onAnnotations });
       this.store = new DraftStore(); this.doc = null; this.key = null; this.history = []; this.future = [];
       this.selected = new Set(); this.group = ""; this.page = 0; this.opened = false; this.loop = null;
       this.saveQueue = Promise.resolve(); this.storageStatus = "saved";
@@ -102,6 +101,13 @@
       this.reviewDialog.addEventListener("cancel", e => { e.preventDefault(); this.reviewMode = false; this.render(); });
       this.stripObserver=new ResizeObserver(()=>this.drawTimeline(true));this.stripObserver.observe(strip);
       button.addEventListener("click", () => { this.opened = !this.opened; this.render(); });
+      document.addEventListener("keydown", e => {
+        if (!e.defaultPrevented && e.key === "Escape" && this.opened && !this.reviewMode) { this.opened = false; this.render(); button.focus(); }
+        if (e.defaultPrevented || !this.opened || this.reviewMode || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+        if (e.code === "Space") { e.preventDefault(); this.video.togglePlayback(); }
+        if (e.key.toLowerCase() === "i") this.panel.querySelector('[data-action="quick-start"]')?.click();
+        if (e.key.toLowerCase() === "o") this.panel.querySelector('[data-action="quick-end"]:not(:disabled)')?.click();
+      });
       panel.addEventListener("click", (e) => this.action(e));
       panel.addEventListener("change", (e) => this.onChange(e));
       panel.addEventListener("input", e => { if(e.target.dataset.field) e.target.dataset.edited="true"; });
@@ -146,6 +152,10 @@
         }
       } else {
         if (this.doc && Math.abs(this.doc.context.duration - duration) > .05) { this.doc.context.duration = duration; }
+        const at = this.video.currentVideoTime;
+        if (this.opened && this.window && !this.selected.size && (at < this.window.start || at > this.window.end)) {
+          this.window = { start: Math.max(0, Math.min(this.draft?.start ?? at, at) - 5), end: Math.min(duration, at + 5) };
+        }
         this.drawTimeline();
         const sync = this.panel.querySelector("[data-sync-note]"); if (sync) sync.textContent = tr(this.video.mapping.verificationStatus === "verified" ? "verified" : "unverified");
       }
@@ -175,6 +185,14 @@
       this.persist(); this.render();
     }
     render() {
+      const focus = Boolean(this.opened && this.doc);
+      document.getElementById("experiment-video-region")?.classList.toggle("annotation-focus", focus);
+      const entered = focus && !this.wasFocused; this.wasFocused = focus;
+      if (entered && !this.window && !this.selected.size) {
+        const at = this.video.currentVideoTime;
+        this.window = {start: Math.max(0, at - 5), end: Math.min(this.doc.context.duration, at + 5)};
+      }
+      if (entered && !this.video.rateChosen) this.video.setPlaybackRate(.25, { user: false });
       if (this.reviewMode && this.opened) {
         this.reviewDialog.append(this.panel); this.panel.classList.remove("is-compact");
         if (!this.reviewDialog.open) this.reviewDialog.showModal();
@@ -182,7 +200,7 @@
       }
       if(this.reviewDialog.open) this.panel.querySelectorAll("video").forEach(v=>{v.pause();v.removeAttribute("src");v.load();});
       this.reviewDialog.close(); this.home.append(this.panel); this.panel.classList.add("is-compact");
-      this.button.textContent = tr("open"); this.button.setAttribute("aria-expanded", String(this.opened));
+      this.button.textContent = this.opened ? "← Signals · Esc" : tr("open"); this.button.setAttribute("aria-expanded", String(this.opened));
       this.panel.hidden = !this.opened;
       this.strip.hidden = !this.doc || (!this.opened && !this.doc.segments.length);
       if (!this.opened || !this.doc) { this.panel.innerHTML = this.doc ? "" : `<p>${esc(tr("empty"))}</p>`; this.drawTimeline(true); return; }
@@ -195,7 +213,7 @@
       this.panel.innerHTML = `${clip && clip.end != null ? "" : `<p class="annotation-instruction">${esc(tr("dragHint"))}</p><div class="annotation-quick-actions">${B("quick-start","compactStart")}${B("quick-end","compactEnd",this.draft?.start == null ? "disabled" : "")}${B("range","useRange",this.getView().selectedInterval ? "" : "disabled")}</div>`}
         ${clip && clip.end != null ? `<div class="annotation-quick-editor"><div class="annotation-range-fields">${field("start",clip.start.toFixed(3),"number")}<span>→</span>${field("end",clip.end.toFixed(3),"number")}<small>s</small></div><div class="annotation-name-row">${field("label",active ? A.label(this.doc,active) : this.pendingLabel||"","text",`list="behavior-label-names" placeholder="${esc(tr("labelHint"))}"`)}${B("quick-save","saveClip")}</div><datalist id="behavior-label-names">${labels.map(l=>`<option value="${esc(l)}">`).join("")}</datalist><input data-field="subject" type="hidden" value="${esc(clip.subject||activeTrack[0])}"><input data-field="track" type="hidden" value="${esc(clip.track||activeTrack[1])}">
         <div class="annotation-context-actions">${B("quick-new",active?"newClip":"clear")}${active?B("split","split")+B("remove","remove"):""}${B("undo","undo",this.history.length?"":"disabled")}${B("review","more")}</div></div>` : this.draft ? `<p class="annotation-pending">${esc(tr("compactStart"))} ${this.draft.start.toFixed(3)} s → …</p>` : ""}
-        ${clip && clip.end != null ? "" : `<div class="annotation-compact-footer"><span>${this.doc.segments.length} ${esc(tr("clipCount"))}</span>${B("undo","undo",this.history.length?"":"disabled")}${B("save","save")}${B("review","more")}</div>`}<small data-storage>${esc(tr(this.storageStatus))}</small>`;
+        ${clip && clip.end != null ? "" : `<div class="annotation-compact-footer"><span>${this.doc.segments.length} ${esc(tr("clipCount"))}</span>${B("undo","undo",this.history.length?"":"disabled")}${B("save","save")}${B("review","more")}</div>`}<small class="annotation-shortcuts">Space · play/pause<br>I / O · mark start/end</small><small data-sync-note>${esc(tr(this.video.mapping.verificationStatus === "verified" ? "verified" : "unverified"))}</small><small data-storage>${esc(tr(this.storageStatus))}</small>`;
       this.drawTimeline(true);
     }
     renderFull() {
@@ -207,7 +225,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.0.0-beta.3</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.1.0-beta.1</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -273,6 +291,16 @@
         ? { start: Math.max(0,start), end: Math.min(total,end) } : {start:0,end:total};
     }
     drawTimeline(force = false) {
+      if (this.tracksDoc !== this.doc) {
+        this.tracksDoc = this.doc;
+        this.availableTracks = [...new Set((this.doc?.segments || []).map(s => JSON.stringify([s.subject,s.track])))];
+      }
+      const availableTracks = this.availableTracks || [];
+      if (!availableTracks.includes(this.activeTrack)) this.activeTrack = availableTracks[0] || null;
+      if (force || this.projectedDoc !== this.doc || this.projectedMapping !== this.video.mapping || this.projectedTrack !== this.activeTrack) {
+        this.projectedDoc = this.doc; this.projectedMapping = this.video.mapping; this.projectedTrack = this.activeTrack;
+        this.onAnnotations(A.project(this.doc, this.video.mapping, this.activeTrack));
+      }
       if (!this.doc) { this.strip.innerHTML=""; return; }
       this.strip.title=tr(this.doc.segments.length>1000?"limited":this.video.mapping.verificationStatus==="verified"?"verified":"unverified");
       this.strip.hidden = !this.opened && !this.doc.segments.length;
@@ -285,7 +313,7 @@
         const tracks=[...new Set(this.doc.segments.map(s=>JSON.stringify([s.subject,s.track])))];
         if(!tracks.includes(this.activeTrack))this.activeTrack=tracks[0];
         const clips=this.doc.segments.filter(s=>(!this.activeTrack||JSON.stringify([s.subject,s.track])===this.activeTrack)&&s.end>=range.start&&s.start<=range.end).slice(0,1000);
-        this.strip.innerHTML=`${tracks.length>1?`<label class="annotation-track-picker">${esc(tr("subject"))} / ${esc(tr("track"))}<select data-video-track>${tracks.map(t=>`<option value="${esc(t)}" ${t===this.activeTrack?"selected":""}>${esc(JSON.parse(t).join(" / "))}</option>`).join("")}</select></label>`:""}<div class="annotation-video-scale"><span>${range.start.toFixed(2)} s</span><button data-range-around>${esc(tr("around"))}</button><button data-range-whole>${esc(tr("whole"))}</button><span>${range.end.toFixed(2)} s</span></div><div class="annotation-track-plot"><svg viewBox="0 0 ${width} 46" preserveAspectRatio="none" role="group" aria-label="${esc(tr("table"))}"><rect class="annotation-track-background" x="0" y="0" width="${width}" height="46"/>${clips.map(s=>{const left=Math.max(0,x(s.start)),right=Math.min(width,x(s.end)),label=A.label(this.doc,s)||this.shortGroup(A.groupKey(this.doc,s));return `<g style="--clip-color:${clipColor(label)}" data-clip="${esc(s.id)}" tabindex="0" role="button" aria-label="${esc(label)} ${s.start.toFixed(3)}–${s.end.toFixed(3)}" class="${this.selected.has(s.id)?"is-selected":""} ${A.reviewed(this.doc,s)?"is-reviewed":""}"><title>${esc(label)} · ${s.start.toFixed(3)}–${s.end.toFixed(3)} s</title><rect x="${left}" y="10" width="${Math.max(2,right-left)}" height="28" rx="3"/>${right-left>70?`<text x="${left+5}" y="29">${esc(label.slice(0,Math.floor((right-left)/8)))}</text>`:""}${this.selected.has(s.id)?`<rect data-edge="start" data-id="${s.id}" class="annotation-edge" x="${left}" y="8" width="9" height="32"/><rect data-edge="end" data-id="${s.id}" class="annotation-edge" x="${Math.max(left,right-9)}" y="8" width="9" height="32"/>`:""}</g>`;}).join("")}<rect data-draft class="annotation-draft" x="0" y="3" width="0" height="40"/><line data-playhead y1="0" y2="46"/></svg></div>`;
+        this.strip.innerHTML=`${tracks.length>1?`<label class="annotation-track-picker">${esc(tr("subject"))} / ${esc(tr("track"))}<select data-video-track>${tracks.map(t=>`<option value="${esc(t)}" ${t===this.activeTrack?"selected":""}>${esc(JSON.parse(t).join(" / "))}</option>`).join("")}</select></label>`:""}<div class="annotation-video-scale"><span>${range.start.toFixed(2)} s</span><button data-range-around>${esc(tr("around"))}</button><button data-range-whole>${esc(tr("whole"))}</button><span>${range.end.toFixed(2)} s</span></div><div class="annotation-track-plot"><svg viewBox="0 0 ${width} 46" preserveAspectRatio="none" role="group" aria-label="${esc(tr("table"))}"><rect class="annotation-track-background" x="0" y="0" width="${width}" height="46"/>${clips.map(s=>{const left=Math.max(0,x(s.start)),right=Math.min(width,x(s.end)),label=A.label(this.doc,s)||this.shortGroup(A.groupKey(this.doc,s));return `<g style="--clip-color:${A.color(this.doc,A.label(this.doc,s))}" data-clip="${esc(s.id)}" tabindex="0" role="button" aria-label="${esc(label)} ${s.start.toFixed(3)}–${s.end.toFixed(3)}" class="${this.selected.has(s.id)?"is-selected":""} ${A.reviewed(this.doc,s)?"is-reviewed":""}"><title>${esc(label)} · ${s.start.toFixed(3)}–${s.end.toFixed(3)} s</title><rect x="${left}" y="10" width="${Math.max(2,right-left)}" height="28" rx="3"/>${right-left>70?`<text x="${left+5}" y="29">${esc(label.slice(0,Math.floor((right-left)/8)))}</text>`:""}${this.selected.has(s.id)?`<rect data-edge="start" data-id="${s.id}" class="annotation-edge" x="${left}" y="8" width="9" height="32"/><rect data-edge="end" data-id="${s.id}" class="annotation-edge" x="${Math.max(left,right-9)}" y="8" width="9" height="32"/>`:""}</g>`;}).join("")}<rect data-draft class="annotation-draft" x="0" y="3" width="0" height="40"/><line data-playhead y1="0" y2="46"/></svg></div>`;
         const picker=this.strip.querySelector("[data-video-track]");if(picker)picker.onchange=()=>{this.activeTrack=picker.value;this.drawTimeline(true);};
         this.strip.querySelector("[data-range-around]").onclick=()=>{const at=this.video.currentVideoTime;this.focusVideoRange({start:Math.max(0,at-5),end:Math.min(this.doc.context.duration,at+5)});};
         this.strip.querySelector("[data-range-whole]").onclick=()=>{this.window={start:0,end:this.doc.context.duration};this.setView({visibleRange:{start:0,end:this.getRecording().duration}});this.drawTimeline(true);};
@@ -470,7 +498,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.0.0-beta.3", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.1.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

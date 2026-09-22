@@ -291,6 +291,11 @@
       this.render();
     }
 
+    setAnnotations(intervals) {
+      this.annotations = intervals || [];
+      this.render();
+    }
+
     setSelectedUnitData(result) {
       this.selectedSpikeTimes = result?.spikeTimes instanceof Float64Array
         ? result.spikeTimes
@@ -332,8 +337,8 @@
 
     _resize() {
       const rectangle = this.canvas.getBoundingClientRect();
-      const width = Math.max(640, Math.round(rectangle.width || 1200));
-      const height = Math.max(360, Math.round(rectangle.height || 620));
+      const width = Math.max(300, Math.round(rectangle.width || 1200));
+      const height = Math.max(100, Math.round(rectangle.height || 620));
       const ratio = Math.max(1, Number(globalThis.devicePixelRatio || 1));
       if (this.canvas.width !== Math.round(width * ratio) || this.canvas.height !== Math.round(height * ratio)) {
         this.canvas.width = Math.round(width * ratio);
@@ -426,6 +431,7 @@
       if (!this.data || !this.rows.length) return;
       this.rowGeometry.forEach((geometry, index) => this._drawRow(context, colors, geometry, index));
       this._drawSpatialIndex(context, colors);
+      this._drawAnnotations(context);
       this._drawSelection(context, colors);
       this._drawCursor(context, colors);
       this._drawAxis(context, colors);
@@ -766,6 +772,23 @@
       const end = Number(this.state.visibleRange?.end ?? this.data?.duration ?? 1);
       const fraction = Math.max(0, Math.min(1, (Number(x) - GUTTER_WIDTH) / Math.max(1, this.width - GUTTER_WIDTH)));
       return start + fraction * (end - start);
+    }
+
+    _drawAnnotations(context) {
+      context.save();
+      context.beginPath();
+      context.rect(GUTTER_WIDTH, HEADER_HEIGHT, this.width - GUTTER_WIDTH, this.height - HEADER_HEIGHT - AXIS_HEIGHT);
+      context.clip();
+      for (const clip of this.annotations || []) {
+        if (clip.end <= this.state.visibleRange.start || clip.start >= this.state.visibleRange.end) continue;
+        const left = this._timeToX(clip.start), right = this._timeToX(clip.end);
+        context.fillStyle = clip.color;
+        context.globalAlpha = .13;
+        context.fillRect(left, HEADER_HEIGHT, right - left, this.height - HEADER_HEIGHT - AXIS_HEIGHT);
+        context.globalAlpha = .95;
+        context.fillRect(left, HEADER_HEIGHT, right - left, 5);
+      }
+      context.restore();
     }
 
     _drawSelection(context, colors) {

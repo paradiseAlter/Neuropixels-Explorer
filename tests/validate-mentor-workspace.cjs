@@ -1,0 +1,30 @@
+"use strict";
+const assert = require("node:assert/strict");
+const A = require("../scripts/annotation-core.js");
+const {TimeMapping, VideoSyncController} = require("../scripts/video-sync.js");
+const {LanguageController} = require("../scripts/i18n.js");
+let doc = A.create({key:"test", duration:100});
+for (let i=0; i<20; i++) doc = A.add(doc, {start:i*2, end:i*2+1, label:`behavior ${i}`});
+assert.equal(new Set(Object.values(doc.labelColors)).size, 20);
+const color = A.color(doc, "behavior 0");
+doc = A.remove(doc, [doc.segments[1].id]);
+doc = A.add(doc, {start:60, end:61, label:"behavior 0"});
+assert.equal(A.color(doc,"behavior 0"), color);
+assert.equal(A.color(A.validate(JSON.parse(JSON.stringify(doc)),doc.context),"behavior 0"),color);
+const before = JSON.stringify(doc);
+const projected = A.project(doc,new TimeMapping({offset_s:3,scale:1.01}));
+assert.equal(projected[0].start,3); assert.equal(projected[0].end,4.01);
+assert.equal(projected[0].color,color); assert.equal(JSON.stringify(doc),before);
+assert.equal(A.project(doc,new TimeMapping(),JSON.stringify(["other","behavior"])).length,0);
+const frameClock = new TimeMapping({provenance:{frame_clock:{video_s:[10,20],neural_s:[11,22]}}});
+assert(A.project(doc,frameClock).every(s => s.start>=11 && s.end<=22));
+assert.equal(new LanguageController({navigatorLanguage:"zh-CN"}).language,"en");
+assert.equal(new LanguageController({storage:{getItem:()=>"es"}}).language,"es");
+const controller = Object.create(VideoSyncController.prototype);
+controller.elements={speed:{},customSpeed:{}}; controller._emitState=()=>{};
+for (const rate of [.01,.05,.1,.17,.25,.333,1,4]) {
+  assert(controller.setPlaybackRate(rate)); assert.equal(controller.playbackRate,rate);
+}
+for (const rate of [0,-1,5,NaN,Infinity]) assert.equal(controller.setPlaybackRate(rate),false);
+assert.equal(controller.playbackRate,4);
+console.log("PASS: distinct persistent colors, mapped intervals, English default, custom speed validation");

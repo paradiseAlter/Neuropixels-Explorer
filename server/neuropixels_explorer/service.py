@@ -36,6 +36,7 @@ from .ingest import IncrementalIngestManager, IngestError
 from .migrations import SCHEMA_VERSION, validate_schema
 from .paths import RuntimePaths
 from .local_projects import LocalProjects
+from .interval_activity import IntervalActivityIndex
 
 
 SERVICE_VERSION = __version__
@@ -148,6 +149,9 @@ class CatalogService:
         self._activity_build_jobs: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._cache_lock = threading.RLock()
         self._activity_build_lock = threading.Lock()
+        self._interval_lock = threading.Lock()
+        self._interval_index = None
+        self._interval_identity = None
         self._activity_store = ActivityPyramidStore(paths.cache_root)
         with self.connect() as connection:
             validate_schema(connection)
@@ -781,6 +785,29 @@ class CatalogService:
             },
         }
 
+    def interval_activity(self, recording_id: str, start: float, end: float) -> dict[str, Any]:
+        if not np.isfinite(start) or not np.isfinite(end) or end <= start:
+            raise ValueError("Expected finite start < end")
+        with self.connect() as connection:
+            row = connection.execute("SELECT recording_duration_s FROM recordings WHERE recording_id = ?", (recording_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown Recording: {recording_id}")
+        covered_start, covered_end = max(0.0, start), min(float(row[0]), end)
+        if covered_end <= covered_start:
+            raise ValueError("Selected interval has no neural recording coverage")
+        context = self._activity_context(recording_id)
+        identity = context["cacheIdentity"]
+        with self._interval_lock:
+            hit = self._interval_identity == identity
+            if not hit:
+                arrays = context["arrays"]
+                self._interval_index = IntervalActivityIndex(arrays["spike_times"], arrays["spike_clusters"], context["sampleRate"])
+                self._interval_identity = identity
+            units = self._interval_index.counts(covered_start, covered_end, [int(u["cluster_id"]) for u in context["unitRows"]])
+        return {"recordingId": recording_id, "requested": {"start": start, "end": end},
+                "covered": {"start": covered_start, "end": covered_end}, "duration": covered_end - covered_start,
+                "units": units, "indexCacheHit": hit, "semantics": "spike count / covered seconds; [start, end)"}
+
     def _activity_context(self, recording_id: str) -> dict[str, Any]:
         arrays, recording_cache_hit = self._recording_arrays(recording_id)
         with self.connect() as connection:
@@ -1278,6 +1305,9 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
             elif (match := re.fullmatch(r"/api/videos/([^/]+)/media", parsed.path)):
                 path, content_type = self.server.service.video_media(unquote(match.group(1)))
                 self._media(path, content_type)
+            elif (match := re.fullmatch(r"/api/recordings/([^/]+)/interval-activity", parsed.path)):
+                query = parse_qs(parsed.query)
+                self._json(self.server.service.interval_activity(unquote(match.group(1)), float(query.get("start", ["nan"])[0]), float(query.get("end", ["nan"])[0])))
             elif (match := re.fullmatch(r"/api/recordings/([^/]+)/activity-overview", parsed.path)):
                 recording_id = unquote(match.group(1))
                 query = parse_qs(parsed.query)

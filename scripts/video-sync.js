@@ -136,7 +136,7 @@
       this.currentVideoTime = 0;
       this.playing = false;
       this.follow = true;
-      this.playbackRate = 1;
+      this.playbackRate = .25;
       this.animationFrame = null;
       this.syntheticStartedAt = null;
       this.syntheticStartedTime = 0;
@@ -154,9 +154,24 @@
       e.play?.addEventListener("click", () => this.togglePlayback());
       e.previous?.addEventListener("click", () => this.stepFrames(-1));
       e.next?.addEventListener("click", () => this.stepFrames(1));
-      e.speed?.addEventListener("change", () => this.setPlaybackRate(Number(e.speed.value)));
+      e.speed?.addEventListener("change", () => {
+        if (e.speed.value === "custom") { e.customSpeed?.focus(); e.customSpeed?.select(); }
+        else this.setPlaybackRate(Number(e.speed.value));
+      });
+      const applyRate = () => {
+        if (this.setPlaybackRate(Number(e.customSpeed.value))) e.customSpeed.setCustomValidity("");
+        else { e.customSpeed.setCustomValidity("Enter a speed from 0.01 to 4×."); e.customSpeed.reportValidity(); }
+      };
+      e.customSpeed?.addEventListener("change", applyRate);
+      e.customSpeed?.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); applyRate(); } });
       e.follow?.addEventListener("change", () => { this.follow = Boolean(e.follow.checked); this._emitState(); });
       e.seek?.addEventListener("input", () => this.seekVideo(Number(e.seek.value)));
+      const jumpToSeconds = () => {
+        const value = Number(e.seekSeconds.value);
+        if (Number.isFinite(value)) { this.pause(); this.seekVideo(value); }
+      };
+      e.seekSeconds?.addEventListener("change", jumpToSeconds);
+      e.seekSeconds?.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); jumpToSeconds(); } });
       const applyOffset = () => {
         const value = Number(e.offset.value);
         if (!Number.isFinite(value)) return;
@@ -174,7 +189,7 @@
       e.video?.addEventListener("loadedmetadata", () => this._finishRealVideoLoad());
       e.video?.addEventListener("timeupdate", () => this._syncFromRealVideo());
       e.video?.addEventListener("play", () => { this.playing = true; this._updatePlayButton(); this._realVideoFrame(); });
-      e.video?.addEventListener("pause", () => { this.playing = false; this._updatePlayButton(); this._emitState(); });
+      e.video?.addEventListener("pause", () => { if (this.manualPlayback) return; this.playing = false; this._updatePlayButton(); this._emitState(); });
       e.video?.addEventListener("ended", () => { this.playing = false; this._updatePlayButton(); this._emitState(); });
       e.video?.addEventListener("error", () => this._renderError(e.video.error?.message || this.t("video.loadError")));
     }
@@ -290,7 +305,16 @@
       if (!this.source) return;
       if (this.currentVideoTime >= this.source.duration) this.seekVideo(0);
       if (["file", "url"].includes(this.source.kind)) {
-        this.elements.video.playbackRate = this.playbackRate;
+        this.manualPlayback = this.playbackRate < .0625;
+        if (!this.manualPlayback) {
+          try { this.elements.video.playbackRate = this.playbackRate; }
+          catch { this.manualPlayback = true; }
+        }
+        if (this.manualPlayback) {
+          this.elements.video.pause(); this.playing = true;
+          this.syntheticStartedAt = performance.now(); this.syntheticStartedTime = this.currentVideoTime;
+          this._updatePlayButton(); this._slowVideoFrame(); this._emitState(); return;
+        }
         const result = this.elements.video.play();
         result?.catch?.(() => this._renderError(this.t("video.playBlocked")));
         return;
@@ -304,6 +328,7 @@
     }
 
     pause() {
+      this.manualPlayback = false;
       if (["file", "url"].includes(this.source?.kind)) this.elements.video.pause();
       this.playing = false;
       if (this.animationFrame != null) cancelAnimationFrame(this.animationFrame);
@@ -313,15 +338,30 @@
       this._emitState();
     }
 
-    setPlaybackRate(rate) {
-      this.playbackRate = [0.25, 0.5, 1, 2, 4].includes(Number(rate)) ? Number(rate) : 1;
-      if (this.elements.speed) this.elements.speed.value = String(this.playbackRate);
-      if (this.elements.video) this.elements.video.playbackRate = this.playbackRate;
-      if (this.playing && this.source?.kind === "synthetic") {
-        this.syntheticStartedAt = performance.now();
-        this.syntheticStartedTime = this.currentVideoTime;
-      }
+    setPlaybackRate(rate, { user = true } = {}) {
+      rate = Number(rate);
+      if (!Number.isFinite(rate) || rate < .01 || rate > 4) return false;
+      const resume = this.playing;
+      if (resume) this.pause();
+      this.playbackRate = rate;
+      if (user) this.rateChosen = true;
+      if (this.elements.speed) this.elements.speed.value = [.01,.05,.1,.25,.5,1,2,4].includes(rate) ? String(rate) : "custom";
+      if (this.elements.customSpeed) this.elements.customSpeed.value = String(rate);
+      if (resume) this.play();
       this._emitState();
+      return true;
+    }
+
+    _slowVideoFrame() {
+      if (!this.playing || !this.manualPlayback) return;
+      const target = Math.min(this.source.duration, this.syntheticStartedTime + (performance.now() - this.syntheticStartedAt) / 1000 * this.playbackRate);
+      const video = this.elements.video;
+      if (!video.seeking && (target - video.currentTime >= 1 / this.source.fps || target >= this.source.duration)) {
+        video.currentTime = target;
+        this.currentVideoTime = target; this._renderTime(); this._emitTime();
+      }
+      if (target >= this.source.duration) { this.pause(); return; }
+      this.animationFrame = requestAnimationFrame(() => this._slowVideoFrame());
     }
 
     stepFrames(delta) {
@@ -338,7 +378,7 @@
       this.currentVideoTime = next;
       if (["file", "url"].includes(this.source.kind)) this.elements.video.currentTime = next;
       else this._renderSyntheticFrame();
-      if (this.playing && this.source.kind === "synthetic") {
+      if (this.playing && (this.source.kind === "synthetic" || this.manualPlayback)) {
         this.syntheticStartedAt = performance.now();
         this.syntheticStartedTime = next;
       }
@@ -384,7 +424,7 @@
     }
 
     _realVideoFrame() {
-      if (!this.playing || !["file", "url"].includes(this.source?.kind)) return;
+      if (!this.playing || this.manualPlayback || !["file", "url"].includes(this.source?.kind)) return;
       this._syncFromRealVideo();
       if (typeof this.elements.video.requestVideoFrameCallback === "function") {
         this.elements.video.requestVideoFrameCallback(() => this._realVideoFrame());

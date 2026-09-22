@@ -752,7 +752,7 @@
       this.listeners = new Set();
       let saved = null;
       try { saved = this.storage?.getItem?.(STORAGE_KEY); } catch { saved = null; }
-      this.language = normalizeLanguage(saved || navigatorLanguage || "en");
+      this.language = normalizeLanguage(saved || "en");
       this.apply();
     }
 
