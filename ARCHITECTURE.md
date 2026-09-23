@@ -17,6 +17,13 @@ outside the repository and are not required by the standalone folder workflow.
 
 ## Module map
 
+- `Start-Explorer.ps1` resolves the optional local project profile, serializes
+  starts per port, verifies the service identity and opens the browser after
+  readiness. Windows WMI creates `server/launch_explorer.py` outside the calling
+  terminal's job tree. The bootstrap establishes its own imports/log streams;
+  neither the service nor its output pipes depend on the launcher staying open.
+- `scripts/Install-ExplorerShortcut.ps1` creates a desktop entry and ignored
+  `config/local.launcher.json`; it does not register a startup service/task.
 - `index.html` defines the current Explorer interface; `VERSION` controls its release label.
 - `scripts/app.js` owns application state, folder selection, review modes, and
   DOM coordination.

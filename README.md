@@ -4,7 +4,7 @@ A local application for exploring processed neural spikes alongside behavior
 video. The main workspace links time, neural activity, individual Units, 2D Probe
 positions, original brain-region labels, and laboratory-defined behavior labels.
 
-The current prerelease is **v4.1.0-beta.1**. Previous releases remain available as
+The current prerelease is **v4.1.1-beta.1**. Previous releases remain available as
 Git tags. The source uses the [MIT license](LICENSE); datasets, videos, and model
 weights retain their own licenses and are not included in this repository.
 
@@ -18,13 +18,28 @@ the selected clip or neural interval. [Changes and validation](docs/mentor-works
 Install the checkout once with `python -m pip install -e ".[allen]"`, then
 double-click **[Start-Explorer.cmd](Start-Explorer.cmd)**. The launcher starts the
 local service, opens the start screen, and reuses a healthy matching instance.
-It restarts an older Explorer serving the same catalog. Re-run the launcher after
-a reboot; a localhost URL by itself does not start the application.
+It restarts an older Explorer serving the same catalog. The background process
+survives closing the launcher or development terminal. After a reboot, use the
+same launcher or desktop shortcut; a browser bookmark alone cannot start it.
+
+For an existing collection, run `scripts/Install-ExplorerShortcut.ps1` with
+`-DataRoot`, `-Database`, `-Python`, and optionally `-Name` / `-Port`. This creates
+a desktop shortcut and an ignored `config/local.launcher.json` profile. Both the
+shortcut and the checkout's `Start-Explorer.cmd` then open that collection at
+`/?database=1` after its health check passes. If its drive/catalog is missing,
+the launcher reports the problem instead of creating an empty replacement.
+Explicit data-path arguments bypass the profile. No login task or Windows
+service is installed; the application runs only when opened.
 
 By default, project metadata and derived caches live under the current user's
 local application-data directory. Existing collections can supply `-DataRoot`,
 `-Database`, `-Python`, and `-Port` to `Start-Explorer.ps1`. `-NoBrowser` checks or
 starts the service without opening a browser window.
+
+Failed starts keep the command window open with a retry instruction and, when
+available, a log excerpt. Startup logs and `latest-process.json` live beside the
+catalog in `logs/`. Simultaneous launches are serialized; an occupied port owned
+by another project or application is left untouched.
 
 ## Open your recording
 

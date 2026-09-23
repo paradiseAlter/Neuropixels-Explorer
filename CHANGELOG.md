@@ -3,6 +3,18 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.1.1-beta.1] - 2026-09-24
+
+- Add a desktop shortcut installer and local project profile so opening Explorer
+  starts the selected collection without depending on a running development task.
+- Start the on-demand Windows process independently of the launcher's console/job
+  and open the selected database only after version, catalog and health checks.
+- Serialize repeated launches, preserve other applications on occupied ports,
+  reject missing configured catalogs, and retain useful failure messages/logs.
+- Validate cold/concurrent/repeated starts, parent-process exit, missing catalogs,
+  wrong-project port conflicts and startup failures with temporary fixture data.
+  The existing large-video annotation, custom speeds and label mapping are retained.
+
 ## [4.1.0-beta.1] - 2026-09-23
 
 - Default new language preferences to English; retain explicitly saved choices.
