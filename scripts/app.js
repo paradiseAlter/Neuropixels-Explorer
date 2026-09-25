@@ -217,11 +217,31 @@
     }
   };
 
+  function videoIsEmphasized() { return Boolean(state.videoEnlarged || state.videoAnnotating); }
+
+  function setVideoEmphasis(kind, enabled) {
+    state[kind === "annotation" ? "videoAnnotating" : "videoEnlarged"] = Boolean(enabled);
+    elements.experimentBody.classList.toggle("video-emphasis", videoIsEmphasized());
+    const region = document.getElementById("experiment-video-region");
+    region.classList.toggle("is-enlarged", Boolean(state.videoEnlarged));
+    const expand = document.getElementById("expand-video");
+    expand.setAttribute("aria-pressed", String(Boolean(state.videoEnlarged)));
+    expand.hidden = Boolean(state.videoAnnotating);
+    setVideoSplitPercent(videoIsEmphasized() ? state.videoFocusSplitPercent || 66 : state.videoSplitPercent || 35);
+  }
+
   function setVideoSplitPercent(value) {
-    const percentValue = Math.max(25, Math.min(50, Number(value) || 35));
-    state.videoSplitPercent = percentValue;
+    const focused = videoIsEmphasized();
+    const requested = Math.max(25, Math.min(focused ? 72 : 50, Number(value) || (focused ? 66 : 35)));
+    state[focused ? "videoFocusSplitPercent" : "videoSplitPercent"] = requested;
+    // Reserve a readable neural texture after its anatomy gutter and Probe.
+    const width = Math.max(1, elements.experimentBody.clientWidth - 24);
+    const contextWidth = document.querySelector(".mini-probe.probe-expanded") ? 764 : 620;
+    const maximum = Math.min(focused ? 72 : 50, Math.max(25, (width - contextWidth - 20) / width * 100));
+    const percentValue = Math.min(requested, maximum);
     elements.experimentBody?.style.setProperty("--video-region-width", `${percentValue}%`);
     elements.videoSplitter?.setAttribute("aria-valuenow", String(Math.round(percentValue)));
+    elements.videoSplitter?.setAttribute("aria-valuemax", String(Math.round(maximum)));
   }
 
   function installVideoSplitter() {
@@ -246,13 +266,16 @@
     };
     splitter.addEventListener("pointerup", finish);
     splitter.addEventListener("pointercancel", finish);
-    splitter.addEventListener("dblclick", () => setVideoSplitPercent(35));
+    splitter.addEventListener("dblclick", () => setVideoSplitPercent(videoIsEmphasized() ? 66 : 35));
     splitter.addEventListener("keydown", (event) => {
       if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
       event.preventDefault();
-      setVideoSplitPercent(event.key === "Home" ? 35 : state.videoSplitPercent + (event.key === "ArrowLeft" ? 2 : -2));
+      setVideoSplitPercent(event.key === "Home" ? (videoIsEmphasized() ? 66 : 35) : Number(splitter.getAttribute("aria-valuenow")) + (event.key === "ArrowLeft" ? 2 : -2));
     });
     setVideoSplitPercent(35);
+    const resize = () => setVideoSplitPercent(videoIsEmphasized() ? state.videoFocusSplitPercent || 66 : state.videoSplitPercent || 35);
+    new ResizeObserver(resize).observe(body);
+    new MutationObserver(resize).observe(document.getElementById("mini-probe"), { attributes: true, attributeFilter: ["class"] });
   }
 
   installVideoSplitter();
@@ -394,6 +417,7 @@
     getRecording: () => state.activeRecording,
     getView: () => state.experimentView,
     setView: (patch, options) => setExperimentView(patch, options),
+    onOpenChange: (opened) => setVideoEmphasis("annotation", opened),
     onAnnotations: (intervals) => {
       activityCanvas.setAnnotations(intervals);
       const legend = document.getElementById("annotation-color-legend");
@@ -411,6 +435,7 @@
     setExperimentView({ selectedRegion: region, selectedShank: null, selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, groupFocusPath: [] });
   });
   projectUI = new window.NeuropixelsProjectUI({state, video:videoController,
+    onVideoExpand: (enabled = !state.videoEnlarged) => setVideoEmphasis("video", enabled),
     openCatalog:openDatabaseCatalog, home:()=>showOnly("empty"), resume:()=>showOnly("explorer"),
     toast:showToast, folderFallback:openPicker});
 

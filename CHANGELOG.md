@@ -3,6 +3,18 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.1.2-beta.1] - 2026-09-26
+
+- Enlarge video and annotate inside the existing activity/video split instead of
+  covering the workspace. Keep the recording header, neural activity, anatomical
+  gutter, Probe and shared cursor visible throughout.
+- Keep separate normal/focused split proportions, reserve readable neural space
+  on smaller screens, and accommodate the expanded Probe distribution. Retain
+  pointer and keyboard resizing; restoring the layout preserves time and Unit.
+- Keep annotation tools beside the uncropped video, show the synchronization
+  status, and use an explicit Done annotating action. Respect reduced motion.
+- This fixes context loss; it adds no automated discovery or scientific scoring.
+
 ## [4.1.1-beta.1] - 2026-09-24
 
 - Add a desktop shortcut installer and local project profile so opening Explorer

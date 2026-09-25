@@ -113,8 +113,6 @@
 .video-tools button { font-size: 12px; }
 .video-tools span { color: var(--muted); font-size: 10px; margin-left: auto; }
 .experiment-video-region .video-mapping { display: none !important; }
-.experiment-video-region.is-enlarged { position: fixed; inset: 65px 8vw 20px; z-index: 90; box-shadow: 0 0 0 100vmax #000a; }
-.experiment-video-region.is-enlarged .video-stage { height: min(58vh, 640px); aspect-ratio: auto; }
 @media (max-width: 1280px) {
   .app-actions .preference-picker > span { display: none; }
   .app-title strong { max-width: 130px; font-size: 9px; }

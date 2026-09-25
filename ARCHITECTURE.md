@@ -172,6 +172,11 @@ older cached coordinates cannot silently survive the adapter fix.
 
 The annotation panel now lives in the video body. The time strip supports direct
 interval selection; batch review moves the same controller into a native dialog.
+Video enlargement and annotation use the existing experiment split. `app.js`
+owns the two emphasis requests and normal/focused proportions; its size clamp
+reserves the neural texture and anatomy gutter even when Probe rates expand.
+Annotation UI owns editor visibility and reports it through `onOpenChange`.
+Layout changes do not mutate scientific selection, time mapping or datasets.
 Annotation JSON schemas and candidate provenance are unchanged. Browser drafts
 remain scoped to the recording/video and origin. Local project links persist
 independently of annotation drafts. `Start-Explorer.cmd` starts or reuses the

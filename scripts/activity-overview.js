@@ -836,11 +836,12 @@
       context.fillStyle = colors.muted;
       context.font = '500 8px "Cascadia Mono", Consolas, monospace';
       context.textBaseline = "middle";
-      for (let tick = 0; tick <= 5; tick += 1) {
-        const fraction = tick / 5;
+      const tickCount = Math.max(1, Math.min(5, Math.floor((this.width - GUTTER_WIDTH) / 90)));
+      for (let tick = 0; tick <= tickCount; tick += 1) {
+        const fraction = tick / tickCount;
         const x = GUTTER_WIDTH + fraction * (this.width - GUTTER_WIDTH);
         const value = start + fraction * (end - start);
-        context.textAlign = tick === 0 ? "left" : tick === 5 ? "right" : "center";
+        context.textAlign = tick === 0 ? "left" : tick === tickCount ? "right" : "center";
         context.fillText(`${value.toFixed(end - start < 10 ? 2 : 1)} s`, x, top + AXIS_HEIGHT / 2);
       }
       context.textAlign = "left";

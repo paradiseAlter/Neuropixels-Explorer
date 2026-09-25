@@ -6,6 +6,7 @@
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const COPY = {
     open: ["Annotate", "标注行为", "Anotar"],
+    done: ["Done annotating · Esc", "结束标注 · Esc", "Terminar anotación · Esc"],
     dragHint: ["Drag on the video strip to select a behavior, or mark its start and end while watching.", "在视频时间条上拖出一段行为，或播放时标记起点和终点。", "Arrastra en la barra del vídeo o marca inicio y fin mientras lo ves."],
     compactStart: ["Mark start", "标记起点", "Marcar inicio"], compactEnd: ["Mark end", "标记终点", "Marcar fin"],
     more: ["Clips & grouping…", "片段与分组…", "Clips y grupos…"],
@@ -90,8 +91,8 @@
     }
   }
   class AnnotationController {
-    constructor({ panel, strip, button, video, getRecording, getView, setView, toast, onAnnotations = () => {} }) {
-      Object.assign(this, { panel, strip, button, video, getRecording, getView, setView, toast, onAnnotations });
+    constructor({ panel, strip, button, video, getRecording, getView, setView, toast, onAnnotations = () => {}, onOpenChange = () => {} }) {
+      Object.assign(this, { panel, strip, button, video, getRecording, getView, setView, toast, onAnnotations, onOpenChange });
       this.store = new DraftStore(); this.doc = null; this.key = null; this.history = []; this.future = [];
       this.selected = new Set(); this.group = ""; this.page = 0; this.opened = false; this.loop = null;
       this.saveQueue = Promise.resolve(); this.storageStatus = "saved";
@@ -102,7 +103,7 @@
       this.stripObserver=new ResizeObserver(()=>this.drawTimeline(true));this.stripObserver.observe(strip);
       button.addEventListener("click", () => { this.opened = !this.opened; this.render(); });
       document.addEventListener("keydown", e => {
-        if (!e.defaultPrevented && e.key === "Escape" && this.opened && !this.reviewMode) { this.opened = false; this.render(); button.focus(); }
+        if (!e.defaultPrevented && e.key === "Escape" && this.opened && !this.reviewMode && !document.querySelector("dialog[open]")) { e.preventDefault(); this.opened = false; this.render(); button.focus(); }
         if (e.defaultPrevented || !this.opened || this.reviewMode || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
         if (e.code === "Space") { e.preventDefault(); this.video.togglePlayback(); }
         if (e.key.toLowerCase() === "i") this.panel.querySelector('[data-action="quick-start"]')?.click();
@@ -187,6 +188,7 @@
     render() {
       const focus = Boolean(this.opened && this.doc);
       document.getElementById("experiment-video-region")?.classList.toggle("annotation-focus", focus);
+      this.onOpenChange(focus);
       const entered = focus && !this.wasFocused; this.wasFocused = focus;
       if (entered && !this.window && !this.selected.size) {
         const at = this.video.currentVideoTime;
@@ -200,7 +202,7 @@
       }
       if(this.reviewDialog.open) this.panel.querySelectorAll("video").forEach(v=>{v.pause();v.removeAttribute("src");v.load();});
       this.reviewDialog.close(); this.home.append(this.panel); this.panel.classList.add("is-compact");
-      this.button.textContent = this.opened ? "← Signals · Esc" : tr("open"); this.button.setAttribute("aria-expanded", String(this.opened));
+      this.button.textContent = this.opened ? tr("done") : tr("open"); this.button.setAttribute("aria-expanded", String(this.opened));
       this.panel.hidden = !this.opened;
       this.strip.hidden = !this.doc || (!this.opened && !this.doc.segments.length);
       if (!this.opened || !this.doc) { this.panel.innerHTML = this.doc ? "" : `<p>${esc(tr("empty"))}</p>`; this.drawTimeline(true); return; }
@@ -225,7 +227,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.1.1-beta.1</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.1.2-beta.1</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -498,7 +500,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.1.1-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.1.2-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

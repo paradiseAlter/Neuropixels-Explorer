@@ -4,7 +4,7 @@ A local application for exploring processed neural spikes alongside behavior
 video. The main workspace links time, neural activity, individual Units, 2D Probe
 positions, original brain-region labels, and laboratory-defined behavior labels.
 
-The current prerelease is **v4.1.1-beta.1**. Previous releases remain available as
+The current prerelease is **v4.1.2-beta.1**. Previous releases remain available as
 Git tags. The source uses the [MIT license](LICENSE); datasets, videos, and model
 weights retain their own licenses and are not included in this repository.
 

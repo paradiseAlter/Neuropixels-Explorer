@@ -1,5 +1,27 @@
 # Mentor workspace review — 4.1.0-beta.1
 
+## Context continuity correction — 4.1.2-beta.1
+
+The 2026-09-26 review rejected the loss of visible context in full-workspace video
+mode. The user explicitly prioritized keeping context over the earlier 60%
+image-area target. Enlargement and annotation now resize the existing split;
+activity, Probe, recording identity and neural time remain visible. The image is
+still uncropped. Normal/focused proportions are independent and reversible.
+Small screens reserve space for anatomy and the activity texture; expanding
+Probe rates reserves additional space. Annotation controls scroll independently.
+
+Running Chrome checks used the real Allen recording at native 2560 x 1271,
+1280 x 800 and 1440 x 900: no page-wide horizontal overflow at tested sizes,
+both regions visible, Unit/time/frame preserved on restore, keyboard resizing,
+frame-step interval editing and on-demand Probe distribution exercised.
+The annotation, video synchronization, workspace layout and mentor contract
+suites pass. No test label was saved to the user's annotation project.
+
+The earlier full-workspace measurements below document the superseded layout.
+Discovery/comparison/AI workflows remain proposals, not implemented features.
+
+## Original checkpoint
+
 This checkpoint updates the application itself. The previous Penpot/local layout
 candidate remains separate. New installations start in English; an explicit
 saved language choice is retained. No fixed behavior taxonomy is introduced.

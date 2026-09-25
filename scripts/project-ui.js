@@ -22,7 +22,8 @@
     nearby:["Video found nearby","发现同目录视频","Vídeo encontrado"], later:["Add video later","稍后添加视频","Añadir vídeo después"],
     nearbyHelp:["Choose the matching view. You can align its time after linking it.","选择与这条记录对应的视频，关联后可对齐时间。","Elige el vídeo correspondiente. Puedes alinear su tiempo después."],
     home:["Start screen","开始界面","Inicio"], return:["Return to recording","返回当前记录","Volver al registro"],
-    enlarge:["Enlarge / restore video","放大 / 还原视频","Ampliar / restaurar vídeo"],
+    enlarge:["Enlarge video","放大视频","Ampliar vídeo"],
+    restore:["Restore layout","还原布局","Restaurar diseño"],
     manual:["Match a known event","对齐一个已知事件","Alinear un evento conocido"],
     follow:["Follow video with the neural cursor","神经光标跟随视频","Seguir el vídeo con el cursor neural"],
     alignmentHelp:["Use the same visible event in the video and neural recording. A manual match does not verify clock drift.","找出视频和神经记录中同一个事件，填写两边的时间。手动对齐不会验证时钟漂移。","Indica el mismo evento en vídeo y registro neural. El ajuste manual no verifica la deriva."],
@@ -34,8 +35,8 @@
   };
   const tr = key => copy[key]?.[document.documentElement.lang==="zh-CN"?1:document.documentElement.lang==="es"?2:0] || key;
   class ProjectUI {
-    constructor({state,video,openCatalog,home,resume,toast,folderFallback}) {
-      Object.assign(this,{state,video,openCatalog,home,resume,toast,folderFallback});
+    constructor({state,video,openCatalog,home,resume,toast,folderFallback,onVideoExpand}) {
+      Object.assign(this,{state,video,openCatalog,home,resume,toast,folderFallback,onVideoExpand});
       this.projects=[]; this.available=false;
       this.dialog=document.createElement("dialog"); this.dialog.className="project-dialog"; this.dialog.id="project-dialog";
       document.body.append(this.dialog);
@@ -56,11 +57,10 @@
         },true);
       }
       document.getElementById("video-alignment").addEventListener("click",()=>this.alignment());
-      document.getElementById("expand-video").addEventListener("click",()=>{
-        const panel=document.getElementById("experiment-video-region"); panel.classList.toggle("is-enlarged");
-        document.getElementById("expand-video").setAttribute("aria-pressed",String(panel.classList.contains("is-enlarged")));
+      document.getElementById("expand-video").addEventListener("click",()=>{ this.onVideoExpand(); this.renderVideoExpand(); });
+      document.addEventListener("keydown",e=>{
+        if(e.key==="Escape" && !e.defaultPrevented && !document.querySelector("dialog[open]")) { this.onVideoExpand(false); this.renderVideoExpand(); }
       });
-      document.addEventListener("keydown",e=>{if(e.key==="Escape") {document.getElementById("experiment-video-region").classList.remove("is-enlarged");document.getElementById("expand-video").setAttribute("aria-pressed","false");}});
       new MutationObserver(()=>this.render()).observe(document.documentElement,{attributes:true,attributeFilter:["lang"]});
       this.render(); this.refresh(true);
     }
@@ -89,8 +89,13 @@
       const empty=document.getElementById("video-empty");
       empty.querySelector("strong").removeAttribute("data-i18n"); empty.querySelector("strong").textContent=tr("addVideo");
       empty.querySelector("p").removeAttribute("data-i18n"); empty.querySelector("p").textContent=tr("videoHint");
-      document.getElementById("expand-video").title=tr("enlarge");
+      this.renderVideoExpand();
       this.syncVideo();
+    }
+    renderVideoExpand() {
+      const button = document.getElementById("expand-video");
+      button.textContent = tr(this.state.videoEnlarged ? "restore" : "enlarge");
+      button.title = button.textContent;
     }
     syncVideo() {
       document.getElementById("video-link-note").textContent=this.video.source ? tr(this.video.mapping.verificationStatus==="verified"?"synced":"linked") : "";
