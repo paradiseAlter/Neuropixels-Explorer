@@ -380,6 +380,17 @@
         y += height;
         return geometry;
       });
+      // Display ancestry only: do not infer groups from activity or brain-region color.
+      const groups = new Map();
+      this.rowGeometry.forEach(({ row, y, height }) => {
+        (row.ancestors || []).forEach((key, level) => {
+          if (!groups.has(key)) groups.set(key, { key, level, y, bottom: y, count: 0 });
+          const group = groups.get(key);
+          group.bottom = y + height;
+          group.count += row.kind === "aggregate" ? row.count : 1;
+        });
+      });
+      this.groupGeometry = [...groups.values()];
       const aggregateCount = this.rows.filter((row) => row.kind === "aggregate").length;
       const unitCount = this.rows.length - aggregateCount;
       const summary = {
@@ -434,10 +445,54 @@
       if (!this.data || !this.rows.length) return;
       this.rowGeometry.forEach((geometry, index) => this._drawRow(context, colors, geometry, index));
       this._drawSpatialIndex(context, colors);
+      this._drawGroupRegions(context, colors);
       this._drawAnnotations(context);
       this._drawSelection(context, colors);
       this._drawCursor(context, colors);
       this._drawAxis(context, colors);
+    }
+
+    _drawGroupRegions(context, colors) {
+      context.save();
+      context.beginPath();
+      context.rect(181, HEADER_HEIGHT, this.width - 181, this.height - HEADER_HEIGHT - AXIS_HEIGHT);
+      context.clip();
+      const badges = [];
+      (this.groupGeometry || []).forEach(({ level, y, bottom, count }) => {
+        const left = 182 + Math.min(level, 2) * 3;
+        const right = this.width - 3 - level * 5;
+        context.fillStyle = colors.soft;
+        context.globalAlpha = .045;
+        context.fillRect(left, y + 1, right - left, bottom - y - 2);
+        context.globalAlpha = .6;
+        context.strokeStyle = colors.soft;
+        context.lineWidth = 1;
+        context.strokeRect(left + .5, y + 1.5, right - left - 1, bottom - y - 3);
+        // A continuous bracket ties the rows together even without the tint.
+        context.lineWidth = 2;
+        context.beginPath();
+        context.moveTo(left + 8, y + 2);
+        context.lineTo(left + 1, y + 2);
+        context.lineTo(left + 1, bottom - 2);
+        context.lineTo(left + 8, bottom - 2);
+        context.stroke();
+        const suffix = this.width - GUTTER_WIDTH < 300 ? "" : ` ${count === 1 ? "Unit" : "Units"}`;
+        const label = `${level ? "Subgroup" : "Group"} · ${count}${suffix}`;
+        context.font = '600 10px "Cascadia Mono", Consolas, monospace';
+        const width = context.measureText(label).width + 14;
+        let x = right - width - 6;
+        badges.forEach((badge) => { if (Math.abs(badge.y - y) < 20) x = Math.min(x, badge.x - width - 5); });
+        // On narrow panes keep the label inside the signal plot.
+        x = Math.max(GUTTER_WIDTH + 6, x);
+        context.globalAlpha = 1;
+        context.fillStyle = colors.row;
+        context.fillRect(x, y + 3, width, 17);
+        context.fillStyle = colors.soft;
+        context.textBaseline = "middle";
+        context.fillText(label, x + 7, y + 11.5);
+        badges.push({ x, y });
+      });
+      context.restore();
     }
 
     _drawHeader(context, colors) {
