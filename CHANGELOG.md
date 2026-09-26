@@ -3,6 +3,14 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.4.0-beta.1] - 2026-09-26
+
+- Select saved behavior intervals directly from the neural plot's aligned strip,
+  preserving Unit focus and annotation editor state, or drag any neural interval.
+- Probe interval statistics show measured positions with rate-sized points, a
+  vertical depth/rate stem plot with horizontal toggle, and all Unit Hz/counts.
+  Orientation reuses the exact interval result; missing positions stay in the list.
+
 ## [4.3.0-beta.1] - 2026-09-26
 
 - Pin up to six Units from different groups in the current Recording for shared-time

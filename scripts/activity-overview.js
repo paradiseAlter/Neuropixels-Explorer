@@ -7,7 +7,7 @@
   "use strict";
 
   const GUTTER_WIDTH = 276;
-  const HEADER_HEIGHT = 31;
+  const HEADER_HEIGHT = 59;
   const AXIS_HEIGHT = 25;
   const MIN_ROW_HEIGHT = 17;
   const EXPANDED_ROW_HEIGHT = 98;
@@ -230,8 +230,9 @@
   }
 
   class ActivityAnatomyCanvas {
-    constructor({ canvas, tooltip = null, empty = null }, callbacks = {}) {
+    constructor({ canvas, tooltip = null, empty = null, behaviorStrip = null }, callbacks = {}) {
       this.canvas = canvas;
+      this.behaviorStrip = behaviorStrip;
       this.tooltip = tooltip;
       this.empty = empty;
       this.callbacks = callbacks;
@@ -295,6 +296,31 @@
     setAnnotations(intervals) {
       this.annotations = intervals || [];
       this.render();
+    }
+
+    _drawBehaviorStrip() {
+      if (!this.behaviorStrip) return;
+      const { start, end } = this.state.visibleRange;
+      const clips = (this.annotations || []).filter(c => c.start < end && c.end > start);
+      const key = JSON.stringify([clips, start, end, this.state.selectedInterval]);
+      if (key === this.behaviorStripKey) return;
+      this.behaviorStripKey = key;
+      this.behaviorStrip.replaceChildren();
+      if (!clips.length) { this.behaviorStrip.textContent = "Saved behavior · select a clip here, or drag on signals"; return; }
+      for (const clip of clips) {
+        const button = document.createElement("button");
+        const left = Math.max(start, clip.start), right = Math.min(end, clip.end);
+        button.type = "button";
+        button.textContent = clip.label || "Unlabeled";
+        button.title = `${clip.label || "Unlabeled"} · ${clip.start.toFixed(3)}–${clip.end.toFixed(3)} s neural · ${clip.subject} / ${clip.track}`;
+        button.setAttribute("aria-label", button.title);
+        button.setAttribute("aria-pressed", String(this.state.selectedInterval?.start === clip.start && this.state.selectedInterval?.end === clip.end));
+        button.style.left = `${100 * (left - start) / (end - start)}%`;
+        button.style.width = `${100 * (right - left) / (end - start)}%`;
+        button.style.setProperty("--clip-color", clip.color);
+        button.onclick = () => this.callbacks.onAnnotationSelect?.(clip.id);
+        this.behaviorStrip.append(button);
+      }
     }
 
     setSelectedUnitData(result) {
@@ -442,6 +468,7 @@
       context.fillStyle = colors.background;
       context.fillRect(0, 0, this.width, this.height);
       this._drawHeader(context, colors);
+      this._drawBehaviorStrip();
       if (!this.data || !this.rows.length) return;
       this.rowGeometry.forEach((geometry, index) => this._drawRow(context, colors, geometry, index));
       this._drawSpatialIndex(context, colors);
@@ -506,13 +533,14 @@
       context.font = '650 9px "Cascadia Mono", Consolas, monospace';
       context.fillStyle = colors.muted;
       context.textBaseline = "middle";
-      context.fillText("SHANK", 10, HEADER_HEIGHT / 2);
-      context.fillText("DEPTH", 52, HEADER_HEIGHT / 2);
-      context.fillText("REGION TRACK", 101, HEADER_HEIGHT / 2);
-      context.fillText("ROW", 190, HEADER_HEIGHT / 2);
-      context.fillText("RELATIVE ACTIVITY · GROUPS = FRACTION ABOVE OWN P90", GUTTER_WIDTH + 12, HEADER_HEIGHT / 2);
+      context.fillText("SHANK", 10, 15.5);
+      context.fillText("DEPTH", 52, 15.5);
+      context.fillText("REGION TRACK", 101, 15.5);
+      context.fillText("ROW", 190, 15.5);
+      context.fillText("BEHAVIOR →", 190, 45);
+      context.fillText("RELATIVE ACTIVITY · GROUPS = FRACTION ABOVE OWN P90", GUTTER_WIDTH + 12, 15.5);
       context.textAlign = "right";
-      context.fillText("time →", this.width - 10, HEADER_HEIGHT / 2);
+      context.fillText("time →", this.width - 10, 15.5);
       context.textAlign = "left";
     }
 

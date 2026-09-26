@@ -285,7 +285,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.3.0-beta.1</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.4.0-beta.1</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -487,10 +487,10 @@
       if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)this.setView({visibleRange:{start:Math.max(0,start),end:Math.min(this.getRecording().duration,end)}});
       this.drawTimeline(true);
     }
-    select(id) {
+    select(id, { openEditor = true } = {}) {
       const s = this.doc?.segments.find((v) => v.id === id); if (!s) return;
       this.activeTrack=JSON.stringify([s.subject,s.track]);
-      this.selected = new Set([id]); this.opened = true; this.loop = null; this.draft = null;
+      this.selected = new Set([id]); if (openEditor) this.opened = true; this.loop = null; this.draft = null;
       const mapping = this.video.mapping;
       const start = mapping.videoToNeural(s.start), end = mapping.videoToNeural(s.end);
       this.video.pause();
@@ -676,7 +676,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.3.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.4.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

@@ -236,7 +236,7 @@
     state[focused ? "videoFocusSplitPercent" : "videoSplitPercent"] = requested;
     // Reserve a readable neural texture after its anatomy gutter and Probe.
     const width = Math.max(1, elements.experimentBody.clientWidth - 24);
-    const contextWidth = document.querySelector(".mini-probe.probe-expanded") ? 764 : 620;
+    const contextWidth = document.querySelector(".mini-probe.probe-expanded") ? 844 : 620;
     const maximum = Math.min(focused ? 72 : 50, Math.max(25, (width - contextWidth - 20) / width * 100));
     const percentValue = Math.min(requested, maximum);
     elements.experimentBody?.style.setProperty("--video-region-width", `${percentValue}%`);
@@ -396,12 +396,14 @@
 
   const activityCanvas = new ActivityAnatomyCanvas({
     canvas: elements.activityCanvas,
+    behaviorStrip: document.getElementById("neural-behavior-strip"),
     tooltip: elements.activityTooltip,
     empty: elements.activityEmpty
   }, {
     onStateChange: (patch, snapshot) => handleExperimentViewChange(patch, snapshot),
     onCursorCommit: (time) => videoController?.seekNeural(time),
     onUnitSelect: (unitId) => selectActivityUnit(unitId),
+    onAnnotationSelect: (id) => annotationController?.select(id, { openEditor: false }),
     onAggregateSelect: () => renderExperimentHeader(),
     onAnatomySelect: () => renderExperimentHeader(),
     onLayoutChange: (summary) => {

@@ -79,7 +79,18 @@
 @media (prefers-reduced-motion: reduce) { .experiment-body { transition:none; } }
 .annotation-review-dialog { z-index:110; }
 .probe-interval-toggle { margin:8px 0; }
-.activity-canvas-frame:has(.probe-expanded) { grid-template-columns:260px minmax(0,1fr); }
+.activity-canvas-frame:has(.probe-expanded) { grid-template-columns:340px minmax(0,1fr); }
+.probe-plot-pair { display:grid; grid-template-columns:65px minmax(0,1fr); align-items:center; }
+.mini-probe .probe-plot-pair .probe-position-map { min-height:0; height:280px; max-height:280px; }
+.neural-behavior-strip { position:absolute; z-index:2; top:31px; left:276px; right:0; height:26px; overflow:hidden; color:var(--muted); font-size:10px; line-height:26px; white-space:nowrap; }
+.neural-behavior-strip button { position:absolute; top:1px; height:24px; min-width:2px; padding:0 5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; font-size:10px; color:var(--text); border:1px solid var(--clip-color); border-left:3px solid var(--clip-color); background:color-mix(in srgb,var(--clip-color) 28%,var(--surface)); cursor:pointer; }
+.neural-behavior-strip button[aria-pressed="true"], .neural-behavior-strip button:focus-visible { outline:2px solid var(--text); outline-offset:-2px; }
+.mini-probe .interval-distribution-chart { display:block; flex:none; min-height:0; max-height:none; margin:8px 0; overflow:visible; }
+.distribution-axis { fill:none; stroke:var(--muted); }
+.distribution-grid { fill:none; stroke:var(--line-soft); }
+.distribution-stem { fill:none; stroke-width:1; opacity:.3; }
+.probe-interval h4 { margin:8px 0 4px; font-size:11px; }
+.probe-interval [data-distribution-orientation] { width:100%; }
 .activity-workspace:has(.pinned-comparison:not([hidden])) { grid-template-rows:43px auto minmax(160px,1fr) 25px; }
 .pinned-comparison { min-width:0; border-bottom:1px solid var(--line); background:var(--surface); }
 .pinned-comparison[hidden] { display:none; }

@@ -170,6 +170,13 @@ use original catalog peak-channel coordinates when present and available
 Kilosort geometry otherwise. The server display-cache version is incremented so
 older cached coordinates cannot silently survive the adapter fix.
 
+Interval distribution reuses exact half-open counts from `interval_activity.py`.
+`mini-probe.js` shares one result between point radii, a depth/rate stem plot and
+the complete Unit list. Orientation and Unit selection reuse the current result;
+new Recording/interval requests abort and discard stale responses. The activity
+canvas's accessible behavior strip uses the annotation controller's existing
+mapped selection with `openEditor: false`; it does not save or relabel segments.
+
 The annotation panel now lives in the video body. The time strip supports direct
 interval selection; batch review moves the same controller into a native dialog.
 Video enlargement and annotation use the existing experiment split. `app.js`

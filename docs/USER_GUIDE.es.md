@@ -174,6 +174,16 @@ Usa Cursor / Zoom / Pan (C/Z/P, +/-) o **10 s en el cursor**; × elimina una fil
 **Vaciar comparación** todas. Cambiar de registro o recargar elimina las fijaciones.
 Amplía las vistas densas para distinguir spikes individuales.
 
+Para las estadísticas del intervalo, selecciona un segmento guardado en la línea
+de vídeo o la banda de comportamiento sobre las señales, o arrastra un intervalo
+en las señales. Pulsa **Interval distribution** en Probe. El tamaño indica Hz;
+la lista incluye Hz y número de potenciales de cada Unidad. El gráfico de
+profundidad/tasa empieza vertical; **Horizontal view / Vertical view** intercambia
+los ejes sin cambiar los resultados. Pasa el cursor por una marca para ver detalles.
+Las Unidades sin profundidad siguen en la lista. El panel abierto sigue nuevas
+selecciones; cerrarlo conserva la selección. Requiere un proyecto local y utiliza
+los segundos neurales cubiertos y el intervalo semiabierto `[start, end)`.
+
 **Agrupación experimental** propone grupos de movimiento y apariencia en el
 equipo local. Es sensible a posición e iluminación y no es reconocimiento
 conductual validado. Compara vídeos del grupo, nómbralo y confirma los clips.

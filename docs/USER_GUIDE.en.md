@@ -181,6 +181,15 @@ window is wider. Use Cursor / Zoom / Pan (C/Z/P, +/-) or **10 s at cursor**; × 
 one row and **Clear pins** removes all. Switching Recording or refreshing clears
 pins. At dense scales, zoom in to resolve individual spikes.
 
+For interval statistics, select a saved clip on the video timeline or the colored
+behavior strip above the neural signals, or drag any time interval on the signals.
+Click **Interval distribution** on the left Probe. Point size shows interval Hz;
+the list contains every Unit's Hz and spike count. The depth/rate chart starts
+vertically; **Horizontal view / Vertical view** swaps its axes without changing
+the results. Hover a mark for details. Units without depth remain in the list.
+An open panel follows new selections; closing it keeps the selection. Statistics
+require a local project and use actual covered neural seconds and `[start, end)`.
+
 **Experimental grouping** proposes motion/appearance groups locally. It is
 sensitive to position and lighting and is not validated behavior recognition.
 Choose a group, compare its sample videos, name it and explicitly confirm clips.
