@@ -164,6 +164,30 @@
       };
       e.customSpeed?.addEventListener("change", applyRate);
       e.customSpeed?.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); applyRate(); } });
+      let rateDrag = null;
+      e.customSpeed?.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        rateDrag = { x: event.clientX, rate: this.playbackRate, moved: false };
+        e.customSpeed.setPointerCapture(event.pointerId);
+      });
+      e.customSpeed?.addEventListener("pointermove", event => {
+        if (!rateDrag || Math.abs(event.clientX - rateDrag.x) < 3) return;
+        rateDrag.moved = true;
+        event.preventDefault();
+        const step = event.shiftKey ? .001 : .01;
+        this.setPlaybackRate(Number(clamp(rateDrag.rate + (event.clientX - rateDrag.x) * step, .01, 4).toFixed(3)));
+      });
+      e.customSpeed?.addEventListener("pointerup", event => {
+        if (e.customSpeed.hasPointerCapture(event.pointerId)) e.customSpeed.releasePointerCapture(event.pointerId);
+        if (rateDrag?.moved) e.customSpeed.blur(); else e.customSpeed.select();
+        rateDrag = null;
+      });
+      e.customSpeed?.addEventListener("pointercancel", () => { rateDrag = null; });
+      e.customSpeed?.addEventListener("keydown", event => {
+        if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
+        event.preventDefault();
+        this.setPlaybackRate(Number(clamp(this.playbackRate + (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? .001 : .01), .01, 4).toFixed(3)));
+      });
       e.follow?.addEventListener("change", () => { this.follow = Boolean(e.follow.checked); this._emitState(); });
       e.seek?.addEventListener("input", () => this.seekVideo(Number(e.seek.value)));
       const jumpToSeconds = () => {
@@ -441,9 +465,8 @@
       this._emitTime();
     }
 
-    _renderSyntheticFrame() {
-      if (this.source?.kind !== "synthetic" || this.collapsed || !this.elements.canvas) return;
-      const canvas = this.elements.canvas;
+    _renderSyntheticFrame(canvas = this.elements.canvas, time = this.currentVideoTime) {
+      if (this.source?.kind !== "synthetic" || !canvas || (canvas === this.elements.canvas && this.collapsed)) return;
       const rectangle = canvas.getBoundingClientRect();
       const width = Math.max(640, Math.round(rectangle.width || 960));
       const height = Math.max(360, Math.round(rectangle.height || width * 9 / 16));
@@ -454,7 +477,7 @@
       }
       const context = canvas.getContext("2d");
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      const frame = syntheticBehaviorAt(this.currentVideoTime, this.source.fps);
+      const frame = syntheticBehaviorAt(time, this.source.fps);
       const arena = { left: width * .08, top: height * .11, width: width * .84, height: height * .78 };
       context.fillStyle = "#080b0d";
       context.fillRect(0, 0, width, height);

@@ -958,6 +958,7 @@
 
   function handleExperimentViewChange(patch, snapshot = null) {
     state.experimentView = { ...state.experimentView, ...(snapshot || patch || {}) };
+    if (Object.hasOwn(patch || {}, "expandedUnitId") || Object.hasOwn(patch || {}, "groupFocusPath")) renderActivityStatus();
     if (Object.prototype.hasOwnProperty.call(patch || {}, "cursorTime")) state.playbackNeuralTime = Number(patch.cursorTime);
     renderExperimentHeader();
     if (Object.prototype.hasOwnProperty.call(patch || {}, "visibleRange")) scheduleActivityLevelForRange(state.experimentView.visibleRange);

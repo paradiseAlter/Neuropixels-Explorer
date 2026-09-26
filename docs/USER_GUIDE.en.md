@@ -155,11 +155,22 @@ The Help documentation is stored as Markdown in this repository and precompiled 
 
 ## 11. Behavior annotation beta
 
-Attach the recording's behavior video and open **Annotate · Beta**. Brush a
-time interval in the neural canvas and choose **Use shared selection**, or set
-start/end at the video cursor. Add a user-defined behavior, subject and track.
-Select a clip to focus both video and neural time; edit boundaries, split, merge
-adjacent clips, or loop the clip. Undo/redo remains available.
+Attach a video and choose **Annotate**. The video stays above an expandable timeline,
+with neural activity and Probe context beside it. Hover to preview a frame without
+seeking playback; wheel to zoom around the pointer; Shift + wheel or the position
+slider pans long videos. Drag a time interval, choose a behavior label and **Save label**.
+**Manage labels** creates reusable names and colors separately from applying labels.
+The video corner, timeline and neural masks use the same persistent label color.
+
+Select a saved clip to review it with **Play interval**, drag its boundary handles,
+or set either boundary at the playback cursor. **Fine adjustment · time / frames**
+accepts seconds or zero-based frame numbers with an exclusive end. Frame numbers
+use nominal FPS; use seconds for variable-frame-rate video. **Clip tools** contains
+New interval, Split at cursor and Remove selected. Mark start/end (I/O), Undo/Redo,
+and the advanced **Clips & grouping** workflow remain available. Drag **Speed ×**
+left/right to adjust by 0.01 per pixel, hold Shift for 0.001, or click and type.
+Click outside an expanded Unit (including another signal group) to collapse it
+without changing the shared time range or annotation selection.
 
 **Experimental grouping** proposes motion/appearance groups locally. It is
 sensitive to position and lighting and is not validated behavior recognition.

@@ -7,13 +7,18 @@ results. It does not ship a universal behavior classifier or a standard ethogram
 
 ## Use in Explorer
 
-1. Open a neural recording and add its video from any folder. Choose **Annotate**
-   beneath the video. The main neural canvas and video keep their height.
-2. Drag on the video time strip, or choose **Mark start** and **Mark end** while
-   watching. Enter the laboratory's behavior name and **Save label**. Click a
-   saved clip to change its boundaries, split or remove it. Numeric boundaries
-   support precise keyboard editing. **Around playhead** focuses both views on
-   ten seconds; **Whole video** restores the overview.
+1. Open a recording, attach its video and choose **Annotate**. Video remains above
+   the expandable timeline; neural activity and Probe stay beside it.
+2. Hover the timeline for an independent frame preview. Wheel zooms around the
+   pointer; Shift + wheel and the position slider pan. Drag an interval, select
+   an existing label and **Save label**. **Manage labels** creates names/colors
+   without creating intervals. Video overlays, timeline clips and neural masks
+   share each label's persistent color. Review with **Play interval**, drag the
+   selected boundaries, or set a boundary at the cursor. **Fine adjustment** uses
+   seconds or zero-based frame numbers (exclusive end) at editable nominal FPS;
+   use seconds for variable-frame-rate sources. This does not change TimeMapping.
+   **Clip tools** contains new/split/remove. **Around playhead** and **Whole video**
+   change the video timeline window; selecting a saved clip focuses neural time.
 3. For automatic suggestions, open **Clips & grouping**, then **Experimental grouping** and choose the
    target group count and short-bout merge threshold. **Group this video** runs
    locally; **Cancel** stops decoding or the clustering worker.
@@ -52,6 +57,13 @@ never modified.
 Native projects use `neuropixels-annotations/1`; candidate files use
 `neuropixels-behavior-candidates/1`. Intervals are half-open `[start, end)` in
 **video-relative seconds**, including the final endpoint at video duration.
+Optional `vocabulary` stores reusable label names (maximum 1,000 unique, non-empty
+names of at most 200 characters); creating one does not create a segment.
+`labelColors` includes unused/predefined names and persists across editing,
+undo/redo and JSON round trips. Old version-1 projects still validate. Frame-based
+editing converts to canonical video seconds; it does not certify measured frame
+indices or synchronization. Hover decoding never mutates the shared playback cursor.
+
 Different subjects/tracks may overlap. An uncovered range means unannotated,
 not an inferred negative behavior.
 

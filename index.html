@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="A local-first interactive explorer for Neuropixels units, signals, physical probes, and brain regions.">
-  <title>Neuropixels Explorer 4.1.2-beta.1</title>
-  <script src="./scripts/i18n.js?v=4.1.2-beta.1"></script>
-  <script src="./scripts/theme.js?v=4.1.2-beta.1"></script>
+  <title>Neuropixels Explorer 4.2.0-beta.1</title>
+  <script src="./scripts/i18n.js?v=4.2.0-beta.1"></script>
+  <script src="./scripts/theme.js?v=4.2.0-beta.1"></script>
   <script>
     window.neuropixelsLanguageController = new window.NeuropixelsI18n.LanguageController({
       root: document.documentElement,
@@ -20,10 +20,10 @@
       matchMedia: window.matchMedia.bind(window)
     });
   </script>
-  <link rel="stylesheet" href="./styles/app.css?v=4.1.2-beta.1">
-  <link rel="stylesheet" href="./styles/annotations.css?v=4.1.2-beta.1">
-  <link rel="stylesheet" href="./styles/workspace-beta.css?v=4.1.2-beta.1">
-  <link rel="stylesheet" href="./styles/mentor-workspace.css?v=4.1.2-beta.1">
+  <link rel="stylesheet" href="./styles/app.css?v=4.2.0-beta.1">
+  <link rel="stylesheet" href="./styles/annotations.css?v=4.2.0-beta.1">
+  <link rel="stylesheet" href="./styles/workspace-beta.css?v=4.2.0-beta.1">
+  <link rel="stylesheet" href="./styles/mentor-workspace.css?v=4.2.0-beta.1">
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -32,7 +32,7 @@
       <button id="home-button" class="quiet-button" type="button" aria-label="Home">⌂</button>
       <div class="app-title">
         <strong data-i18n="app.title">NEUROPIXELS EXPLORER</strong>
-        <span id="version-label">4.1.2-beta.1</span>
+        <span id="version-label">4.2.0-beta.1</span>
       </div>
       <div class="dataset-title" id="dataset-title" data-i18n="app.noFolder">No folder loaded</div>
       <div class="app-actions">
@@ -213,7 +213,7 @@
                     </div>
                     <div class="video-time-readout"><strong id="video-current-time">00:00:00.000</strong><span>/</span><span id="video-duration">00:00:00.000</span></div>
                     <input class="video-seek" id="video-seek" type="range" min="0" max="1" step="0.033333" value="0" aria-label="Video time" data-i18n-aria-label="video.seekAria">
-                    <label class="video-speed"><span data-i18n="video.speed">SPEED</span><select id="video-speed-select" aria-label="Playback speed" data-i18n-aria-label="video.speedAria"><option value="0.01">0.01×</option><option value="0.05">0.05×</option><option value="0.1">0.1×</option><option value="0.25" selected>0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="custom">Custom…</option></select></label><label class="video-custom-rate">Custom ×<input id="video-custom-speed" type="number" min="0.01" max="4" step="any" value="0.25" aria-label="Custom playback speed" title="0.01–4×; press Enter to apply"></label>
+                    <label class="video-speed"><span data-i18n="video.speed">SPEED</span><select id="video-speed-select" aria-label="Playback speed" data-i18n-aria-label="video.speedAria"><option value="0.01">0.01×</option><option value="0.05">0.05×</option><option value="0.1">0.1×</option><option value="0.25" selected>0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="custom">Custom…</option></select></label><label class="video-custom-rate">Speed ×<input id="video-custom-speed" type="text" inputmode="decimal" value="0.25" aria-label="Custom playback speed" title="Drag left / right · Shift for fine adjustment · click to type · 0.01–4×"></label>
                     <label class="video-jump">Go to video s<input id="video-seek-seconds" type="number" min="0" step="0.001" placeholder="Seconds" aria-label="Jump to video seconds"></label><label class="video-follow"><input id="video-follow" type="checkbox" checked><span data-i18n="video.follow">FOLLOW SIGNAL</span></label>
                   </div>
                   <div class="video-tools"><button class="quiet-button" id="annotation-toggle" type="button" aria-expanded="false" aria-controls="annotation-panel">Annotate</button><button id="video-alignment" class="quiet-button" type="button">Alignment</button><span id="video-link-note"></span><div id="annotation-color-legend" aria-label="Behavior label colors"></div></div>
@@ -347,22 +347,22 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="./scripts/kilosort-core.js?v=4.1.2-beta.1" defer></script>
+  <script src="./scripts/kilosort-core.js?v=4.2.0-beta.1" defer></script>
   <script src="./scripts/region-core.js" defer></script>
-  <script src="./scripts/help-content.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/data-status.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/stream-contracts.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/video-sync.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/activity-overview.js?v=4.1.2-beta.1" defer></script>
+  <script src="./scripts/help-content.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/data-status.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/stream-contracts.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/video-sync.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/activity-overview.js?v=4.2.0-beta.1" defer></script>
   <script src="./scripts/plots.js" defer></script>
-  <script src="./scripts/probe-view.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/database-client.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/workspace-layout.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/annotation-core.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/behavior-discovery.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/annotation-ui.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/mini-probe.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/project-ui.js?v=4.1.2-beta.1" defer></script>
-  <script src="./scripts/app.js?v=4.1.2-beta.1" defer></script>
+  <script src="./scripts/probe-view.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/database-client.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/workspace-layout.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/annotation-core.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/behavior-discovery.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/annotation-ui.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/mini-probe.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/project-ui.js?v=4.2.0-beta.1" defer></script>
+  <script src="./scripts/app.js?v=4.2.0-beta.1" defer></script>
 </body>
 </html>

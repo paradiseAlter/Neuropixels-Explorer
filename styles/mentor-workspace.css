@@ -21,28 +21,61 @@
 .video-emphasis .video-sync-body > .video-stage { flex: 1 1 0; aspect-ratio: auto; min-height: 120px; }
 .video-emphasis .video-stage video,
 .video-emphasis .video-stage canvas { width:100%; height:100%; object-fit:contain; }
-#experiment-video-region.annotation-focus .video-sync-body { display:grid; grid-template-columns:minmax(0,1fr) 210px; grid-template-rows:auto auto auto minmax(0,1fr); }
-#experiment-video-region.annotation-focus .video-stage { grid-column:1; grid-row:1 / 5; height:100%; width:100%; aspect-ratio:auto; min-height:0; max-height:none; }
-#experiment-video-region.annotation-focus .video-tools { grid-column:2; grid-row:1; padding:8px; border-left:1px solid var(--line); }
-#experiment-video-region.annotation-focus #annotation-toggle { width:100%; padding:8px; color:var(--primary-text); background:var(--primary-bg); }
-#experiment-video-region.annotation-focus #video-link-note { margin:0; line-height:1.4; }
-#experiment-video-region.annotation-focus .video-transport { grid-column:2; grid-row:2; display:flex; flex-wrap:wrap; justify-content:space-between; padding:8px; gap:8px; border-left:1px solid var(--line); }
-#experiment-video-region.annotation-focus .video-time-readout { order:-1; width:100%; justify-content:flex-start; }
+/* Annotating is a vertical video workbench, with the neural canvas kept beside it. */
+#experiment-video-region.annotation-focus .video-sync-body { display:flex; flex-direction:column; overflow:auto; }
+#experiment-video-region.annotation-focus .video-stage { flex:1 1 0; min-height:180px; width:100%; aspect-ratio:auto; }
+#experiment-video-region.annotation-focus .video-tools { order:1; padding:6px 12px; border-top:1px solid var(--line); }
+#experiment-video-region.annotation-focus .video-transport { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:8px 12px; border-top:1px solid var(--line); }
+#experiment-video-region.annotation-focus .video-time-readout { margin-right:auto; font-size:11px; }
 #experiment-video-region.annotation-focus .video-custom-rate,
-#experiment-video-region.annotation-focus .video-jump { width:100%; justify-content:space-between; }
-#experiment-video-region.annotation-focus #annotation-timeline { grid-column:2; grid-row:3; min-width:0; padding:8px; border-left:1px solid var(--line); max-height:160px; overflow:auto; }
-#experiment-video-region.annotation-focus .annotation-video-scale { display:flex; flex-wrap:wrap; gap:5px; }
-#experiment-video-region.annotation-focus .annotation-video-scale button { font-size:10px; }
-#experiment-video-region.annotation-focus #annotation-panel { grid-column:2; grid-row:4; min-height:0; margin:0; padding:10px; overflow:auto; border-left:1px solid var(--line); }
-#experiment-video-region.annotation-focus .annotation-instruction { font-size:12px; line-height:1.5; }
-#experiment-video-region.annotation-focus .annotation-quick-actions,
-#experiment-video-region.annotation-focus .annotation-name-row,
-#experiment-video-region.annotation-focus .annotation-compact-footer { display:flex; flex-direction:column; align-items:stretch; gap:6px; }
-#experiment-video-region.annotation-focus .annotation-range-fields input { width:70px; min-width:0; padding-inline:3px; font-size:11px; appearance:textfield; }
-#experiment-video-region.annotation-focus .annotation-range-fields input::-webkit-inner-spin-button { appearance:none; }
-#experiment-video-region.annotation-focus .annotation-name-row input { width:100%; min-width:0; }
-#experiment-video-region.annotation-focus .annotation-context-actions { display:flex; flex-wrap:wrap; }
-#experiment-video-region.annotation-focus [data-storage] { display:block; line-height:1.5; margin-top:10px; }
+#experiment-video-region.annotation-focus .video-jump { width:auto; }
+#experiment-video-region.annotation-focus #annotation-timeline { padding:0 12px 6px; border-bottom:1px solid var(--line); min-width:0; }
+#experiment-video-region.annotation-focus #annotation-panel { flex:0 0 auto; padding:10px 12px; border:0; margin:0; overflow:visible; }
+#experiment-video-region.annotation-focus #annotation-color-legend { display:none; }
+#experiment-video-region.annotation-focus #annotation-toggle { color:var(--primary-text); background:var(--primary-bg); }
+.video-custom-rate input { cursor:ew-resize; touch-action:none; user-select:none; }
+.video-custom-rate input:focus { cursor:text; user-select:text; outline:1px solid var(--accent); }
+.video-stage { position:relative; }
+.annotation-video-labels { position:absolute; top:14px; left:14px; display:flex; flex-wrap:wrap; gap:6px; max-width:90%; pointer-events:none; z-index:3; }
+.annotation-video-labels span { background:#12181dea; color:var(--label-color); border:1px solid var(--label-color); border-left:5px solid var(--label-color); padding:7px 12px; border-radius:5px; font:600 15px system-ui,sans-serif; box-shadow:0 2px 12px #0004; }
+.annotation-workbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+.annotation-workbar strong { font-size:12px; font-weight:500; }
+.annotation-workbar .annotation-context-actions { display:flex; gap:6px; flex-wrap:wrap; margin:0; }
+.annotation-apply-row,.annotation-precision-fields,.annotation-quick-actions { display:flex; align-items:end; flex-wrap:wrap; gap:7px; margin-top:10px; }
+.annotation-apply-row label { min-width:160px; flex:1; max-width:280px; }
+.annotation-apply-row select { width:100%; }
+.annotation-primary { background:var(--primary-bg)!important; color:var(--primary-text)!important; border-color:var(--primary-border)!important; }
+.annotation-precision { margin-top:10px; font-size:11px; }
+.annotation-precision summary { cursor:pointer; color:var(--text-soft); padding:4px 0; }
+.annotation-precision input { width:112px; }
+.annotation-precision small { display:block; color:var(--muted); margin-top:8px; }
+.annotation-statusline { display:flex; flex-wrap:wrap; gap:4px 16px; color:var(--muted); margin-top:8px; font-size:10px; }
+.annotation-statusline [data-sync-note] { margin:0; font-size:inherit; }
+.annotation-video-scale { flex-wrap:wrap; gap:6px 12px; }
+.annotation-video-scale strong { font-size:11px; color:var(--text-soft); }
+.annotation-video-scale span { margin-right:auto; }
+.annotation-video-scale button { border:1px solid var(--line); padding:4px 7px; border-radius:4px; }
+.annotation-track-plot line.annotation-tick { stroke:var(--line-soft); stroke-width:1; pointer-events:none; }
+.annotation-track-plot text.annotation-tick-label { fill:var(--muted); font-size:10px; pointer-events:none; }
+.annotation-track-plot .annotation-edge { cursor:ew-resize; fill:var(--clip-color); stroke:var(--text); }
+.annotation-track-plot svg { touch-action:none; }
+.annotation-timeline-footer { display:flex; align-items:center; gap:16px; color:var(--muted); font-size:10px; }
+.annotation-timeline-footer input { flex:1; min-width:80px; height:16px; accent-color:var(--accent); }
+.annotation-hover-preview { position:fixed; z-index:150; width:384px; max-width:calc(100vw - 16px); padding:6px; border:1px solid var(--line); border-radius:8px; background:var(--surface,#151b22); box-shadow:0 8px 35px #0008; pointer-events:none; }
+.annotation-hover-preview[hidden] { display:none; }
+.annotation-hover-preview video,.annotation-hover-preview canvas { width:100%; height:220px; object-fit:contain; background:#070a0d; display:block; }
+.annotation-hover-preview [hidden] { display:none; }
+.annotation-hover-preview [data-preview-caption] { font:11px Consolas,monospace; color:var(--text); padding:6px 4px 2px; }
+.annotation-label-dialog { width:min(480px,90vw); max-height:80vh; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--text); padding:22px; }
+.annotation-label-dialog::backdrop { background:#0008; }
+.annotation-label-list { display:grid; gap:8px; margin:18px 0; }
+.annotation-label-list label { display:flex; align-items:center; gap:10px; color:var(--text); }
+.annotation-label-list i { width:12px; height:12px; border-radius:3px; }
+.annotation-label-list span { flex:1; }
+.annotation-label-list input[type=color] { width:42px; height:28px; padding:2px; }
+.annotation-label-create { display:flex; gap:8px; }
+.annotation-label-create input { flex:1; }
+@media (max-width:1100px) { .annotation-workbar .annotation-context-actions { gap:4px; } .annotation-timeline-footer { flex-wrap:wrap; gap:2px; } .annotation-statusline [data-sync-note] { width:100%; } }
 @media (prefers-reduced-motion: reduce) { .experiment-body { transition:none; } }
 .annotation-review-dialog { z-index:110; }
 .probe-interval-toggle { margin:8px 0; }
@@ -53,3 +86,7 @@
 .probe-interval [data-rates] button { display:block; width:100%; text-align:left; margin:3px 0; }
 .probe-interval small { color:var(--muted); }
 .probe-rate-bar { display:block; height:3px; margin-top:4px; background:var(--accent); }
+
+.annotation-clip-tools { position:relative; font-size:11px; }
+.annotation-clip-tools summary { cursor:pointer; padding:7px 9px; border:1px solid var(--line); border-radius:4px; color:var(--text-soft); }
+.annotation-clip-tools > div { position:absolute; bottom:calc(100% + 6px); right:0; width:180px; padding:6px; display:grid; gap:5px; background:var(--surface); border:1px solid var(--line); border-radius:5px; box-shadow:0 4px 16px #0005; z-index:5; }

@@ -257,6 +257,7 @@
 
     destroy() {
       this.resizeObserver?.disconnect();
+      document.removeEventListener("click", this.outsideClick, true);
     }
 
     setData(data, { preserveState = false } = {}) {
@@ -319,6 +320,11 @@
     }
 
     _install() {
+      // Dismiss without changing the shared time range or annotation selection.
+      this.outsideClick = (event) => {
+        if (event.target !== this.canvas && !event.target.closest?.("#find-unit-popover, #inspect-unit-button, #review-layout, dialog")) this.collapseFocus();
+      };
+      document.addEventListener("click", this.outsideClick, true);
       this.canvas.addEventListener("pointerdown", (event) => this._pointerDown(event));
       this.canvas.addEventListener("pointermove", (event) => this._pointerMove(event));
       this.canvas.addEventListener("pointerup", (event) => this._pointerUp(event));
@@ -897,7 +903,12 @@
         return;
       }
       const row = geometry?.row || drag.row;
-      if (!row) return;
+      if (this.state.expandedUnitId != null && (row?.kind !== "unit" || Number(row.unit.id) !== Number(this.state.expandedUnitId))) {
+        this.collapseFocus(); return;
+      }
+      const focusedGroup = this.state.groupFocusPath?.at(-1);
+      if (focusedGroup && row?.key !== focusedGroup && !row?.ancestors?.includes(focusedGroup)) { this.collapseFocus(); return; }
+      if (!row) { this.collapseFocus(); return; }
       if (point.x < GUTTER_WIDTH) {
         const shank = row.kind === "unit" ? finiteOrNull(row.unit.shankId) : row.shankId;
         const region = row.kind === "unit" ? (row.unit.region || "Unmapped") : (row.region || null);
@@ -917,6 +928,12 @@
       this._emitState({ selectedUnitId: id, expandedUnitId: id, selectedGroupKey: null, groupFocusPath: [], selectedShank: finiteOrNull(row.unit.shankId), selectedRegion: row.unit.region || "Unmapped", cursorTime: time });
       this.callbacks.onUnitSelect?.(id, row.unit);
       this.callbacks.onCursorCommit?.(time);
+    }
+
+    collapseFocus() {
+      if (this.state.expandedUnitId == null && !this.state.groupFocusPath?.length) return;
+      this._emitState({ selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null,
+        groupFocusPath: [], selectedShank: null, selectedRegion: null });
     }
 
     _wheel(event) {

@@ -149,11 +149,20 @@ La Ayuda se conserva como Markdown y se precompila como contenido JavaScript loc
 
 ## 11. Anotación de conducta beta
 
-Adjunta el vídeo del registro y abre **Anotar · Beta**. Selecciona un intervalo
-en el lienzo neural y usa **Usar intervalo compartido**, o fija inicio/fin en el
-cursor del vídeo. Define etiquetas, individuos y pistas. Seleccionar un clip
-enfoca el vídeo y el tiempo neural; puedes editar límites, dividir, unir clips
-adyacentes o repetirlos. Las ediciones permiten deshacer y rehacer.
+Adjunta el vídeo y elige **Annotate**. El vídeo queda encima de una línea temporal
+ampliable, con actividad neural y Probe al lado. Pasa el puntero para previsualizar
+sin mover la reproducción; usa la rueda para ampliar y Mayús + rueda o el deslizador
+para desplazarte. Arrastra un intervalo, elige una etiqueta y pulsa **Save label**.
+**Manage labels** separa la creación de nombres y colores de su aplicación. El vídeo,
+la línea temporal y las máscaras neurales comparten el mismo color de etiqueta.
+
+Selecciona un clip y usa **Play interval**, arrastra sus límites o fija un límite en
+el cursor. **Fine adjustment · time / frames** acepta segundos o fotogramas desde 0,
+con final exclusivo. Los fotogramas usan FPS nominales; usa segundos para vídeo con
+frecuencia variable. **Clip tools** contiene crear, dividir y quitar. Se conservan
+I/O, Deshacer/Rehacer y **Clips & grouping**. Arrastra **Speed ×** horizontalmente
+(0.01 por píxel; Mayús: 0.001), o pulsa y escribe. Pulsa fuera de un Unit expandido,
+incluso en otro grupo, para plegarlo sin modificar el tiempo ni la selección.
 
 **Agrupación experimental** propone grupos de movimiento y apariencia en el
 equipo local. Es sensible a posición e iluminación y no es reconocimiento

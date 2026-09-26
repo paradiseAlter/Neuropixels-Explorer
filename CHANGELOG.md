@@ -3,6 +3,20 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.2.0-beta.1] - 2026-09-26
+
+- Rebuild manual annotation around video above an expandable timeline: independent
+  hover frame previews, pointer-centered wheel zoom, panning, interval brushing,
+  playback review and optional seconds/frame boundary editing.
+- Separate reusable label creation/colors from interval labeling. Show the active
+  label in the video corner with the same color as timeline clips and neural masks.
+  The optional vocabulary field preserves version-1 project compatibility.
+- Add horizontal playback-speed scrubbing (Shift for fine adjustment) and direct
+  numeric entry. Clicking outside an expanded Unit/group restores the overview
+  without changing shared time or annotation selection.
+- Preserve source data, time mapping, candidate provenance and advanced review.
+  Frame entry uses nominal FPS; variable-frame-rate sources should use seconds.
+
 ## [4.1.2-beta.1] - 2026-09-26
 
 - Enlarge video and annotate inside the existing activity/video split instead of

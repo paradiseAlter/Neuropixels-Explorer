@@ -40,7 +40,7 @@
   function ensureColors(doc) {
     doc.labelColors ||= {};
     for (const s of doc.schemes) {
-      for (const value of [...Object.values(s.labels), ...Object.values(s.mappings)]) {
+      for (const value of [...(doc.vocabulary || []), ...Object.values(s.labels), ...Object.values(s.mappings)]) {
         if (!value || own(doc.labelColors, value)) continue;
         const used = new Set(Object.values(doc.labelColors));
         let index = used.size, color;
@@ -93,6 +93,11 @@
       }
     });
     check(schemes.has(doc.activeSchemeId), "Unknown active label scheme");
+    if (doc.vocabulary != null) {
+      check(Array.isArray(doc.vocabulary) && doc.vocabulary.length <= 1000, "Invalid label vocabulary");
+      doc.vocabulary.forEach(value => text(value, "label name"));
+      check(new Set(doc.vocabulary).size === doc.vocabulary.length, "Duplicate label name");
+    }
     if (doc.labelColors != null) {
       check(typeof doc.labelColors === "object" && !Array.isArray(doc.labelColors), "Invalid label palette");
       const colors = Object.values(doc.labelColors);
@@ -106,6 +111,18 @@
     fn(next, scheme(next));
     next.updatedAt = new Date().toISOString();
     return validate(next, doc.context);
+  }
+  function addLabel(doc, value) {
+    const name = text(String(value).trim(), "label name");
+    return change(doc, next => {
+      next.vocabulary = [...new Set([...(next.vocabulary || []), ...Object.keys(next.labelColors || {}), name])];
+    });
+  }
+  function zoomRange(range, anchor, factor, duration, fps = 30) {
+    const span = Math.max(Math.min(duration, 4 / fps), Math.min(duration, (range.end - range.start) * factor));
+    const fraction = Math.max(0, Math.min(1, (anchor - range.start) / (range.end - range.start)));
+    const start = Math.max(0, Math.min(duration - span, anchor - span * fraction));
+    return { start, end: start + span };
   }
   function importCandidates(doc, input) {
     check(input?.schema === CANDIDATE_SCHEMA && input.timebase === "video_seconds", "Expected behavior candidates in video_seconds");
@@ -253,5 +270,5 @@
     return rows.map((row) => row.map(cell).join(",")).join("\r\n");
   }
   return { SCHEMA, CANDIDATE_SCHEMA, create, validate, change, clone, scheme, groupKey, label, reviewed, ensureColors, color, project,
-    importCandidates, add, edit, remove, split, merge, assign, nameGroup, regroup, addScheme, groups, samples, toCSV };
+    addLabel, zoomRange, importCandidates, add, edit, remove, split, merge, assign, nameGroup, regroup, addScheme, groups, samples, toCSV };
 });
