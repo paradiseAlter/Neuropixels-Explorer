@@ -173,6 +173,14 @@ Click another signal row or blank space inside the activity canvas to collapse
 an expanded Unit without changing the shared time range or annotation selection.
 Video, annotation and inspector controls preserve the expanded Unit.
 
+To compare Units from different groups, select a Unit and choose **Pin to compare**
+after its spikes load. Repeat from another group or **Find Unit**. Up to six pinned
+spike rows share the overview time window and video cursor; collapsing groups does
+not remove them. The first pin opens 10 seconds around the cursor when the current
+window is wider. Use Cursor / Zoom / Pan (C/Z/P, +/-) or **10 s at cursor**; × removes
+one row and **Clear pins** removes all. Switching Recording or refreshing clears
+pins. At dense scales, zoom in to resolve individual spikes.
+
 **Experimental grouping** proposes motion/appearance groups locally. It is
 sensitive to position and lighting and is not validated behavior recognition.
 Choose a group, compare its sample videos, name it and explicitly confirm clips.

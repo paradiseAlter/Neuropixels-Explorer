@@ -561,7 +561,8 @@
       const bottom = 25;
       const plotWidth = Math.max(1, width - left - right);
       const plotHeight = Math.max(1, height - top - bottom);
-      const rasterBottom = top + 62;
+      const rasterOnly = Boolean(this.elements.rasterOnly);
+      const rasterBottom = rasterOnly ? height - bottom - 5 : top + 62;
       const rateTop = rasterBottom + 22;
       const rateBottom = top + plotHeight;
       const windowEnd = this.start + this.span;
@@ -570,7 +571,7 @@
       context.fillStyle = COLORS.text;
       context.textAlign = "right";
       context.fillText("SPIKES", left - 8, top + 7);
-      context.fillText("RATE", left - 8, rateTop + 7);
+      if (!rasterOnly) context.fillText("RATE", left - 8, rateTop + 7);
       context.strokeStyle = COLORS.grid;
       context.beginPath();
       context.moveTo(left, crisp(rasterBottom + 9));
@@ -578,7 +579,7 @@
       context.stroke();
 
       const first = lowerBound(this.data.spikeTimes, this.start);
-      const last = upperBound(this.data.spikeTimes, windowEnd);
+      const last = rasterOnly ? lowerBound(this.data.spikeTimes, windowEnd) : upperBound(this.data.spikeTimes, windowEnd);
       const visibleCount = Math.max(0, last - first);
       if (visibleCount <= plotWidth * 2.5) {
         context.strokeStyle = this.traceColor;
@@ -614,40 +615,46 @@
         context.globalAlpha = 1;
       }
 
-      const binCount = Math.max(24, Math.min(160, Math.floor(plotWidth / 5)));
-      const rates = new Float32Array(binCount);
-      const secondsPerBin = this.span / binCount;
-      let maximumRate = 1;
-      for (let index = first; index < last; index += 1) {
-        const bin = Math.min(binCount - 1, Math.floor((this.data.spikeTimes[index] - this.start) / this.span * binCount));
-        rates[bin] += 1 / secondsPerBin;
-        maximumRate = Math.max(maximumRate, rates[bin]);
+      if (rasterOnly) {
+        context.fillStyle = COLORS.text;
+        context.textAlign = "right";
+        context.fillText(`${visibleCount} spikes${visibleCount > plotWidth * 2.5 ? " · density; zoom for individual spikes" : ""}`, width - right, 11);
+      } else {
+        const binCount = Math.max(24, Math.min(160, Math.floor(plotWidth / 5)));
+        const rates = new Float32Array(binCount);
+        const secondsPerBin = this.span / binCount;
+        let maximumRate = 1;
+        for (let index = first; index < last; index += 1) {
+          const bin = Math.min(binCount - 1, Math.floor((this.data.spikeTimes[index] - this.start) / this.span * binCount));
+          rates[bin] += 1 / secondsPerBin;
+          maximumRate = Math.max(maximumRate, rates[bin]);
+        }
+        context.beginPath();
+        rates.forEach((rate, index) => {
+          const x = left + index / Math.max(1, rates.length - 1) * plotWidth;
+          const y = rateBottom - rate / maximumRate * Math.max(1, rateBottom - rateTop - 8);
+          if (!index) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        });
+        context.lineTo(left + plotWidth, rateBottom);
+        context.lineTo(left, rateBottom);
+        context.closePath();
+        context.fillStyle = this.rateFill;
+        context.fill();
+        context.beginPath();
+        rates.forEach((rate, index) => {
+          const x = left + index / Math.max(1, rates.length - 1) * plotWidth;
+          const y = rateBottom - rate / maximumRate * Math.max(1, rateBottom - rateTop - 8);
+          if (!index) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        });
+        context.strokeStyle = this.rateColor;
+        context.lineWidth = 1;
+        context.stroke();
+        context.fillStyle = COLORS.text;
+        context.textAlign = "right";
+        context.fillText(`${maximumRate.toFixed(maximumRate < 10 ? 1 : 0)} Hz`, left - 8, rateTop + 19);
       }
-      context.beginPath();
-      rates.forEach((rate, index) => {
-        const x = left + index / Math.max(1, rates.length - 1) * plotWidth;
-        const y = rateBottom - rate / maximumRate * Math.max(1, rateBottom - rateTop - 8);
-        if (!index) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-      context.lineTo(left + plotWidth, rateBottom);
-      context.lineTo(left, rateBottom);
-      context.closePath();
-      context.fillStyle = this.rateFill;
-      context.fill();
-      context.beginPath();
-      rates.forEach((rate, index) => {
-        const x = left + index / Math.max(1, rates.length - 1) * plotWidth;
-        const y = rateBottom - rate / maximumRate * Math.max(1, rateBottom - rateTop - 8);
-        if (!index) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-      context.strokeStyle = this.rateColor;
-      context.lineWidth = 1;
-      context.stroke();
-      context.fillStyle = COLORS.text;
-      context.textAlign = "right";
-      context.fillText(`${maximumRate.toFixed(maximumRate < 10 ? 1 : 0)} Hz`, left - 8, rateTop + 19);
 
       context.textAlign = "center";
       for (let index = 0; index <= 5; index += 1) {

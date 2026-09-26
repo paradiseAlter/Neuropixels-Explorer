@@ -3,6 +3,14 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.3.0-beta.1] - 2026-09-26
+
+- Pin up to six Units from different groups in the current Recording for shared-time
+  spike comparison above the activity overview. Pins survive group collapse and
+  video operations; individual removal, clear-all and Recording isolation are explicit.
+- Reuse exact spike data and inspector navigation in compact raster rows. The first
+  pin opens a 10-second window when needed; dense views indicate when zoom is needed.
+
 ## [4.2.1-beta.1] - 2026-09-26
 
 - Restore individual Unit expansion and detail access after opening anatomical

@@ -298,6 +298,7 @@
   let projectUI = null;
   let miniProbe = null;
   let annotationController = null;
+  let pinnedComparison = null;
 
   const plots = new PlotManager({
     detail: document.getElementById("spike-detail-canvas"),
@@ -409,6 +410,11 @@
     }
   });
 
+  pinnedComparison = new window.NeuropixelsPinnedComparison(document.getElementById("pinned-comparison"), {
+    PlotManager, getView: () => state.experimentView, setView: setExperimentView,
+    onChange: () => renderExperimentHeader(), t
+  });
+
   annotationController = new window.NeuropixelsAnnotationUI.AnnotationController({
     panel: document.getElementById("annotation-panel"),
     strip: document.getElementById("annotation-timeline"),
@@ -455,6 +461,7 @@
     comparisonColors = [...next.palette.units.comparisons];
     elements.themeSelect.value = next.preference;
     setPlotTheme(next.palette.canvas);
+    pinnedComparison?.refresh(next.palette.units.primary);
     setProbeTheme(next.palette.probe);
     plotEntries().forEach((entry) => {
       const palette = paletteForEntry(entry);
@@ -536,6 +543,7 @@
 
   function applyLanguageSnapshot(next) {
     languageSnapshot = next;
+    pinnedComparison?.refresh();
     elements.languageSelect.value = next.language;
     i18nApi.translateDocument(document, next.language);
     localizeHelpControls();
@@ -943,6 +951,12 @@
       ? `${Number(interval.start).toFixed(3)}–${Number(interval.end).toFixed(3)} s`
       : `${Number(state.experimentView.cursorTime || 0).toFixed(3)} s`;
     elements.inspectUnitButton.disabled = state.experimentView.selectedUnitId == null;
+    const pinButton = document.getElementById("pin-unit-button");
+    const selectedId = state.experimentView.selectedUnitId;
+    const ready = selectedId != null && state.openUnits.get(viewKey(recording, selectedId))?.result?.spikeTimes;
+    const pinned = selectedId != null && pinnedComparison?.has(selectedId);
+    pinButton.disabled = !ready || pinned || pinnedComparison?.entries.size >= pinnedComparison?.limit;
+    pinButton.textContent = t(pinned ? "workspace.unitPinned" : "workspace.pinUnit");
   }
 
   function renderActivityStatus() {
@@ -958,6 +972,7 @@
 
   function handleExperimentViewChange(patch, snapshot = null) {
     state.experimentView = { ...state.experimentView, ...(snapshot || patch || {}) };
+    pinnedComparison?.syncView();
     if (Object.hasOwn(patch || {}, "expandedUnitId") || Object.hasOwn(patch || {}, "groupFocusPath")) renderActivityStatus();
     if (Object.prototype.hasOwnProperty.call(patch || {}, "cursorTime")) state.playbackNeuralTime = Number(patch.cursorTime);
     renderExperimentHeader();
@@ -1006,6 +1021,7 @@
 
   function setExperimentView(patch, { seekVideo = false } = {}) {
     state.experimentView = { ...state.experimentView, ...(patch || {}) };
+    pinnedComparison?.syncView();
     activityCanvas.setViewState(state.experimentView);
     if (Object.prototype.hasOwnProperty.call(patch || {}, "visibleRange")) scheduleActivityLevelForRange(state.experimentView.visibleRange);
     if (seekVideo && Number.isFinite(Number(patch?.cursorTime))) videoController?.seekNeural(Number(patch.cursorTime));
@@ -1066,6 +1082,7 @@
   }
 
   async function refreshExperimentWorkspace(recording) {
+    pinnedComparison?.clear();
     const token = ++state.overviewToken;
     state.overviewAbortController?.abort();
     state.activityLevelAbortController?.abort();
@@ -2088,6 +2105,16 @@
     const result = event.target.closest("[data-find-unit-id]");
     if (result) selectActivityUnit(Number(result.dataset.findUnitId));
   });
+  document.getElementById("pin-unit-button").addEventListener("click", () => {
+    const recording = state.activeRecording;
+    const id = state.experimentView.selectedUnitId;
+    if (!recording || id == null) return;
+    const entry = state.openUnits.get(viewKey(recording, id));
+    const unit = state.activeActivityOverview?.units.find(item => Number(item.id) === Number(id));
+    if (pinnedComparison.add(recording, unit, entry?.result, themeSnapshot.palette.units.primary))
+      showToast(t("workspace.pinNext"));
+  });
+
   elements.inspectUnitButton.addEventListener("click", () => {
     if (state.experimentView.selectedUnitId == null) return;
     elements.reviewLayout.hidden = false;

@@ -166,6 +166,14 @@ espacio vacío dentro del lienzo de actividad para plegar el Unit sin modificar 
 tiempo ni la selección. Los controles de vídeo, anotación e inspección mantienen
 el Unit expandido.
 
+Para comparar grupos, selecciona una unidad y pulsa **Fijar para comparar** cuando
+se carguen sus spikes. Repite desde otro grupo o con Buscar unidad. Hasta seis filas
+comparten la ventana temporal y el cursor del vídeo; plegar grupos no las elimina.
+La primera fijación reduce ventanas mayores a 10 segundos alrededor del cursor.
+Usa Cursor / Zoom / Pan (C/Z/P, +/-) o **10 s en el cursor**; × elimina una fila y
+**Vaciar comparación** todas. Cambiar de registro o recargar elimina las fijaciones.
+Amplía las vistas densas para distinguir spikes individuales.
+
 **Agrupación experimental** propone grupos de movimiento y apariencia en el
 equipo local. Es sensible a posición e iluminación y no es reconocimiento
 conductual validado. Compara vídeos del grupo, nómbralo y confirma los clips.
