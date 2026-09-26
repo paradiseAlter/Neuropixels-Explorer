@@ -3,6 +3,13 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.2.1-beta.1] - 2026-09-26
+
+- Restore individual Unit expansion and detail access after opening anatomical
+  groups by preserving the leaf Unit's group ancestry.
+- Limit focus dismissal to other rows or blank space inside the activity canvas.
+  Video, annotation and inspector controls preserve the expanded Unit.
+
 ## [4.2.0-beta.1] - 2026-09-26
 
 - Rebuild manual annotation around video above an expandable timeline: independent

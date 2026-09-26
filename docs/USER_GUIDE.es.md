@@ -161,8 +161,10 @@ el cursor. **Fine adjustment · time / frames** acepta segundos o fotogramas des
 con final exclusivo. Los fotogramas usan FPS nominales; usa segundos para vídeo con
 frecuencia variable. **Clip tools** contiene crear, dividir y quitar. Se conservan
 I/O, Deshacer/Rehacer y **Clips & grouping**. Arrastra **Speed ×** horizontalmente
-(0.01 por píxel; Mayús: 0.001), o pulsa y escribe. Pulsa fuera de un Unit expandido,
-incluso en otro grupo, para plegarlo sin modificar el tiempo ni la selección.
+(0.01 por píxel; Mayús: 0.001), o pulsa y escribe. Pulsa otra fila de señales o un
+espacio vacío dentro del lienzo de actividad para plegar el Unit sin modificar el
+tiempo ni la selección. Los controles de vídeo, anotación e inspección mantienen
+el Unit expandido.
 
 **Agrupación experimental** propone grupos de movimiento y apariencia en el
 equipo local. Es sensible a posición e iluminación y no es reconocimiento

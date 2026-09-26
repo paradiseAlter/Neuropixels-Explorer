@@ -169,8 +169,9 @@ use nominal FPS; use seconds for variable-frame-rate video. **Clip tools** conta
 New interval, Split at cursor and Remove selected. Mark start/end (I/O), Undo/Redo,
 and the advanced **Clips & grouping** workflow remain available. Drag **Speed ×**
 left/right to adjust by 0.01 per pixel, hold Shift for 0.001, or click and type.
-Click outside an expanded Unit (including another signal group) to collapse it
-without changing the shared time range or annotation selection.
+Click another signal row or blank space inside the activity canvas to collapse
+an expanded Unit without changing the shared time range or annotation selection.
+Video, annotation and inspector controls preserve the expanded Unit.
 
 **Experimental grouping** proposes motion/appearance groups locally. It is
 sensitive to position and lighting and is not validated behavior recognition.

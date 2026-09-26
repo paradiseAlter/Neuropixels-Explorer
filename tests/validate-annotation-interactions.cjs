@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const A = require("../scripts/annotation-core.js");
-const {ActivityAnatomyCanvas} = require("../scripts/activity-overview.js");
+const {ActivityAnatomyCanvas, buildDisplayRows} = require("../scripts/activity-overview.js");
 const {VideoSyncController} = require("../scripts/video-sync.js");
 const context = {key:"fixture",duration:600,videoName:"fixture.mp4"};
 const blank = A.create(context);
@@ -32,6 +32,29 @@ assert(!("cursorTime" in patch));
 activity.state.expandedUnitId=7;activity.data={};activity.drag={row:{kind:"unit",unit:{id:7}}};
 activity._point=()=>({x:500,y:100});activity._rowAt=()=>({row:{kind:"aggregate",key:"other"}});
 activity._pointerUp({});assert.equal(activity.state.expandedUnitId,null,"Clicking a different group returns to the collapsed overview");
+// Follow the actual group -> subgroup -> Unit path, not just Find Unit.
+const units=Array.from({length:20},(_,id)=>({id,sourceIndex:id,shankId:0,depthUm:id*10,region:"MB"}));
+const matrix=new Uint8Array(80);
+const parent=buildDisplayRows(units,matrix,4,1)[0];
+const subgroup=buildDisplayRows(units,matrix,4,1,[parent.key])[0];
+const focusedPath=[parent.key,subgroup.key];
+const unitRow=buildDisplayRows(units,matrix,4,1,focusedPath).find(row=>row.kind==="unit");
+assert.deepEqual(unitRow.ancestors,focusedPath,"Leaf Units retain the focused group ancestry");
+activity.state.groupFocusPath=focusedPath;activity.drag={row:unitRow};
+activity._rowAt=()=>({row:unitRow});activity._xToTime=()=>10;
+let selectedUnit=null;activity.callbacks={onUnitSelect:id=>{selectedUnit=id;}};
+activity._pointerUp({});
+assert.equal(activity.state.expandedUnitId,unitRow.unit.id,"A revealed Unit expands instead of dismissing its parent group");
+assert.equal(selectedUnit,unitRow.unit.id,"Selecting the leaf still requests exact Unit details");
+const documentListeners=new Map(), savedDocument=global.document;
+try {
+  global.document={addEventListener:(name,handler)=>documentListeners.set(name,handler)};
+  activity.canvas={addEventListener(){}};activity._install();
+  // A background toolbar/inspector click must not clear the expanded Unit.
+  documentListeners.get("click")?.({target:{closest:()=>null}});
+  assert.equal(activity.state.expandedUnitId,unitRow.unit.id);
+  assert.deepEqual(activity.state.selectedInterval,{start:9,end:12});
+} finally { if(savedDocument===undefined)delete global.document;else global.document=savedDocument; }
 const sandbox={window:{NeuropixelsAnnotations:A},document:{documentElement:{lang:"en"}},console};
 vm.runInNewContext(fs.readFileSync(require.resolve("../scripts/annotation-ui.js"),"utf8"),sandbox);
 const ui=Object.create(sandbox.window.NeuropixelsAnnotationUI.AnnotationController.prototype);
@@ -58,4 +81,4 @@ listeners.pointermove[0]({clientX:110,preventDefault(){}});assert.equal(speed,.3
 listeners.pointermove[0]({clientX:110,shiftKey:true,preventDefault(){}});assert.equal(speed,.26);
 listeners.pointermove[0]({clientX:-1000,preventDefault(){}});assert.equal(speed,.01);
 listeners.pointermove[0]({clientX:1000,preventDefault(){}});assert.equal(speed,4);
-console.log(JSON.stringify({status:"PASS",checks:"vocabulary without intervals, stable colors, old/new JSON, zoom bounds and anchor, outside collapse with time preserved, frame conversion, independent preview, speed scrubbing"}));
+console.log(JSON.stringify({status:"PASS",checks:"vocabulary without intervals, stable colors, old/new JSON, zoom bounds and anchor, canvas collapse with time preserved, group-to-Unit expansion and detail callback, external controls preserve focus, frame conversion, independent preview, speed scrubbing"}));

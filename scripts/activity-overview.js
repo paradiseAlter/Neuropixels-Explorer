@@ -71,13 +71,14 @@
     return activity;
   }
 
-  function individualRow(unit) {
+  function individualRow(unit, ancestors = []) {
     return {
       key: `unit:${Number(unit.id)}`,
       kind: "unit",
       unit,
       unitIds: [Number(unit.id)],
-      sourceIndexes: [Number(unit.sourceIndex)]
+      sourceIndexes: [Number(unit.sourceIndex)],
+      ancestors: [...ancestors]
     };
   }
 
@@ -164,7 +165,7 @@
     const end = Math.min(group.length, selectedIndex + 3);
     const rows = [];
     if (start > 0) rows.push(aggregateRow(group.slice(0, start), matrix, binCount, level + 1, ancestors));
-    rows.push(...group.slice(start, end).map(individualRow));
+    rows.push(...group.slice(start, end).map(unit => individualRow(unit, ancestors)));
     if (end < group.length) rows.push(aggregateRow(group.slice(end), matrix, binCount, level + 1, ancestors));
     return rows;
   }
@@ -172,7 +173,7 @@
   function buildDisplayRows(units, matrix, binCount, targetRows, groupFocusPath = [], forceUnitId = null, unusualMatrix = null) {
     const ordered = stableUnitOrder(units);
     const safeTarget = Math.max(1, Math.floor(Number(targetRows) || 1));
-    if (ordered.length <= safeTarget) return ordered.map(individualRow);
+    if (ordered.length <= safeTarget) return ordered.map(unit => individualRow(unit));
     const groups = anatomicalGroups(ordered, safeTarget);
     const focusPath = Array.isArray(groupFocusPath) ? groupFocusPath : groupFocusPath ? [groupFocusPath] : [];
     const forceId = finiteOrNull(forceUnitId);
@@ -183,7 +184,7 @@
         return selectedNeighborhoodRows(group, aggregateMatrix, binCount, forceId, level, [...ancestors, aggregate.key]);
       }
       if (focusPath[level] !== aggregate.key) return [aggregate];
-      if (group.length <= 8) return group.map(individualRow);
+      if (group.length <= 8) return group.map(unit => individualRow(unit, [...ancestors, aggregate.key]));
       return localGroups(group).flatMap((child) => renderGroup(child, level + 1, [...ancestors, aggregate.key]));
     };
     return groups.flatMap((group) => renderGroup(group));
@@ -257,7 +258,6 @@
 
     destroy() {
       this.resizeObserver?.disconnect();
-      document.removeEventListener("click", this.outsideClick, true);
     }
 
     setData(data, { preserveState = false } = {}) {
@@ -320,11 +320,8 @@
     }
 
     _install() {
-      // Dismiss without changing the shared time range or annotation selection.
-      this.outsideClick = (event) => {
-        if (event.target !== this.canvas && !event.target.closest?.("#find-unit-popover, #inspect-unit-button, #review-layout, dialog")) this.collapseFocus();
-      };
-      document.addEventListener("click", this.outsideClick, true);
+      // Focus dismissal belongs to this canvas. Video, annotation and inspector
+      // controls must not clear the Unit the researcher is inspecting.
       this.canvas.addEventListener("pointerdown", (event) => this._pointerDown(event));
       this.canvas.addEventListener("pointermove", (event) => this._pointerMove(event));
       this.canvas.addEventListener("pointerup", (event) => this._pointerUp(event));
