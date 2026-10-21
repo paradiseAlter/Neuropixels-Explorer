@@ -26,6 +26,8 @@ import numpy as np
 
 from .ingest import EXACT_ROLES, UNIT_METADATA_NAMES, VIDEO_EXTENSIONS, media_type
 from .migrations import SCHEMA_VERSION
+from . import project_files
+from .project_checks import inspect_files
 
 
 def native_pick(kind):
@@ -66,10 +68,68 @@ class LocalProjects:
 
     def recent(self):
         with self.lock:
-            return json.loads(json.dumps({"projects": list(reversed(self.state["projects"]))}))
+            return json.loads(json.dumps({"projects": [{k: v for k, v in p.items() if k != "annotations"} for p in reversed(self.state["projects"])]}))
+
+    @staticmethod
+    def now():
+        return datetime.now(timezone.utc).isoformat()
+
+    def get_project(self, project_id):
+        return next(p for p in self.state["projects"] if p["id"] == project_id)
+
+    @staticmethod
+    def validate_annotations(docs, recording_id):
+        if not isinstance(docs, dict) or len(docs) > 100:
+            raise ValueError("Invalid project annotation collection")
+        for key, doc in docs.items():
+            context = doc.get("context", {})
+            if doc.get("schema") != "neuropixels-annotations/1" or context.get("key") != key or context.get("recordingKey") != recording_id:
+                raise ValueError("Annotations belong to a different recording")
+            if not isinstance(doc.get("segments"), list) or len(doc["segments"]) > 100000:
+                raise ValueError("Invalid annotation segments")
+
+    def annotation(self, payload):
+        with self.lock:
+            project = self.get_project(payload["projectId"])
+            docs = project.setdefault("annotations", {})
+            key = payload["key"]
+            if "document" in payload:
+                self.validate_annotations({key: payload["document"]}, project["recordingIds"][0])
+                docs[key] = payload["document"]
+                project.update(dirty=True, updatedAt=self.now())
+                self.save()
+            return {"document": docs.get(key)}
+
+    def checks(self, recording_id, project_id=None):
+        paths, issues = {}, {}
+        with self.service.connect() as db:
+            recording = dict(db.execute("SELECT * FROM recordings WHERE recording_id=?", (recording_id,)).fetchone())
+            for row in db.execute("SELECT * FROM data_assets WHERE recording_id=? AND availability_status='available'", (recording_id,)):
+                try:
+                    path = self.paths.resolve_asset(row["relative_path"])
+                    if not path.is_file():
+                        raise FileNotFoundError(path.name)
+                    paths[row["asset_role"]] = path
+                except (OSError, ValueError, KeyError) as error:
+                    issues[row["asset_role"]] = str(error)
+            locations = db.execute("SELECT COUNT(*) FROM unit_locations WHERE unit_id IN (SELECT unit_id FROM units WHERE recording_id=?) AND probe_depth_um IS NOT NULL", (recording_id,)).fetchone()[0]
+            anatomy = db.execute("SELECT COUNT(*) FROM unit_locations WHERE unit_id IN (SELECT unit_id FROM units WHERE recording_id=?) AND brain_region_id IS NOT NULL", (recording_id,)).fetchone()[0]
+        project = self.get_project(project_id) if project_id else self.project_for(recording_id)
+        video = project.get("videos", {}).get(recording_id)
+        if video and video.get("clockIssue"):
+            issues["frame_clock"] = video["clockIssue"]
+        if video:
+            try:
+                self.paths.resolve_asset("@local/" + video["video_stream_id"])
+            except (OSError, ValueError, KeyError) as error:
+                issues["video"] = str(error)
+                video = None
+        return {"checks": inspect_files(paths, recording["sample_rate_hz"], anatomy=anatomy, locations=locations,
+                  allen=recording_id.startswith("allen-"), video=video, issues=issues),
+                "matched": {role: path.name for role, path in paths.items()}, "issues": issues}
 
     def start(self, kind, payload):
-        if kind not in {"folder", "nwb", "video", "clock", "import", "mapping"}:
+        if kind not in {"folder", "nwb", "video", "clock", "import", "mapping", "open-project", "save-project"}:
             raise ValueError("Unknown local action")
         job_id = uuid.uuid4().hex
         job = {"id": job_id, "status": "working", "phase": "selecting" if kind not in {"import", "mapping"} else "importing"}
@@ -86,9 +146,18 @@ class LocalProjects:
                 return
             try:
                 if kind == "import":
-                    result = self.import_candidate(payload["candidateId"], payload.get("sampleRate"))
+                    result = self.import_candidate(payload["candidateId"], payload.get("sampleRate"), payload.get("projectName"), payload.get("mode"))
                 elif kind == "mapping":
                     result = self.update_mapping(payload)
+                elif kind == "save-project":
+                    with self.lock:
+                        project = self.get_project(payload["projectId"])
+                    path = self.picker(kind) if payload.get("saveAs") or not project.get("file") else Path(project["file"])
+                    if path is None:
+                        job.update(status="cancelled")
+                        return
+                    with self.lock:
+                        result = project_files.write(self, project, path)
                 else:
                     path = self.picker(kind)
                     if path is None:
@@ -112,8 +181,10 @@ class LocalProjects:
         """Internal picker seam; deliberately not exposed as an HTTP path API."""
         payload = payload or {}
         path = Path(path).resolve(strict=True)
+        if kind == "open-project":
+            return project_files.read(self, path)
         if kind == "video":
-            return self.attach_video(payload["recordingId"], path)
+            return self.attach_video(payload["recordingId"], path, payload.get("projectId"))
         if kind == "clock":
             if path.stat().st_size > 50_000_000:
                 raise ValueError("Time-mapping file exceeds 50 MB")
@@ -180,7 +251,7 @@ class LocalProjects:
         except (KeyError, OSError, ValueError) as error:
             raise ValueError("This file is not a supported Allen ecephys NWB with units, peak channels and probe metadata: " + str(error)) from error
 
-    def import_candidate(self, candidate_id, sample_rate=None):
+    def import_candidate(self, candidate_id, sample_rate=None, project_name=None, mode=None):
         candidate = self.candidates[candidate_id]
         source = Path(candidate["path"])
         if candidate["kind"] == "nwb":
@@ -213,10 +284,10 @@ class LocalProjects:
             recording_id = self.import_kilosort(source, rate)
         self.service.invalidate_recordings([recording_id])
         with self.lock:
-            project = next((p for p in self.state["projects"] if recording_id in p["recordingIds"]), None)
+            project = None if project_name else next((p for p in self.state["projects"] if recording_id in p["recordingIds"]), None)
             if not project:
-                project = {"id": uuid.uuid4().hex, "name": candidate["name"], "source": str(source),
-                           "recordingIds": [recording_id], "videos": {}}
+                project = {"id": uuid.uuid4().hex, "name": str(project_name or candidate["name"]).strip()[:200], "source": str(source),
+                           "recordingIds": [recording_id], "videos": {}, "annotations": {}, "mode": mode or "neural", "dirty": True}
                 self.state["projects"].append(project)
                 self.save()
         # A nearby video is suggested, never silently equated with a neural clock.
@@ -224,7 +295,7 @@ class LocalProjects:
         folders += [folder / "behavior_videos" for folder in list(folders)]
         videos = [p for folder in folders if folder.is_dir() for p in folder.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS]
         choices = [{"token": self.grant(v), "name": v.name} for v in videos[:20]]
-        return {"project": project, "recordingId": recording_id, "nearbyVideos": choices}
+        return {"project": project, "recordingId": recording_id, "nearbyVideos": choices, **self.checks(recording_id, project["id"])}
 
     def import_kilosort(self, folder, rate):
         times_path, clusters_path = folder / "spike_times.npy", folder / "spike_clusters.npy"
@@ -235,6 +306,16 @@ class LocalProjects:
         if not np.isfinite(times).all() or np.any(times < 0) or np.any(times[1:] < times[:-1]):
             raise ValueError("Spike times must be finite, nonnegative and sorted")
         signature = [(str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in (times_path, clusters_path)]
+        # Reuse an indexed local recording, including its Unit anatomy metadata.
+        with self.service.connect() as connection:
+            for row in connection.execute("SELECT a.recording_id, a.relative_path FROM data_assets a JOIN recordings r USING(recording_id) WHERE a.asset_role='spike_times' AND r.sample_rate_hz=?", (rate,)):
+                try:
+                    if self.paths.resolve_asset(row["relative_path"]) == times_path.resolve():
+                        other = connection.execute("SELECT relative_path FROM data_assets WHERE recording_id=? AND asset_role='spike_clusters'", (row["recording_id"],)).fetchone()
+                        if other and self.paths.resolve_asset(other[0]) == clusters_path.resolve():
+                            return row["recording_id"]
+                except (OSError, ValueError, KeyError):
+                    continue
         recording_id = "local-" + hashlib.sha256(json.dumps([signature, rate]).encode()).hexdigest()[:24]
         with self.service.connect() as connection:
             if connection.execute("SELECT 1 FROM recordings WHERE recording_id=?", (recording_id,)).fetchone():
@@ -295,7 +376,21 @@ class LocalProjects:
             self.state["projects"].append(project)
         return project
 
-    def attach_video(self, recording_id, path):
+    def adopt(self, recording_id):
+        with self.lock:
+            project = self.project_for(recording_id)
+            if recording_id not in project["videos"]:
+                descriptor = next((v for v in self.service.videos()["videos"] if v["recording_id"] == recording_id), None)
+                if descriptor and descriptor.get("mediaUrl"):
+                    path, _ = self.service.video_media(descriptor["video_stream_id"])
+                    attached = self.attach_video(recording_id, path, project["id"])["video"]
+                    attached["timeMapping"] = descriptor.get("timeMapping")
+            project.setdefault("annotations", {})
+            project.setdefault("dirty", True)
+            self.save()
+        return {"project": project}
+
+    def attach_video(self, recording_id, path, project_id=None):
         if path.suffix.lower() not in VIDEO_EXTENSIONS:
             raise ValueError("Choose a behavior video file")
         token = self.grant(path)
@@ -311,17 +406,30 @@ class LocalProjects:
         except (ImportError, OSError, ValueError, IndexError):
             pass  # Browser decoding still works; no clock verification is implied.
         with self.lock:
-            project = self.project_for(recording_id)
+            project = self.get_project(project_id) if project_id else self.project_for(recording_id)
+            if recording_id not in project["recordingIds"]:
+                raise ValueError("Video must belong to the project's recording")
             project["videos"][recording_id] = descriptor
+            project.update(mode="combined", dirty=True)
             self.save()
+        # Our Allen clock exports use <video-stem>.clock.json beside the media.
+        clock_path = path.with_suffix(".clock.json")
+        if clock_path.is_file() and clock_path.stat().st_size <= 50_000_000:
+            try:
+                self.update_mapping({"projectId": project["id"], "recordingId": recording_id,
+                                     "clock": json.loads(clock_path.read_text(encoding="utf-8"))})
+            except (ValueError, KeyError, TypeError) as error:
+                with self.lock:
+                    descriptor["clockIssue"] = str(error)
+                    self.save()
         return {"project": project, "video": descriptor}
 
-    def attach_granted(self, recording_id, token):
-        return self.attach_video(recording_id, self.paths.resolve_asset(f"@local/{token}"))
+    def attach_granted(self, recording_id, token, project_id=None):
+        return self.attach_video(recording_id, self.paths.resolve_asset(f"@local/{token}"), project_id)
 
     def update_mapping(self, payload):
         with self.lock:
-            project = self.project_for(payload["recordingId"])
+            project = self.get_project(payload["projectId"]) if payload.get("projectId") else self.project_for(payload["recordingId"])
             video = project["videos"].get(payload["recordingId"])
             if not video:
                 raise ValueError("Attach a video before setting its alignment")
@@ -356,14 +464,14 @@ class LocalProjects:
                 if not math.isfinite(float(mapping.get("offset_s", 0))) or not math.isfinite(float(mapping.get("scale", 1))) or float(mapping.get("scale", 1)) <= 0:
                     raise ValueError("Invalid frame clock offset or scale")
                 session = clock.get("session_id")
-                if session and payload["recordingId"].startswith("allen-") and not payload["recordingId"].startswith(f"allen-{session}-"):
+                if session and not payload["recordingId"].startswith(f"allen-{session}-"):
                     raise ValueError("The frame clock belongs to a different Allen session")
                 video["frame_rate_hz"] = identity.get("fps")
             else:
                 offset = float(payload["offset"])
                 if not math.isfinite(offset):
                     raise ValueError("Alignment must be a finite time offset")
-                mapping = {"mapping_method": "manual_offset", "offset_s": offset, "scale": 1, "verification_status": "unverified"}
+                mapping = {"mapping_method": "manual_offset", "offset_s": offset, "scale": 1, "verification_status": "unverified", "matched_event_count": 1}
                 previous = video.get("timeMapping", {})
                 anchors = (previous.get("provenance") or {}).get("frame_clock")
                 if anchors:
@@ -378,5 +486,7 @@ class LocalProjects:
                                    offset_s=float(previous.get("offset_s", 0)) + shift, matched_event_count=1, residual_rms_ms=None)
                     mapping["provenance"]["frame_clock"]["neural_s"] = [value + shift for value in anchors["neural_s"]]
             video["timeMapping"] = json.loads(json.dumps(mapping))
+            video.pop("clockIssue", None)
+            project["dirty"] = True
             self.save()
             return {"project": project, "video": video}

@@ -15,8 +15,11 @@ def main() -> None:
     try:
         if kind == "folder":
             path = filedialog.askdirectory(parent=root, title="Neuropixels Explorer — Open recording folder")
+        elif kind == "save-project":
+            path = filedialog.asksaveasfilename(parent=root, title="Neuropixels Explorer — Save project", defaultextension=".neuroproject.json", initialfile="Experiment.neuroproject.json", filetypes=[("Explorer project", "*.neuroproject.json")])
         else:
             types = {
+                "open-project": [("Explorer project", "*.neuroproject.json")],
                 "nwb": [("Allen NWB", "*.nwb")],
                 "video": [("Behavior video", "*.mp4 *.webm *.mov *.avi *.mkv")],
                 "clock": [("Video time mapping", "*.json")],

@@ -22,8 +22,8 @@
     scheme: ["Label scheme", "标签方案", "Esquema de etiquetas"],
     schemeName: ["New scheme name", "新方案名称", "Nombre del esquema"],
     newScheme: ["New scheme", "新建方案", "Nuevo esquema"],
-    import: ["Import project / candidates", "导入项目 / 候选", "Importar proyecto / candidatos"],
-    save: ["Save project", "保存项目", "Guardar proyecto"],
+    import: ["Import annotations / candidates", "导入标注 / 候选", "Importar anotaciones / candidatos"],
+    save: ["Export annotations", "导出标注", "Exportar anotaciones"],
     csv: ["Export CSV", "导出 CSV", "Exportar CSV"],
     undo: ["Undo", "撤销", "Deshacer"], redo: ["Redo", "重做", "Rehacer"],
     group: ["Review group", "检查分组", "Revisar grupo"], all: ["All clips", "全部片段", "Todos los clips"],
@@ -51,7 +51,7 @@
     progress: ["Analyzing locally", "正在本地分析", "Analizando localmente"], clustering: ["Clustering motion samples…", "正在聚类运动样本…", "Agrupando muestras…"],
     cancelled: ["Analysis cancelled", "分析已取消", "Análisis cancelado"],
     autoVideo: ["Attach a real video file for experimental grouping.", "请关联真实视频文件以试验自动分组。", "Adjunta un vídeo real para probar la agrupación."],
-    saved: ["Draft saved on this browser · Save project for a portable backup", "草稿已保存在此浏览器 · 保存项目可获得可迁移备份", "Borrador guardado en este navegador · Guarda el proyecto como respaldo"],
+    saved: ["Draft saved · Save the project to update its file", "草稿已保存 · 点击保存项目写入项目文件", "Borrador guardado · Guarda el proyecto para actualizar su archivo"],
     saving: ["Saving draft…", "正在保存草稿…", "Guardando borrador…"],
     storageError: ["Browser storage unavailable. Save project before closing.", "浏览器存储不可用，请在关闭前保存项目。", "Almacenamiento no disponible. Guarda el proyecto antes de cerrar."],
     error: ["Annotation", "行为标注", "Anotación"],
@@ -169,7 +169,7 @@
       panel.addEventListener("keydown", (e) => {
         if (e.key === "Escape") { e.preventDefault(); if (this.reviewMode) this.reviewMode = false; else this.opened = false; this.render(); button.focus(); }
         if (e.key === "Enter" && e.target.dataset.field === "label") { e.preventDefault(); this.panel.querySelector('[data-action="quick-save"]')?.click(); }
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); this.downloadProject(); }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); this.onSaveProject ? this.onSaveProject() : this.downloadProject(); }
       });
       this.render();
     }
@@ -216,11 +216,22 @@
     }
     persist() {
       if (!this.doc) return;
-      const doc = A.clone(this.doc), key = this.key;
+      const doc = A.clone(this.doc), key = this.key, store = this.store;
       this.storageStatus = "saving";
-      this.saveQueue = this.saveQueue.catch(() => {}).then(() => this.store.request(key, doc)).then(() => {
+      this.saveQueue = this.saveQueue.catch(() => {}).then(() => store.request(key, doc)).then(() => {
         if (this.key === key) this.storageStatus = "saved"; this.renderStorage();
       }, () => { if (this.key === key) this.storageStatus = "storageError"; this.renderStorage(); });
+    }
+    async flush() {
+      this.persist();
+      await this.saveQueue;
+      if (this.storageStatus === "storageError") throw new Error(tr("storageError"));
+    }
+    async useStore(store) {
+      await this.flush();
+      this.doc = null; this.key = null;
+      this.store = store;
+      await this.update();
     }
     renderStorage() { const node = this.panel.querySelector("[data-storage]"); if (node) { node.textContent = tr(this.storageStatus); node.dataset.failed = String(this.storageStatus === "storageError"); } }
     commit(next) {
@@ -285,7 +296,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.5.0-beta.1</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.6.0-beta.1</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -676,7 +687,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.5.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.6.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

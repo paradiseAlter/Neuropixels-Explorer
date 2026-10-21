@@ -3,6 +3,17 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.6.0-beta.1] - 2026-10-22
+
+- Create named neural-only or neural + video projects from local Kilosort results
+  or Allen ecephys NWB. Show supported inputs and feature-specific check/cross
+  results, including missing files, unavailable templates and optional video alignment.
+- Save and reopen `.neuroproject.json` files with source references, catalog
+  metadata, video mappings and complete annotations. Project drafts are isolated
+  per project; opening a saved file can restore a fresh local catalog.
+- Match adjacent video frame-clock exports, reuse existing Kilosort catalog
+  anatomy, and retain annotation-only JSON export as a separate action.
+
 ## [4.5.0-beta.1] - 2026-10-21
 
 - Keep interval activity and Unit template distribution independently open in the

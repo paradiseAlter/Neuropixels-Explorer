@@ -474,7 +474,14 @@ class CatalogService:
         paths: dict[str, Path] = {}
         for row in rows:
             if row["asset_role"] not in paths and row["relative_path"]:
-                paths[row["asset_role"]] = self.paths.resolve_asset(row["relative_path"])
+                try:
+                    path = self.paths.resolve_asset(row["relative_path"])
+                    if path.is_file():
+                        paths[row["asset_role"]] = path
+                except (OSError, ValueError, KeyError):
+                    if not row["relative_path"].startswith("@local/"):
+                        raise
+                    continue  # Project checks explain missing/changed links; other features remain usable.
         return paths
 
     def _recording_arrays(self, recording_id: str) -> tuple[dict[str, np.ndarray], bool]:
@@ -1358,9 +1365,15 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
                 if host.split(":")[0] not in {"localhost", "127.0.0.1"} or (origin and origin != "http://" + host) or not self.headers.get("Content-Type", "").startswith("application/json"):
                     self._json({"message": "Local project actions require the Explorer's own window"}, HTTPStatus.FORBIDDEN)
                     return
-                payload = self._read_json()
+                payload = self._read_json(maximum_bytes=64 * 1024 * 1024)
                 if parsed.path == "/api/local/attach":
-                    self._json(self.server.service.local_projects.attach_granted(payload["recordingId"], payload["token"]))
+                    self._json(self.server.service.local_projects.attach_granted(payload["recordingId"], payload["token"], payload.get("projectId")))
+                elif parsed.path == "/api/local/annotations":
+                    self._json(self.server.service.local_projects.annotation(payload))
+                elif parsed.path == "/api/local/adopt":
+                    self._json(self.server.service.local_projects.adopt(payload["recordingId"]))
+                elif parsed.path == "/api/local/checks":
+                    self._json(self.server.service.local_projects.checks(payload["recordingId"], payload.get("projectId")))
                 elif parsed.path == "/api/local/actions":
                     self._json(self.server.service.local_projects.start(payload["kind"], payload), HTTPStatus.ACCEPTED)
                 else:

@@ -46,6 +46,35 @@
 .alignment-fields label { display: grid; gap: 8px; color: var(--text-soft); font-size: 12px; }
 .alignment-follow { display: flex; gap: 8px; align-items: center; margin-top: 18px; font-size: 12px; }
 .project-dialog .alignment-follow input { width: auto; }
+.project-dialog:has(.project-checks), .project-dialog:has(.project-create) { width: min(760px, calc(100vw - 32px)); box-sizing: border-box; padding: 24px; max-height: 90vh; }
+.project-dialog:has(.project-checks) h2 { margin-bottom: 10px; }
+.project-dialog:has(.project-checks) p { margin: 8px 0; line-height: 1.5; }
+.project-create { display: grid; gap: 10px; }
+.project-create h3 { margin: 8px 0 0; font-size: 14px; }
+.project-create p { margin: 6px 0 12px; }
+.project-create small, .project-dialog small { color: var(--text-soft); line-height: 1.6; }
+.project-name { display: grid; gap: 8px; font-size: 13px; }
+.project-name input { width: 100%; box-sizing: border-box; }
+.project-modes { display: flex; flex-wrap: wrap; gap: 18px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--line); }
+.project-modes legend { color: var(--muted); font-size: 12px; }
+.project-modes label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.project-modes input { width: auto; accent-color: var(--accent); }
+.project-format { padding-bottom: 10px; border-bottom: 1px solid var(--line-soft); }
+.project-checks { width: 100%; border-collapse: collapse; margin: 12px 0; text-align: left; }
+.project-checks caption { text-align: left; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.project-checks td { padding: 7px 8px; vertical-align: top; border-bottom: 1px solid var(--line-soft); }
+.project-checks strong { font-size: 13px; font-weight: 550; }
+.project-checks small { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.project-checks .check-symbol { width: 24px; font-size: 19px; font-weight: 650; color: var(--muted); }
+.project-checks [data-ready="true"] { color: var(--accent); }
+.project-link-issue { color: var(--warning, #c98f45) !important; }
+.project-footer { position: sticky; bottom: -24px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; padding: 12px 0; background: var(--panel); }
+.project-dialog .project-primary { border-color: var(--primary-border); background: var(--primary-bg); }
+.project-dialog summary { cursor: pointer; font-size: 13px; padding: 8px 0; }
+.matched-files { overflow-wrap: anywhere; }
+.project-dialog :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+#save-project-button { font-size: 12px; min-height: 33px; white-space: nowrap; }
+@media (max-width: 700px) { .project-dialog { padding: 24px 18px; } .start-workspace { width: calc(100vw - 24px); padding: 20px; } .start-actions { grid-template-columns: 1fr; gap: 10px; } }
 .experiment-body, .experiment-body:has(.video-sync-panel.has-source) { --video-region-width: 35%; grid-template-columns: minmax(0, 1fr) 8px minmax(330px, var(--video-region-width)); grid-template-rows: minmax(0, 1fr); gap: 6px; }
 .experiment-body .video-region-splitter { display: block; }
 .experiment-body:not(:has(.video-sync-panel.has-source)) { grid-template-columns: minmax(0,1fr) 8px 290px; }

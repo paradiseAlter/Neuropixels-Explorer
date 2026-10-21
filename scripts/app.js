@@ -442,7 +442,7 @@
   miniProbe = new window.NeuropixelsMiniProbe(document.getElementById("mini-probe"), selectActivityUnit, (region) => {
     setExperimentView({ selectedRegion: region, selectedShank: null, selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, groupFocusPath: [] });
   });
-  projectUI = new window.NeuropixelsProjectUI({state, video:videoController,
+  projectUI = new window.NeuropixelsProjectUI({state, video:videoController, annotations:annotationController,
     onVideoExpand: (enabled = !state.videoEnlarged) => setVideoEmphasis("video", enabled),
     openCatalog:openDatabaseCatalog, home:()=>showOnly("empty"), resume:()=>showOnly("explorer"),
     toast:showToast, folderFallback:openPicker});
@@ -1737,7 +1737,7 @@
     elements.reviewLayout.hidden = true;
     renderRecordings();
     renderUnitList();
-    videoController?.setRecording(recording, state.databaseCatalog?.videos || []);
+    videoController?.setRecording(recording, projectUI?.active ? [] : state.databaseCatalog?.videos || []);
     projectUI?.recordingChanged(recording);
     refreshExperimentWorkspace(recording);
   }
