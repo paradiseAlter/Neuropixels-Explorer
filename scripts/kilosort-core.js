@@ -30,6 +30,8 @@
     "spike_positions.npy": "spike_positions",
     "spike_templates.npy": "spike_templates",
     "templates.npy": "templates",
+    "templates_ind.npy": "template_indices",
+    "channel_map.npy": "channel_map",
     "channel_positions.npy": "channel_positions",
     "channel_shanks.npy": "channel_probe_groups",
     "channel_geometry.csv": "channel_geometry"
@@ -609,6 +611,62 @@
     };
   }
 
+  function buildTemplateFootprint(buffers, sampleRate, clusterId) {
+    const result = { status: "missing_templates", channels: [], amplitudeUnit: "stored", scope: "recording_template", source: "templates.npy", templateId: null };
+    const fail = status => ({ ...result, status });
+    if (!buffers.templates || !buffers.spikeTemplates) return result;
+    const read = key => {
+      if (!buffers[key]) return null;
+      const array = parseNpyArrayBuffer(buffers[key]);
+      if (!array.header.fortranOrder || array.header.shape.length < 2) return array;
+      return { ...array, valueAt(index) {
+        const shape = array.header.shape; let physical = 0, stride = 1;
+        for (let axis = 0; axis < shape.length; axis++) {
+          const trailing = shape.slice(axis+1).reduce((a,b) => a*b,1);
+          physical += Math.floor(index/trailing)%shape[axis]*stride; stride *= shape[axis];
+        }
+        return array.valueAt(physical);
+      }};
+    };
+    const templates = read("templates"), assignments = read("spikeTemplates"), clusters = read("spikeClusters");
+    if (!clusters || assignments.header.count !== clusters.header.count) return fail("invalid_assignments");
+    const counts = new Map(); let total = 0;
+    for (let i = 0; i < clusters.header.count; i++) {
+      if (clusters.valueAt(i) !== Number(clusterId)) continue;
+      const id = assignments.valueAt(i);
+      if (!Number.isInteger(id) || id < 0 || id >= templates.header.shape[0]) return fail("invalid_assignments");
+      counts.set(id, (counts.get(id) || 0) + 1); total++;
+    }
+    if (!total) return fail("no_spikes");
+    if (templates.header.shape.length !== 3) return fail("invalid_assignments");
+    const [templateId, count] = [...counts].sort((a,b) => b[1]-a[1] || a[0]-b[0])[0];
+    const [, samples, channelCount] = templates.header.shape;
+    const positions = read("channelPositions"), indices = read("templateIndices"), map = read("channelMap"), shanks = read("channelShanks");
+    if (!positions) return fail("missing_geometry");
+    if (positions.header.shape.length !== 2 || positions.header.shape[0] !== channelCount || positions.header.shape[1] < 2 || samples < 2 || channelCount < 1 || samples * channelCount > 2000000) return fail("unsupported_layout");
+    if (indices && (indices.header.shape.length !== 2 || indices.header.shape[0] !== templates.header.shape[0] || indices.header.shape[1] !== channelCount)) return fail("unsupported_layout");
+    if (map && map.header.count !== channelCount) return fail("invalid_channel_map");
+    if (!(Number.isFinite(sampleRate) && sampleRate > 0)) return fail("invalid_values");
+    const channels = [], channelIds = new Set(); let peakChannelIndex = 0, peak = -1;
+    const finite = n => Number.isFinite(n) ? n : null;
+    for (let c = 0; c < channelCount; c++) {
+      if (indices && indices.valueAt(templateId * channelCount + c) !== c) return fail("unsupported_layout");
+      const channelId = map ? map.valueAt(c) : null;
+      if (map && (!Number.isInteger(channelId) || channelId < 0 || channelIds.has(channelId))) return fail("invalid_channel_map");
+      channelIds.add(channelId);
+      const waveform = []; let min = Infinity, max = -Infinity;
+      for (let s = 0; s < samples; s++) {
+        const v = templates.valueAt((templateId * samples + s) * channelCount + c);
+        if (!Number.isFinite(v)) return fail("invalid_values");
+        waveform.push(v); min = Math.min(min, v); max = Math.max(max, v);
+      }
+      if (max-min > peak) { peak = max-min; peakChannelIndex = c; }
+      const shank = shanks && c < shanks.header.count ? shanks.valueAt(c) : null;
+      channels.push({ index: c, channelId, xUm: finite(positions.valueAt(c * positions.header.shape[1])), depthUm: finite(positions.valueAt(c * positions.header.shape[1]+1)), shankId: Number.isInteger(shank) && shank >= 0 ? shank : null, peakToPeak: max-min, waveform });
+    }
+    return { ...result, status: "available", templateId, templateCount: counts.size, templateSpikeCount: count, unitSpikeCount: total, sampleRate, sampleCount: samples, peakChannelIndex, channels };
+  }
+
   function analyzeUnitBuffers(buffers, sampleRate, clusterId) {
     const times = parseNpyArrayBuffer(buffers.spikeTimes);
     const clusters = parseNpyArrayBuffer(buffers.spikeClusters);
@@ -812,6 +870,7 @@
       meanX: mean(selectedXs),
       templateId,
       templateWaveform,
+      templateFootprint: buildTemplateFootprint(buffers, sampleRate, clusterId),
       peakChannel,
       peakChannelPosition,
       shankId,
@@ -827,6 +886,7 @@
     return `
       "use strict";
       const parseNpyHeaderBuffer = ${parseNpyHeaderBuffer.toString()};
+      const buildTemplateFootprint = ${buildTemplateFootprint.toString()};
       const scalarFromDataView = ${scalarFromDataView.toString()};
       const typedData = ${typedData.toString()};
       const parseNpyArrayBuffer = ${parseNpyArrayBuffer.toString()};
@@ -970,6 +1030,7 @@
     buildActivityPyramidBuffers,
     selectActivityPyramidLevel,
     analyzeUnitBuffers,
+    buildTemplateFootprint,
     createWorkerSource
   };
 });

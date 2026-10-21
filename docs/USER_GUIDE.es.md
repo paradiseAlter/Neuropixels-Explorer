@@ -197,3 +197,10 @@ los esquemas. **Guardar proyecto** exporta esquemas y resultados originales;
 El navegador guarda borradores locales; descarga el proyecto como respaldo
 portátil. Los vídeos sin calibrar siguen indicándose como no verificados.
 Los datos de origen no se modifican.
+
+## Inspeccionar ambas distribuciones de Sonda
+
+Selecciona un segmento conductual o un intervalo neural y abre **Interval distribution** para ver conteos y Hz. Selecciona una Unidad en la vista neural, Sonda o lista y abre **Distribución de plantilla / Unit template distribution**. Ambas secciones pueden permanecer abiertas; desplázate en la barra lateral.
+Los círculos muestran posiciones de canales y su tamaño indica amplitud pico a pico almacenada. Elige un canal para ver su forma de onda con una escala de amplitud común. La lista completa conserva índices, identificadores de adquisición disponibles, coordenadas y amplitudes.
+Es la plantilla dominante del registro completo, con la fracción de spikes asignados. No cambia con el intervalo ni representa una forma de onda medida en ese segmento. Los valores no están desblanqueados ni calibrados en µV.
+Cambiar de Unidad conserva las estadísticas del intervalo. Si faltan plantillas o el mapa no es compatible, se indica el motivo. Los registros Allen sin plantillas multicanal conservan las estadísticas de actividad.

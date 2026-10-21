@@ -37,6 +37,7 @@ from .migrations import SCHEMA_VERSION, validate_schema
 from .paths import RuntimePaths
 from .local_projects import LocalProjects
 from .interval_activity import IntervalActivityIndex
+from .template_footprint import template_footprint
 
 
 SERVICE_VERSION = __version__
@@ -490,7 +491,7 @@ class CatalogService:
         arrays: dict[str, np.ndarray] = {}
         for role in (
             "spike_times", "spike_clusters", "spike_amplitudes", "spike_positions",
-            "spike_templates", "templates", "channel_positions",
+            "spike_templates", "templates", "channel_positions", "template_indices", "channel_map", "channel_probe_groups",
         ):
             path = asset_paths.get(role)
             if path:
@@ -534,7 +535,9 @@ class CatalogService:
         selected_groups = self._asset_paths(recording_id).get("channel_probe_groups")
         if selected_groups:
             groups = np.load(selected_groups, allow_pickle=False).reshape(-1)
-            if groups.size != channel_count or groups.dtype.kind not in "iu":
+            if (groups.size != channel_count or groups.dtype.kind not in "fiu"
+                    or not np.all(np.isfinite(groups)) or not np.all(groups == np.floor(groups))
+                    or np.any(groups < -1) or np.any(groups > np.iinfo(np.int16).max)):
                 raise ValueError("Channel shank assignments must be integer IDs matching channel positions")
             return groups.astype(np.int16)
         result = np.full(max(0, channel_count), -1, dtype=np.int16)
@@ -763,6 +766,7 @@ class CatalogService:
             "meanX": mean_x,
             "templateId": template_id,
             "templateWaveform": template_waveform.astype(float).tolist(),
+            "templateFootprint": template_footprint(arrays, cluster_id, float(unit["sample_rate_hz"])),
             "peakChannel": peak_channel,
             "peakChannelPosition": peak_position,
             "shankId": physical_probe_id,

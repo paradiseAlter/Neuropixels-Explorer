@@ -556,6 +556,7 @@
     if (!elements.helpDrawer.hidden) renderHelpContent();
     if (activeHelpControl) showContextHelp(activeHelpControl);
     if (state.recordings.length) {
+      elements.datasetTitle.textContent = state.rootName;
       renderSummary();
       renderRecordings();
       renderUnitList();
@@ -570,6 +571,7 @@
       renderDialog();
       renderExperimentHeader();
       renderFindUnitResults();
+      renderActivityStatus();
     } else {
       elements.datasetTitle.textContent = t("app.noFolder");
       clearFocusedDetails();
@@ -925,7 +927,9 @@
   }
 
   function renderExperimentHeader() {
-    miniProbe?.update(state.activeActivityOverview, state.experimentView, state.activeRecording);
+    const selectedReview = state.activeRecording && state.experimentView.selectedUnitId != null
+      ? state.openUnits.get(viewKey(state.activeRecording, state.experimentView.selectedUnitId))?.result : null;
+    miniProbe?.update(state.activeActivityOverview, state.experimentView, state.activeRecording, selectedReview);
     projectUI?.syncVideo();
     annotationController?.update();
     const recording = state.activeRecording;
@@ -1034,7 +1038,7 @@
     if (!query) return true;
     const normalized = String(query).trim().toLowerCase();
     const shank = unit.shankId != null && Number.isFinite(Number(unit.shankId)) ? `shank ${Number(unit.shankId) + 1}` : "";
-    return [unit.id, unit.region, unit.quality, shank].some((value) => String(value || "").toLowerCase().includes(normalized));
+    return [unit.id, unit.region, unit.quality, shank].some((value) => String(value ?? "").toLowerCase().includes(normalized));
   }
 
   function renderFindUnitResults() {
@@ -1269,6 +1273,8 @@
       spikePositions: names.get("spike_positions.npy") || null,
       spikeTemplates: names.get("spike_templates.npy") || null,
       templates: names.get("templates.npy") || null,
+      templateIndices: names.get("templates_ind.npy") || null,
+      channelMap: names.get("channel_map.npy") || null,
       channelPositions: names.get("channel_positions.npy") || null,
       channelShanks: names.get("channel_shanks.npy") || null
     };

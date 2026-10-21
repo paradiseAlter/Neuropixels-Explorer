@@ -3,6 +3,20 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.5.0-beta.1] - 2026-10-21
+
+- Keep interval activity and Unit template distribution independently open in the
+  linked neural/video/Probe workspace. Dense Kilosort templates expose per-channel
+  stored peak-to-peak amplitude, measured positions, channel IDs and selectable
+  common-scale waveforms with dominant-template provenance and explicit missing states.
+- Preserve interval selection and statistics across Unit/channel changes. Interval
+  chart points select Units, while template channels remain local to the template view.
+- Restore real recordings with integer-valued floating-point shank IDs; reject invalid
+  IDs without modifying source files. Find Unit now correctly matches Unit 0.
+- Templates remain whole-recording stored values, not interval waveforms or calibrated
+  microvolts. Browser workflow checks use real spikes/templates and synthetic video;
+  scientific interpretation and user layout acceptance remain separate.
+
 ## [4.4.0-beta.1] - 2026-09-26
 
 - Select saved behavior intervals directly from the neural plot's aligned strip,

@@ -202,3 +202,10 @@ Changing shared video boundaries makes affected clips need review in all schemes
 the current scheme, mapped times and synchronization status. Browser drafts are
 saved locally, but a downloaded project is the portable backup. Unsynchronized
 videos remain visibly unverified. The original data is never edited.
+
+## Inspect both Probe distributions
+
+Select a behavior clip or drag a neural interval, then open **Interval distribution** for exact counts and Hz. Select a Unit in the neural view, Probe or rate list and open **Unit template distribution**. Both sections can stay open; scroll within the Probe sidebar.
+Template markers show channel positions, sized by stored peak-to-peak amplitude. Click a channel or use the channel selector to inspect its waveform on a common amplitude scale. The full channel list retains row indices, available acquisition channel IDs, coordinates and amplitudes.
+This is the whole-recording dominant template with its spike count/fraction, independent of the selected interval. It is not a waveform measured within that interval. Amplitudes are stored values, without unwhitening or calibration in µV.
+Changing Units preserves interval statistics. Missing templates or unsupported channel layouts show a reason. Allen recordings without multichannel templates still support interval activity.

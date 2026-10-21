@@ -260,6 +260,17 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.interval_activity("rec_01", 1000, 1001)
 
+    def test_float_encoded_shanks_preserve_integer_identity(self) -> None:
+        from unittest.mock import patch
+        path = self.root / "shanks.npy"
+        with patch.object(self.service, "_asset_paths", return_value={"channel_probe_groups": path}):
+            np.save(path, np.array([0., 3.], dtype=np.float32))
+            np.testing.assert_equal(self.service._channel_probe_ids("rec_01", 2), [0, 3])
+            for values in ([0., .5], [0., np.nan], [0., 32768], [-2., 0.]):
+                np.save(path, np.array(values))
+                with self.assertRaises(ValueError):
+                    self.service._channel_probe_ids("rec_01", 2)
+
     def test_catalog_and_review_match_the_frontend_contract(self) -> None:
         catalog = self.service.catalog()
         self.assertEqual(catalog["dataset"]["dataset_id"], "fixture")
@@ -277,6 +288,10 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(review["physicalProbeId"], 0)
         self.assertEqual(review["channelShankIds"], review["channelProbeIds"])
         self.assertEqual(len(review["templateWaveform"]), 3)
+        footprint = review["templateFootprint"]
+        self.assertEqual(footprint["status"], "available")
+        self.assertEqual([c["peakToPeak"] for c in footprint["channels"]], [4, 1])
+        self.assertEqual(footprint["templateSpikeCount"], 3)
         self.assertFalse(review["server"]["unitCacheHit"])
         self.assertTrue(self.service.unit_review("rec_01_unit_0007")["server"]["unitCacheHit"])
 
