@@ -3,6 +3,17 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.8.0-beta.1] - 2026-10-23
+
+- Build one standalone HTML with embedded scripts, styles and HDF5/WASM. Read
+  Kilosort folders and Allen ecephys NWB physical probes entirely in the browser.
+- Cache data, optional video, alignment and isolated annotation drafts in
+  IndexedDB. Export/import complete `.neuroproject` packages for portable recovery;
+  retain the service's reference-based JSON format.
+- Calculate exact interval spike counts in the browser Worker; show both Probe
+  distributions, with explicit missing-template results for Allen.
+- Check an imported Allen clock against the neural session and video SHA-256.
+
 ## [4.7.0-beta.1] - 2026-10-22
 
 - Open directly into the neural, Probe, video and annotation workspace. Empty

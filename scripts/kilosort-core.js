@@ -882,6 +882,22 @@
     };
   }
 
+  function intervalActivityBuffers(buffers, sampleRate, start, end, duration) {
+    const times = parseNpyArrayBuffer(buffers.spikeTimes);
+    const clusters = parseNpyArrayBuffer(buffers.spikeClusters);
+    if (!(sampleRate > 0) || !Number.isFinite(start) || !Number.isFinite(end) || end <= start || times.header.count !== clusters.header.count) throw new Error("Invalid interval or spike arrays");
+    const covered = { start: Math.max(0, start), end: Math.min(Number(duration), end) };
+    const seconds = Math.max(0, covered.end - covered.start);
+    if (!seconds) throw new Error("Selected interval is outside the recording");
+    const counts = new Map();
+    for (let i = 0; i < times.header.count; i++) {
+      const id = clusters.valueAt(i), t = times.valueAt(i) / sampleRate;
+      if (!counts.has(id)) counts.set(id, 0);
+      if (t >= covered.start && t < covered.end) counts.set(id, counts.get(id) + 1);
+    }
+    return { covered, duration: seconds, units: [...counts].map(([id, spikeCount]) => ({ id, spikeCount, rateHz: spikeCount / seconds })) };
+  }
+
   function createWorkerSource() {
     return `
       "use strict";
@@ -899,6 +915,7 @@
       const buildActivityPyramidBuffers = ${buildActivityPyramidBuffers.toString()};
       const selectActivityPyramidLevel = ${selectActivityPyramidLevel.toString()};
       const analyzeUnitBuffers = ${analyzeUnitBuffers.toString()};
+      const intervalActivityBuffers = ${intervalActivityBuffers.toString()};
       const cache = new Map();
       const MAX_RESIDENT = 2;
 
@@ -987,6 +1004,10 @@
             return;
           }
           const entry = await loadEntry(message);
+          if (message.type === "interval-activity") {
+            self.postMessage({ type: "interval-result", requestId: message.requestId, ...intervalActivityBuffers(entry.buffers, message.sampleRate, message.start, message.end, message.duration) });
+            return;
+          }
           if (message.type !== "inspect-unit") return;
           const result = analyzeUnitBuffers(entry.buffers, Number(message.sampleRate), Number(message.clusterId));
           const residentExperiments = [...cache.keys()];
@@ -1004,6 +1025,7 @@
     REQUIRED,
     LABEL_FILES,
     USEFUL_NAMES,
+    intervalActivityBuffers,
     pathOf,
     fileNameOf,
     roleForFile,

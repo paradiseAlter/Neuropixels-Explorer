@@ -176,7 +176,7 @@
       panel.hidden = !this.expanded; button.setAttribute("aria-expanded", String(!!this.expanded));
       button.textContent = this.expanded ? "Close distribution" : "Interval distribution";
       const range = this.view?.selectedInterval;
-      const dataKey = JSON.stringify([this.recording?.databaseId, range?.start, range?.end]);
+      const dataKey = JSON.stringify([this.recording?.databaseId || this.recording?.key, this.recording?.dataVersion, range?.start, range?.end]);
       const key = JSON.stringify([dataKey, this.expanded]);
       if (key === this.intervalKey) return;
       const map = this.host.querySelector(".probe-position-map");
@@ -191,16 +191,20 @@
       list.replaceChildren();
       panel.querySelector("[data-distribution]").hidden = true;
       if (!range) { status.textContent = "Select a labeled clip or drag a time interval on the signals."; return; }
-      if (!this.recording?.databaseId) { status.textContent = "Open this recording as a local project to calculate exact interval rates."; return; }
+      if (!this.recording?.databaseId && !this.intervalReader) { status.textContent = "Load a recording to calculate interval rates."; return; }
       if (this.result && this.resultKey === dataKey) { this.renderDistribution(); return; }
       this.result = null; this.resultKey = null;
       status.textContent = "Calculating interval rates… First use prepares a reusable time index.";
       this.intervalTimer = setTimeout(async () => {
         const abort = new AbortController(); this.intervalAbort = abort;
         try {
-          const response = await fetch(`/api/recordings/${encodeURIComponent(this.recording.databaseId)}/interval-activity?start=${range.start}&end=${range.end}`, { signal: abort.signal });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.message || result.error || "Interval calculation failed");
+          let result;
+          if (!this.recording.databaseId && this.intervalReader) result = await this.intervalReader(this.recording, range, abort.signal);
+          else {
+            const response = await fetch(`/api/recordings/${encodeURIComponent(this.recording.databaseId)}/interval-activity?start=${range.start}&end=${range.end}`, { signal: abort.signal });
+            result = await response.json();
+            if (!response.ok) throw new Error(result.message || result.error || "Interval calculation failed");
+          }
           if (key !== this.intervalKey) return;
           this.result = result; this.resultKey = dataKey;
           this.renderDistribution();

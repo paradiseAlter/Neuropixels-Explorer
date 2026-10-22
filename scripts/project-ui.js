@@ -106,7 +106,7 @@
       for(const id of ["replace-video","choose-local-video"]) {
         document.getElementById(id).addEventListener("click",e=>{
           if(!state.activeRecording) { e.stopImmediatePropagation(); this.action("new"); }
-          else if(this.available && state.dataMode==="database") { e.stopImmediatePropagation(); this.action("video"); }
+          else if(this.available && (state.dataMode==="database" || this.browserLocal)) { e.stopImmediatePropagation(); this.action("video"); }
           else if(id==="replace-video") document.getElementById("video-file-input").click();
         },true);
       }

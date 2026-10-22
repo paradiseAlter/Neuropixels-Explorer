@@ -440,7 +440,8 @@
   miniProbe = new window.NeuropixelsMiniProbe(document.getElementById("mini-probe"), selectActivityUnit, (region) => {
     setExperimentView({ selectedRegion: region, selectedShank: null, selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, groupFocusPath: [] });
   });
-  projectUI = new window.NeuropixelsProjectUI({state, video:videoController, annotations:annotationController,
+  miniProbe.intervalReader = (recording, range, signal) => requestWorker({ type: "interval-activity", experimentKey: `${state.datasetToken}:${recording.key}:${Number(recording.dataVersion || 0)}`, files: workerFiles(recording), sampleRate: recording.sampleRate, duration: recording.duration, ...range }, { signal });
+  projectUI = new (window.NeuropixelsBrowserProjectUI || window.NeuropixelsProjectUI)({state, video:videoController, annotations:annotationController, openFiles,
     onVideoExpand: (enabled = !state.videoEnlarged) => setVideoEmphasis("video", enabled),
     openCatalog:openDatabaseCatalog, home:()=>showOnly("explorer"), resume:()=>showOnly("explorer"),
     toast:showToast, folderFallback:openPicker});
@@ -897,7 +898,7 @@
         id,
         count: Number(result.unitCounts?.[sourceIndex] || 0),
         rateHz: Number(result.unitRateHz?.[sourceIndex] || 0),
-        x: nullableNumber(result.unitX?.[sourceIndex]),
+        x: nullableNumber(catalog?.x_um) ?? nullableNumber(result.unitX?.[sourceIndex]),
         depthUm,
         shankId,
         region: region?.region || catalog?.brain_region || t("units.unmapped"),
@@ -1233,6 +1234,7 @@
       for (const [key, file] of Object.entries(message.files || {})) {
         if (file) buffers[key] = await file.arrayBuffer();
       }
+      if (message.type === "interval-activity") return core.intervalActivityBuffers(buffers, message.sampleRate, message.start, message.end, message.duration);
       if (message.type === "activity-overview") {
         onProgress?.({ phase: "reading", progress: 18, status: "running" });
         const pyramid = core.buildActivityPyramidBuffers(buffers, message.sampleRate, message.sourceFingerprint);
@@ -1828,7 +1830,12 @@
     elements.loadingProgress.style.width = "34%";
     let completed = 0;
     const indexedPromise = Promise.allSettled(groups.map(async (group) => {
-      try { return await core.indexExperiment(group); }
+      try {
+        const recording = await core.indexExperiment(group);
+        const metadata = group.byName.get("explorer-units.json");
+        if (metadata) { const info = JSON.parse(await metadata.text()); recording.units = info.units; recording.sourceSession = info.session; }
+        return recording;
+      }
       finally {
         completed += 1;
         elements.loadingProgress.style.width = `${34 + completed / groups.length * 46}%`;
@@ -2297,7 +2304,11 @@
     elements.dropOverlay.hidden = true;
     elements.dropZone.classList.remove("is-dragging");
     showLoading(t("loading.readingFolder"), t("loading.collectingFiles"), 8);
-    try { await openFiles(await filesFromDrop(event.dataTransfer)); }
+    try {
+      const files = await filesFromDrop(event.dataTransfer);
+      if (projectUI?.browserLocal) await projectUI.importFolder(files);
+      else await openFiles(files);
+    }
     catch (error) {
       showOnly("explorer");
       showToast(t("toast.droppedError", { error: error.message }));
@@ -2317,7 +2328,7 @@
 
   async function initialize() {
     const databaseRequested = new URLSearchParams(window.location.search).get("database") === "1";
-    if (databaseRequested && ["http:", "https:"].includes(window.location.protocol)) {
+    if (!window.NeuropixelsBrowserProjectUI && databaseRequested && ["http:", "https:"].includes(window.location.protocol)) {
       try {
         await openDatabaseCatalog();
         return;

@@ -4,7 +4,7 @@ A local application for exploring processed neural spikes alongside behavior
 video. The main workspace links time, neural activity, individual Units, 2D Probe
 positions, original brain-region labels, and laboratory-defined behavior labels.
 
-The current prerelease is **v4.1.2-beta.1**. Previous releases remain available as
+The current prerelease is **v4.8.0-beta.1**. Previous releases remain available as
 Git tags. The source uses the [MIT license](LICENSE); datasets, videos, and model
 weights retain their own licenses and are not included in this repository.
 
@@ -12,6 +12,19 @@ In this version, **Annotate** opens the large-video workspace; **Signals / Esc**
 returns to the neural view. Playback starts at **0.25×**; enter a custom speed or
 video time and press Enter. **Interval distribution** expands the Probe view for
 the selected clip or neural interval. [Changes and validation](docs/mentor-workspace-4.1.md).
+
+## Standalone browser edition (4.8.0-beta.1)
+
+Build with `node scripts/build-standalone.cjs` and open the generated
+`dist/Neuropixels-Explorer.html` in a desktop browser. Scripts, styles and the
+Allen NWB reader are embedded; no Python API or CDN is required. Create a
+project from a Kilosort folder or Allen ecephys NWB physical probe, then link
+matching video and its frame clock. Projects, data and annotations are cached
+in IndexedDB. Save project exports a complete `.neuroproject` package for
+recovery or another browser. Keep this package before clearing browser data.
+The local HTML is the offline entry; a hosted URL has no service worker.
+The local service and its reference-based `.neuroproject.json` files remain
+available. The following service instructions concern that optional mode.
 
 ## Start on Windows
 

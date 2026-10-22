@@ -162,3 +162,25 @@
 #open-menu { max-width:min(420px,90vw); max-height:75vh; overflow:auto; }
 #open-menu button span { display:block; color:var(--muted); font-size:10px; margin-top:4px; overflow-wrap:anywhere; }
 .project-menu-heading { border-top:1px solid var(--line); padding:12px 12px 3px; font-size:10px; color:var(--muted); }
+
+/* Both distributions remain visible, with independently scrollable scientific detail. */
+.activity-canvas-frame:has(.probe-interval:not([hidden])):has(.probe-template:not([hidden])) { grid-template-columns:min(420px, 46%) minmax(0, 1fr); }
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) {
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:auto auto minmax(0,1fr); gap:5px; overflow:hidden;
+}
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) > header { grid-column:1 / -1; }
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) > .probe-interval-toggle { grid-column:1; grid-row:2; }
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) > .probe-template-toggle { grid-column:2; grid-row:2; }
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) > section {
+  grid-row:3; min-width:0; min-height:0; overflow:auto; margin:0;
+  border:1px solid var(--line); padding:6px; border-radius:4px;
+}
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) > .probe-interval { grid-column:1; }
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) > .probe-template { grid-column:2; }
+.mini-probe:has(.probe-template:not([hidden])):has(.probe-interval:not([hidden])) > :is(svg, .mini-probe-selection, .mini-probe-regions, small, details) { display:none; }
+.mini-probe:has(.probe-template:not([hidden])) .probe-interval .probe-plot-pair { display:block; }
+.mini-probe:has(.probe-template:not([hidden])) .probe-interval .probe-position-map { display:none; }
+.mini-probe:has(.probe-template:not([hidden])) .probe-interval .interval-distribution-chart { height:210px; width:100%; }
+.mini-probe:has(.probe-interval:not([hidden])) .template-position-map { height:155px; }
+.mini-probe:has(.probe-interval:not([hidden])) .template-waveform { height:110px; }

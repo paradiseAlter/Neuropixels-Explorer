@@ -1,5 +1,15 @@
 # Third-party methods and evaluation material
 
+## Bundled browser NWB reader
+
+The standalone HTML embeds h5wasm 0.10.3 from the official npm package,
+including its embedded HDF5 WebAssembly runtime. Source:
+https://github.com/usnistgov/h5wasm . The complete distributed notice is
+preserved in `vendor/h5wasm/LICENSE.txt` and embedded in the generated HTML.
+The npm tarball SHA-1 is `fd58a1cdcbc27d21bf639d65d00fce9948238141`.
+No research recordings or videos are included in the application HTML.
+
+
 Checked for the annotation beta on 2026-09-08. The repository itself is MIT
 licensed. A repository's public availability does not replace its license.
 No third-party model weights, software source trees or experimental videos are
