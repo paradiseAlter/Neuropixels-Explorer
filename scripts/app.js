@@ -26,12 +26,10 @@
     shell: document.getElementById("app-shell"),
     datasetTitle: document.getElementById("dataset-title"),
     openFolder: document.getElementById("open-folder-button"),
-    emptyOpen: document.getElementById("empty-open-button"),
     folderInput: document.getElementById("folder-input"),
     supplementFileInput: document.getElementById("supplement-file-input"),
     supplementFolderInput: document.getElementById("supplement-folder-input"),
-    emptyView: document.getElementById("empty-view"),
-    dropZone: document.getElementById("drop-zone"),
+    dropZone: document.getElementById("explorer-view"),
     loadingView: document.getElementById("loading-view"),
     loadingProgress: document.getElementById("loading-progress"),
     loadingTitle: document.getElementById("loading-title"),
@@ -444,7 +442,7 @@
   });
   projectUI = new window.NeuropixelsProjectUI({state, video:videoController, annotations:annotationController,
     onVideoExpand: (enabled = !state.videoEnlarged) => setVideoEmphasis("video", enabled),
-    openCatalog:openDatabaseCatalog, home:()=>showOnly("empty"), resume:()=>showOnly("explorer"),
+    openCatalog:openDatabaseCatalog, home:()=>showOnly("explorer"), resume:()=>showOnly("explorer"),
     toast:showToast, folderFallback:openPicker});
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -838,9 +836,9 @@
   }
 
   function showOnly(target) {
-    elements.emptyView.hidden = target !== "empty";
     elements.loadingView.hidden = target !== "loading";
-    elements.explorerView.hidden = target !== "explorer";
+    elements.explorerView.hidden = target === "loading";
+    projectUI?.renderEmptyWorkspace();
   }
 
   function showLoading(title, message, progress = 12) {
@@ -937,6 +935,7 @@
       elements.experimentRecordingName.textContent = "—";
       elements.experimentFacts.replaceChildren();
       elements.experimentTime.textContent = "0.000 s";
+      projectUI?.renderEmptyWorkspace();
       return;
     }
     const overview = state.activeActivityOverview;
@@ -1820,9 +1819,8 @@
 
     const groups = core.groupExperimentFiles(selectedFiles);
     if (!groups.length) {
-      showOnly("empty");
-      elements.dropZone.querySelector("p").textContent = t("loading.noRequiredFiles");
-      showToast(t("toast.noRecordings"));
+      showOnly("explorer");
+      showToast(t("loading.noRequiredFiles"));
       return;
     }
 
@@ -1847,9 +1845,8 @@
     state.regionResult = regionResult;
 
     if (!state.recordings.length) {
-      showOnly("empty");
-      elements.dropZone.querySelector("p").textContent = t("loading.nonePassed");
-      showToast(t("toast.couldNotIndex"));
+      showOnly("explorer");
+      showToast(t("loading.nonePassed"));
       return;
     }
 
@@ -2063,7 +2060,6 @@
     elements.folderInput.click();
   }
 
-  elements.emptyOpen.addEventListener("click", openPicker);
   elements.themeSelect.value = themeSnapshot.preference;
   elements.themeSelect.addEventListener("change", () => themeController.setPreference(elements.themeSelect.value));
   themeController.onChange(applyThemeSnapshot, false);
@@ -2079,8 +2075,6 @@
     setDataStatusOpen(false);
     elements.dataStatusButton.focus({ preventScroll: true });
   });
-  elements.dropZone.addEventListener("click", (event) => { if (event.target === elements.dropZone || event.target.closest(".folder-mark")) openPicker(); });
-  elements.dropZone.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); openPicker(); } });
   elements.folderInput.addEventListener("change", () => openFiles(elements.folderInput.files));
   elements.supplementFileInput.addEventListener("change", () => handleSupplementSelection(elements.supplementFileInput));
   elements.supplementFolderInput.addEventListener("change", () => handleSupplementSelection(elements.supplementFolderInput));
@@ -2305,7 +2299,7 @@
     showLoading(t("loading.readingFolder"), t("loading.collectingFiles"), 8);
     try { await openFiles(await filesFromDrop(event.dataTransfer)); }
     catch (error) {
-      showOnly("empty");
+      showOnly("explorer");
       showToast(t("toast.droppedError", { error: error.message }));
     }
   });
@@ -2328,11 +2322,11 @@
         await openDatabaseCatalog();
         return;
       } catch (error) {
-        showOnly("empty");
+        showOnly("explorer");
         showToast(t("toast.databaseUnavailable", { error: error.message }));
       }
     }
-    showOnly("empty");
+    showOnly("explorer");
   }
 
   applyLanguageSnapshot(languageSnapshot);

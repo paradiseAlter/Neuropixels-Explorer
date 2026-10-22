@@ -57,7 +57,19 @@
     launch:["For NWB and saved projects, start the app with Start-Explorer.cmd.","请双击 Start-Explorer.cmd 启动，以使用 NWB 导入和项目自动保存。","Inicia con Start-Explorer.cmd para importar NWB y guardar proyectos."],
     nearby:["Video found nearby","发现同目录视频","Vídeo encontrado"], later:["Add video later","稍后添加视频","Añadir vídeo después"],
     nearbyHelp:["Choose the matching view. You can align its time after linking it.","选择与这条记录对应的视频，关联后可对齐时间。","Elige el vídeo correspondiente. Puedes alinear su tiempo después."],
-    home:["Start screen","开始界面","Inicio"], return:["Return to recording","返回当前记录","Volver al registro"],
+    home:["Workspace","工作区","Espacio de trabajo"], return:["Return to recording","返回当前记录","Volver al registro"],
+    emptyTitle:["Neural activity workspace","神经活动工作区","Espacio de actividad neural"],
+    emptyHint:["Create or open a project to explore a recording here.","新建或打开项目，在这里浏览神经记录。","Crea o abre un proyecto para explorar un registro aquí."],
+    emptyActivity:["Overview → group → Unit · select time and compare spikes","全记录 → 分组 → Unit · 选择时间区间，比较放电","Registro → grupo → Unit · selecciona tiempo y compara disparos"],
+    emptyProbe:["Probe positions and regions","探针位置与脑区","Posiciones y regiones de la sonda"],
+    emptyInterval:["Interval distribution · firing rate (Hz)","区间分布 · 发放率（Hz）","Distribución del intervalo · tasa (Hz)"],
+    emptyTemplate:["Unit template · channel amplitude","Unit 模板 · 各通道振幅","Plantilla Unit · amplitud por canal"],
+    emptyProbeHint:["Load neural data to match coordinates and templates.","导入神经数据后匹配坐标与模板。","Importa datos para vincular coordenadas y plantillas."],
+    emptyAnnotation:["Behavior annotation","行为标注","Anotación conductual"],
+    emptyAnnotationHint:["Link video to select intervals, assign labels, review candidates and compare annotation schemes.","关联视频后，可选择区间、添加标签、复核候选片段和比较标注方案。","Vincula vídeo para seleccionar intervalos, etiquetar, revisar candidatos y comparar esquemas."],
+    emptyUnit:["Unit inspection & comparison","Unit 检查与比较","Inspección y comparación de Units"],
+    emptyUnitHint:["Select a Unit for raster, rate and template views; pin Units to compare on a shared time axis.","选择 Unit 查看点阵、发放率和模板；固定多个 Unit，在共同时间轴上比较。","Selecciona una Unit para ver raster, tasa y plantilla; fija Units para compararlas."],
+    emptyVideo:["Behavior video · optional","行为视频 · 可选","Vídeo conductual · opcional"],
     enlarge:["Enlarge video","放大视频","Ampliar vídeo"],
     restore:["Restore layout","还原布局","Restaurar diseño"],
     manual:["Match a known event","对齐一个已知事件","Alinear un evento conocido"],
@@ -77,6 +89,8 @@
       this.projects=[]; this.available=false;
       this.dialog=document.createElement("dialog"); this.dialog.className="project-dialog"; this.dialog.id="project-dialog";
       document.body.append(this.dialog);
+      this.annotationEmpty=document.createElement("section");this.annotationEmpty.className="workspace-annotation-empty";
+      document.querySelector(".video-sync-body").append(this.annotationEmpty);
       this.dialog.addEventListener("click",e=>{ if(e.target.closest("[data-close-project]")) this.dialog.close(); });
       this.menu=document.getElementById("open-menu");
       this.saveButton=document.createElement("button");this.saveButton.type="button";this.saveButton.id="save-project-button";this.saveButton.dataset.projectAction="save-project";
@@ -88,10 +102,11 @@
         if(action) { this.toggleMenu(false); this.action(action,e.target.closest("[data-project-action]")); }
         if(!e.target.closest(".open-control")) this.toggleMenu(false);
       });
-      document.addEventListener("keydown",e=>{if(e.key==="Escape")this.toggleMenu(false);});
+      document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!this.menu.hidden){this.toggleMenu(false);document.getElementById("open-folder-button").focus();}});
       for(const id of ["replace-video","choose-local-video"]) {
         document.getElementById(id).addEventListener("click",e=>{
-          if(this.available && state.dataMode==="database") { e.stopImmediatePropagation(); this.action("video"); }
+          if(!state.activeRecording) { e.stopImmediatePropagation(); this.action("new"); }
+          else if(this.available && state.dataMode==="database") { e.stopImmediatePropagation(); this.action("video"); }
           else if(id==="replace-video") document.getElementById("video-file-input").click();
         },true);
       }
@@ -122,17 +137,17 @@
     render() {
       const button=(key,action,sub="")=>`<button type="button" data-project-action="${action}"><strong>${esc(tr(key))}</strong>${sub?`<span>${esc(tr(sub))}</span>`:""}</button>`;
       document.getElementById("open-folder-button").textContent=tr("open");
-      this.saveButton.textContent=tr("saveProject");this.saveButton.hidden=!this.state.activeRecording;
+      this.saveButton.textContent=tr("saveProject");this.saveButton.disabled=!this.state.activeRecording;
       const status=document.getElementById("data-status-summary");
       if(this.active){status.removeAttribute("data-i18n");status.textContent=tr("inspect");}
       document.getElementById("home-button").title=tr("home");
-      this.menu.innerHTML=button("newProject","new")+button("openProject","open-project")+button("home","home")+(this.state.activeRecording?button("inspect","inspect")+button("addVideo","video")+button("saveProject","save-project")+button("saveAs","save-as"):"");
-      document.getElementById("start-content").innerHTML=`<div class="start-kicker">NEUROPIXELS EXPLORER</div><h1>${esc(tr("title"))}</h1><p>${esc(tr("intro"))}</p><div class="start-actions">${button("newProject","new","newHelp")}${button("openProject","open-project","openHelp")}</div><p class="start-note">${esc(tr(this.available?"saveHelp":"launch"))}</p><div class="recent-projects"><h2>${esc(tr("recent"))}</h2>${this.state.activeRecording?button("return","return"):""}${this.projects.slice(0,6).map(p=>`<button data-project-action="recent" data-id="${esc(p.id)}"><strong>${esc(p.name)}</strong><span>${Object.keys(p.videos).length ? "◉ " : ""}${esc(p.file||p.source||p.recordingIds.join(", "))}</span></button>`).join("")}${this.catalogCount?button("catalog","catalog"):""}</div>`;
+      document.getElementById("home-button").setAttribute("aria-label",tr("home"));
+      this.menu.innerHTML=button("newProject","new")+button("openProject","open-project")+(this.state.activeRecording?button("inspect","inspect")+button("addVideo","video")+button("saveProject","save-project")+button("saveAs","save-as"):"")+(this.catalogCount?button("catalog","catalog"):"")+(this.projects.length?`<div class="project-menu-heading">${esc(tr("recent"))}</div>`:"")+this.projects.slice(0,6).map(p=>`<button data-project-action="recent" data-id="${esc(p.id)}"><strong>${esc(p.name)}</strong><span>${esc(p.file||p.source||p.recordingIds.join(", "))}</span></button>`).join("");
       for(const [id,key] of [["replace-video","changeVideo"],["choose-local-video","addVideo"],["video-alignment","align"]]) {
         const node=document.getElementById(id); node.removeAttribute("data-i18n"); node.textContent=tr(key);
       }
       const empty=document.getElementById("video-empty");
-      empty.querySelector("strong").removeAttribute("data-i18n"); empty.querySelector("strong").textContent=tr("addVideo");
+      empty.querySelector("strong").removeAttribute("data-i18n"); empty.querySelector("strong").textContent=tr("emptyVideo");
       empty.querySelector("p").removeAttribute("data-i18n"); empty.querySelector("p").textContent=tr("videoHint");
       this.renderVideoExpand();
       this.syncVideo();
@@ -147,6 +162,22 @@
       document.getElementById("replace-video").hidden=!this.video.source;
       document.getElementById("video-alignment").hidden=!this.video.source;
       document.getElementById("annotation-toggle").disabled=!this.video.source;
+      this.renderEmptyWorkspace();
+    }
+    renderEmptyWorkspace() {
+      const empty=!this.state.activeRecording;
+      document.getElementById("app-shell").classList.toggle("workspace-unloaded",empty);
+      document.getElementById("find-unit-button").disabled=empty;
+      document.getElementById("data-status-button").disabled=empty;
+      const intro=document.getElementById("workspace-empty-intro");intro.hidden=!empty;
+      this.annotationEmpty.hidden=!!this.video.source;
+      this.annotationEmpty.innerHTML=`<strong>${esc(tr("emptyAnnotation"))}</strong><p>${esc(tr("emptyAnnotationHint"))}</p>`;
+      if(!empty)return;
+      document.getElementById("experiment-recording-name").textContent=tr("emptyTitle");
+      document.getElementById("experiment-time-readout").textContent="— s";
+      document.getElementById("activity-status").textContent=tr("emptyActivity");
+      intro.innerHTML=`<div><h2>${esc(tr("emptyTitle"))}</h2><p>${esc(tr("emptyHint"))}</p><div class="workspace-project-actions"><button type="button" class="primary-button" data-project-action="new">${esc(tr("newProject"))}</button><button type="button" data-project-action="open-project">${esc(tr("openProject"))}</button></div><small>Kilosort · Allen Brain ecephys NWB</small></div><div class="workspace-unit-empty"><strong>${esc(tr("emptyUnit"))}</strong><p>${esc(tr("emptyUnitHint"))}</p></div>`;
+      document.getElementById("mini-probe").innerHTML=`<header><strong>2D PROBE</strong><span>${esc(tr("emptyProbe"))}</span></header><div class="workspace-probe-empty"><strong>${esc(tr("emptyInterval"))}</strong><strong>${esc(tr("emptyTemplate"))}</strong><p>${esc(tr("emptyProbeHint"))}</p></div>`;
     }
     show(html) { this.dialog.innerHTML=`<button type="button" class="dialog-close" data-close-project aria-label="${esc(tr("close"))}">×</button>${html}`; if(!this.dialog.open)this.dialog.showModal(); }
     newProject() {

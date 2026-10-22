@@ -3,6 +3,13 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.7.0-beta.1] - 2026-10-22
+
+- Open directly into the neural, Probe, video and annotation workspace. Empty
+  regions explain their tools and inputs; create or open a project in place.
+- Move recent projects into Open / add data. Returning to the workspace retains
+  the current recording, and loading data replaces the empty regions.
+
 ## [4.6.0-beta.1] - 2026-10-22
 
 - Create named neural-only or neural + video projects from local Kilosort results
