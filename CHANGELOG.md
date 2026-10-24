@@ -3,6 +3,18 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.10.0-beta.1] - 2026-10-25
+
+- Redesign the working application as an observation bench: local typography,
+  cool white / instrument navy surfaces, consistent controls and a shared-time accent.
+- Move Probe into a full-height dock with independent interval and template panels;
+  hide or restore the dock without losing selections. Default to video above while
+  preserving side-by-side layout, resizing, Inspector and pinned comparisons.
+- Keep annotation/alignment actions in the video header; put custom speed and
+  jump-to-time in Playback details, automatically opened by Custom speed.
+- Adapt empty illustrations, project dialogs, three themes and narrow windows;
+  preserve single-HTML delivery, local projects, scientific renderers and formats.
+
 ## [4.9.0-beta.1] - 2026-10-25
 
 - Group New project, Open project and Add / Change video in the top toolbar;

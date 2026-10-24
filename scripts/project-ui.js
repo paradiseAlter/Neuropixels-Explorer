@@ -53,6 +53,10 @@
     sideLayout:["Side by side","左右布局","Lado a lado"],
     stackedLayout:["Video above","视频在上","Vídeo arriba"],
     layoutLabel:["Workspace layout","工作区布局","Diseño del espacio"],
+    sharedTime:["Neural time","共享神经时间","Tiempo neural"],
+    probeDock:["Probe workspace","Probe 观察栏","Espacio de la sonda"],
+    playbackOptions:["Playback details","播放细调","Ajustes de reproducción"],
+    emptyWorkspace:["Experiment workspace","实验观察台","Espacio del experimento"],
     validationVideo:["Generate validation video","生成验证视频","Generar vídeo de validación"],
     align:["Alignment","时间对齐","Alineación"], linked:["Linked · alignment unverified","已关联 · 尚未验证同步","Vinculado · sincronización sin verificar"],
     synced:["Linked · frame clock verified","已关联 · 帧时间已验证","Vinculado · reloj verificado"],
@@ -159,6 +163,10 @@
       document.querySelector(".workspace-layout-choice").setAttribute("aria-label",tr("layoutLabel"));
       document.querySelector('[data-workspace-layout="side"] [data-layout-label]').textContent=tr("sideLayout");
       document.querySelector('[data-workspace-layout="stacked"] [data-layout-label]').textContent=tr("stackedLayout");
+      document.querySelector('[data-design-copy="sharedTime"]').textContent=tr("sharedTime");
+      document.querySelector('[data-design-copy="playbackOptions"]').textContent=tr("playbackOptions");
+      document.getElementById("probe-dock").setAttribute("aria-label",tr("probeDock"));
+      document.getElementById("toggle-probe-dock").title=tr("probeDock");
       this.saveButton.textContent=tr("saveProject");this.saveButton.disabled=!this.state.activeRecording;
       const status=document.getElementById("data-status-summary");
       if(this.active){status.removeAttribute("data-i18n");status.textContent=tr("inspect");}
@@ -197,11 +205,11 @@
       this.annotationEmpty.hidden=!!this.video.source;
       this.annotationEmpty.innerHTML=`<div class="annotation-schematic" aria-hidden="true"><i></i><i></i><i></i><b></b></div><strong>${esc(tr("emptyAnnotation"))}</strong><p>${esc(tr("emptyAnnotationHint"))}</p>`;
       if(!empty)return;
-      document.getElementById("experiment-recording-name").textContent=tr("emptyTitle");
+      document.getElementById("experiment-recording-name").textContent=tr("emptyWorkspace");
       document.getElementById("experiment-time-readout").textContent="— s";
       document.getElementById("activity-status").textContent=tr("emptyActivity");
       intro.innerHTML=`<div>${illustration("activity")}<h2>${esc(tr("emptyTitle"))}</h2><p>${esc(tr("emptyHint"))}</p><small>Kilosort · Allen Brain ecephys NWB</small></div><div class="workspace-unit-empty"><strong>${esc(tr("emptyUnit"))}</strong><p>${esc(tr("emptyUnitHint"))}</p></div>`;
-      document.getElementById("mini-probe").innerHTML=`<header><strong>2D PROBE</strong><span>${esc(tr("emptyProbe"))}</span></header><div class="workspace-probe-empty">${illustration("probe")}<small>${esc(tr("schematic"))}</small><strong>${esc(tr("emptyInterval"))}</strong><strong>${esc(tr("emptyTemplate"))}</strong><p>${esc(tr("emptyProbeHint"))}</p></div>`;
+      document.getElementById("mini-probe").innerHTML=`<header><strong>Probe</strong><span>${esc(tr("emptyProbe"))}</span></header><div class="workspace-probe-empty">${illustration("probe")}<small>${esc(tr("schematic"))}</small><strong>${esc(tr("emptyInterval"))}</strong><strong>${esc(tr("emptyTemplate"))}</strong><p>${esc(tr("emptyProbeHint"))}</p></div>`;
     }
     show(html) { this.dialog.innerHTML=`<button type="button" class="dialog-close" data-close-project aria-label="${esc(tr("close"))}">×</button>${html}`; if(!this.dialog.open)this.dialog.showModal(); }
     newProject() {

@@ -32,7 +32,7 @@
 
   const EN = {
     "app.title": "NEUROPIXELS EXPLORER",
-    "app.noFolder": "No folder loaded",
+    "app.noFolder": "No project open",
     "app.theme": "THEME",
     "app.language": "LANGUAGE",
     "app.languageAria": "Explorer language",
@@ -187,7 +187,7 @@
     "controls.panTitle": "Pan mode: drag anywhere in a signal or use the wheel to move through time",
     "controls.backTitle": "Return to the previous time view",
     "video.aria": "Synchronized behavior video",
-    "video.kicker": "BEHAVIOR VIDEO · SHARED NEURAL TIME",
+    "video.kicker": "Behavior video",
     "video.sourcePrompt": "No video source attached",
     "video.noSource": "NO SOURCE",
     "video.collapse": "Collapse video",
@@ -402,7 +402,7 @@
   };
 
   const ZH = {
-    "app.noFolder": "尚未加载文件夹", "app.theme": "主题", "app.language": "语言", "app.languageAria": "Explorer 语言", "app.themeAria": "Explorer 主题", "app.help": "帮助", "app.dataDetails": "数据详情", "app.openFolder": "打开文件夹",
+    "app.noFolder": "尚未打开项目", "app.theme": "主题", "app.language": "语言", "app.languageAria": "Explorer 语言", "app.themeAria": "Explorer 主题", "app.help": "帮助", "app.dataDetails": "数据详情", "app.openFolder": "打开文件夹",
     "theme.dark": "深色", "theme.light": "浅色", "theme.contrast": "高对比度", "theme.system": "跟随系统",
     "empty.drop": "拖入实验文件夹", "empty.description": "程序会自动识别 KiloSort 记录与物理探针分组。", "empty.choose": "选择文件夹", "empty.aria": "拖入或选择 Neuropixels 数据文件夹",
     "loading.inspectTitle": "正在检查文件夹", "loading.inspectMessage": "正在查找 KiloSort 记录和可读取的元数据。",
@@ -424,7 +424,7 @@
     "toast.removed": "已从当前视图移除神经元单元 {id}", "toast.added": "已将神经元单元 {id} 添加到当前视图", "toast.maxUnits": "当前已打开 {count} 个神经元单元。请先移除一个再添加。", "toast.recordingsReady": "{count} 条记录已就绪", "toast.probePosition": "探针 {probe} · {region} · {depth} µm · 已显示附近神经元单元", "toast.couldNotAdd": "无法添加神经元单元 {id}：{error}", "toast.couldNotRead": "无法读取神经元单元 {id}：{error}", "toast.noReadableFiles": "所选文件夹没有提供可读取文件", "toast.noRecordings": "未找到 KiloSort 记录文件夹", "toast.couldNotIndex": "无法索引 KiloSort 记录", "toast.droppedError": "无法读取拖入的文件夹：{error}", "toast.databaseUnavailable": "数据库服务不可用：{error}", "loading.filesReceived": "已接收 {count} 个文件，正在查找 KiloSort 记录。", "loading.noRequiredFiles": "没有文件夹同时包含 spike_times.npy、spike_clusters.npy 和 params.py。", "loading.checkCandidates": "正在检查 {count} 条候选记录，不加载其大型数组。", "loading.checkRecording": "正在检查记录 {current}/{total}。", "loading.nonePassed": "发现了 KiloSort 候选目录，但没有一个通过结构检查。", "loading.folderReady": "文件夹已就绪", "loading.recordingsDetected": "检测到 {count} 条记录。请选择一个神经元单元开始。", "loading.openingDatabase": "正在打开数据库", "loading.databaseCatalog": "正在读取本地 SQLite 目录并准备神经元单元列表。", "loading.databaseIndexed": "已索引 {recordings} 条记录和 {units} 个神经元单元。请选择一个开始。", "loading.readingFolder": "正在读取文件夹", "loading.collectingFiles": "正在收集拖入目录中的文件。", "toast.databaseReady": "数据库已就绪 · 目录查询 {time} 毫秒", "toast.supplementTargetMissing": "目标记录已不可用", "toast.noMatchingSupplement": "所选内容不包含当前缺失的数据类型", "toast.wrongRecording": "{file} 属于 {recording}，而不是 {expected}", "toast.duplicateSelection": "所选内容包含多个 {file}", "toast.supplementUpload": "正在上传 {current}/{total} · {file}", "toast.supplementCommit": "正在校验并提交补充数据", "toast.supplementReady": "补充完成 · 新增 {added} 项 · 忽略 {duplicates} 个重复项", "toast.supplementFailed": "补充数据被拒绝：{error}"
     ,"review.manual": "行为与神经同步检查"
     ,"video.aria": "同步行为视频"
-    ,"video.kicker": "行为视频 · 共用神经时间"
+    ,"video.kicker": "行为视频"
     ,"video.sourcePrompt": "尚未连接视频源"
     ,"video.noSource": "无视频源"
     ,"video.collapse": "折叠视频"
@@ -467,7 +467,7 @@
   };
 
   const ES = {
-    "app.noFolder": "Ninguna carpeta cargada", "app.theme": "TEMA", "app.language": "IDIOMA", "app.languageAria": "Idioma del Explorer", "app.themeAria": "Tema del Explorer", "app.help": "AYUDA", "app.dataDetails": "DETALLES DE DATOS", "app.openFolder": "ABRIR CARPETA",
+    "app.noFolder": "Ningún proyecto abierto", "app.theme": "TEMA", "app.language": "IDIOMA", "app.languageAria": "Idioma del Explorer", "app.themeAria": "Tema del Explorer", "app.help": "AYUDA", "app.dataDetails": "DETALLES DE DATOS", "app.openFolder": "ABRIR CARPETA",
     "theme.dark": "Oscuro", "theme.light": "Claro", "theme.contrast": "Alto contraste", "theme.system": "Sistema",
     "empty.drop": "ARRASTRE LA CARPETA DE SESIÓN", "empty.description": "Los registros de KiloSort y los grupos de Sondas físicas se detectan automáticamente.", "empty.choose": "ELEGIR CARPETA", "empty.aria": "Arrastrar o elegir una carpeta de datos Neuropixels",
     "loading.inspectTitle": "Inspeccionando carpeta", "loading.inspectMessage": "Buscando registros de KiloSort y metadatos legibles.",
@@ -494,7 +494,7 @@
     ,"status.file.rawVoltageDetected": "Voltaje bruto detectado · sin proveedor de lectura"
     ,"review.manual": "REVISIÓN SINCRONIZADA DE CONDUCTA Y ACTIVIDAD NEURAL"
     ,"video.aria": "Vídeo de conducta sincronizado"
-    ,"video.kicker": "VÍDEO DE CONDUCTA · TIEMPO NEURAL COMPARTIDO"
+    ,"video.kicker": "Vídeo conductual"
     ,"video.sourcePrompt": "Sin fuente de vídeo conectada"
     ,"video.noSource": "SIN FUENTE"
     ,"video.collapse": "Contraer vídeo"
@@ -648,13 +648,13 @@
     en: {
       "workspace.aria": "Experiment activity, anatomy, and behavior workspace",
       "workspace.kicker": "EXPERIMENT OVERVIEW",
-      "workspace.findUnit": "FIND UNIT",
+      "workspace.findUnit": "Find Unit",
       "workspace.findUnitAria": "Find a Unit in this experiment",
       "workspace.findUnitLabel": "UNIT ID, SHANK, REGION, OR KILOSORT LABEL",
       "workspace.findUnitPlaceholder": "e.g. 7, Shank 1, VISp, good",
       "workspace.findUnitResults": "Matching Units",
-      "workspace.inspectUnit": "INSPECT UNIT",
-      "workspace.pinUnit": "PIN TO COMPARE",
+      "workspace.inspectUnit": "Inspect Unit",
+      "workspace.pinUnit": "Pin to compare",
       "workspace.unitPinned": "PINNED",
       "workspace.pinnedTitle": "PINNED SPIKES",
       "workspace.compareNear": "10 s at cursor",
@@ -664,7 +664,7 @@
       "workspace.pinNext": "Unit pinned. Browse another group or use Find Unit to add more.",
       "workspace.closeInspector": "Close Unit inspector",
       "workspace.activityAria": "Recording-wide neural activity aligned with anatomy",
-      "workspace.activityTitle": "ACTIVITY × ANATOMY",
+      "workspace.activityTitle": "Neural activity & anatomy",
       "workspace.activityLoading": "Preparing recording overview…",
       "workspace.legendAria": "Activity display semantics",
       "workspace.unitTexture": "Unit · within-Unit normalized",
@@ -694,7 +694,7 @@
       "workspace.pinNext": "已固定。可浏览其他分组或查找单元，继续加入对比。",
       "workspace.closeInspector": "关闭神经元单元检查器",
       "workspace.activityAria": "与解剖位置对齐的全记录神经活动",
-      "workspace.activityTitle": "神经活动 × 解剖位置",
+      "workspace.activityTitle": "神经活动与解剖",
       "workspace.activityLoading": "正在准备记录总览…",
       "workspace.legendAria": "活动显示语义",
       "workspace.unitTexture": "单元 · 单元内归一化",
@@ -724,7 +724,7 @@
       "workspace.pinNext": "Unidad fijada. Explora otro grupo o busca otra unidad para comparar.",
       "workspace.closeInspector": "Cerrar inspector de Unidad",
       "workspace.activityAria": "Actividad neural del registro alineada con la anatomía",
-      "workspace.activityTitle": "ACTIVIDAD × ANATOMÍA",
+      "workspace.activityTitle": "Actividad neural y anatomía",
       "workspace.activityLoading": "Preparando la vista general…",
       "workspace.legendAria": "Semántica de actividad mostrada",
       "workspace.unitTexture": "Unidad · normalizada dentro de la Unidad",

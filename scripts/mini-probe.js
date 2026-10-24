@@ -2,6 +2,18 @@
 // Measured unit coordinates, never an inferred atlas trajectory.
 (() => {
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const probeText = (key, lang) => {
+    const copy = {
+      interval: ["Interval distribution", "区间活动分布", "Actividad del intervalo"],
+      horizontal: ["Horizontal view", "横向显示", "Vista horizontal"],
+      vertical: ["Vertical view", "纵向显示", "Vista vertical"],
+      choose: ["Select a labeled clip or drag a time interval on the signals.", "选择行为片段，或在神经信号上拖出时间区间。", "Selecciona un segmento o un intervalo en las señales."],
+      loading: ["Calculating interval rates… First use prepares a reusable time index.", "正在统计区间放电。首次使用需建立时间索引。", "Calculando tasas; el primer uso prepara el índice temporal."],
+      semantics: ["Circle size: interval firing rate. Color: brain region. This is Unit activity at measured positions, not a multichannel waveform.", "点的大小表示区间发放率，颜色表示脑区；坐标来自原始数据。多通道波形见 Unit 模板。", "Tamaño: tasa del intervalo. Color: región cerebral. Posiciones medidas; las ondas multicanal están en la plantilla Unit."],
+      units: ["Units · Hz / spike count", "各 Unit 发放率与放电数", "Units: tasa y número de disparos"]
+    };
+    return copy[key][lang === "zh-CN" ? 1 : lang === "es" ? 2 : 0];
+  };
   // One stem per measured Unit: never join unrelated Units into a waveform.
   function distributionGeometry(units, horizontal = false) {
     const located = units.filter(u => Number.isFinite(u.depthUm) && Number.isFinite(u.rateHz));
@@ -103,7 +115,7 @@
         const y = u => 460-(u.depthUm-min)/Math.max(1,max-min)*410;
         this.positions = located.map(unit => ({unit,x:x(unit),y:y(unit)}));
         const focus = overview.units.find(u => u.id === selected);
-        this.host.innerHTML = `<header><strong>2D PROBE</strong><span>${zh ? "位置与放电" : es ? "Posición y actividad" : "Position & activity"}</span></header><button class="probe-interval-toggle" data-probe-expand aria-expanded="${!!this.expanded}">${this.expanded ? "Close distribution" : "Interval distribution"}</button><section class="probe-interval" ${this.expanded ? "" : "hidden"}><p data-interval-status role="status"></p><div data-distribution hidden><button data-distribution-orientation aria-pressed="false">Horizontal view</button><div class="probe-plot-pair"><div data-distribution-chart></div></div><small data-distribution-note></small></div><h4>Units · Hz / spike count</h4><div data-rates></div><small>Circle size: interval firing rate. Color: brain region. This is Unit activity at measured positions, not a multichannel waveform.</small></section>
+        this.host.innerHTML = `<header><strong>Probe</strong><span>${zh ? "位置与放电" : es ? "Posición y actividad" : "Position & activity"}</span></header><button class="probe-interval-toggle" data-probe-expand aria-expanded="${!!this.expanded}">${probeText("interval", this.lang)}</button><section class="probe-interval" ${this.expanded ? "" : "hidden"}><p data-interval-status role="status"></p><div data-distribution hidden><button data-distribution-orientation aria-pressed="false">Horizontal view</button><div class="probe-plot-pair"><div data-distribution-chart></div></div><small data-distribution-note></small></div><h4>${probeText("units", this.lang)}</h4><div data-rates></div><small>${probeText("semantics", this.lang)}</small></section>
           ${located.length ? `<svg class="probe-position-map" viewBox="0 0 ${width} 500" role="group" aria-label="2D Probe">${shanks.map(s => `<path d="M${58+shanks.indexOf(s)*48} 40 V475" class="probe-shaft"/><text x="${58+shanks.indexOf(s)*48}" y="25" text-anchor="middle">S${s == null ? "?" : s+1}</text>`).join("")}<text x="2" y="51">${Math.round(max)}</text><text x="2" y="465">${Math.round(min)}</text><text x="2" y="489">µm</text>${located.map(u => `<circle cx="${x(u)}" cy="${y(u)}" r="${u.id===selected ? 6 : 2.3}" fill="${color(u)}" data-source="${u.sourceIndex}" data-probe-unit="${u.id}" tabindex="${u.id===selected ? 0 : -1}" role="button" aria-label="Unit ${u.id}, ${esc(u.region)}, ${u.depthUm} µm" class="${u.id===selected ? "selected" : ""}"><title>Unit ${u.id} · ${esc(u.region)} · ${u.depthUm} µm</title></circle>`).join("")}</svg>` : `<p>${zh ? "此记录没有可用的探针坐标" : es ? "Sin coordenadas disponibles" : "No probe coordinates available"}</p>`}
           <div class="mini-probe-selection" aria-live="polite">${focus ? `<strong>Unit ${focus.id}</strong><b>${esc(focus.region)}</b><span>${focus.depthUm==null ? "—" : focus.depthUm+" µm"}</span>` : `<span>${zh ? "点击神经元查看位置" : es ? "Selecciona una unidad" : "Select a Unit to locate it"}</span>`}</div>
           <div class="mini-probe-regions">${regions.map(r => `<button data-probe-region="${esc(r)}">${esc(r)}</button>`).join("")}</div>
@@ -153,7 +165,7 @@
       });
       panel.querySelector("[data-distribution]").hidden = false;
       const toggle = panel.querySelector("[data-distribution-orientation]");
-      toggle.textContent = horizontal ? "Vertical view" : "Horizontal view";
+      toggle.textContent = probeText(horizontal ? "vertical" : "horizontal", this.lang);
       toggle.setAttribute("aria-pressed", String(horizontal));
       const fmt = n => Number(n.toFixed(2)).toLocaleString("en-US");
       const chart = panel.querySelector("[data-distribution-chart]");
@@ -174,7 +186,7 @@
       const panel = this.host.querySelector(".probe-interval"), button = this.host.querySelector("[data-probe-expand]");
       if (!panel) return;
       panel.hidden = !this.expanded; button.setAttribute("aria-expanded", String(!!this.expanded));
-      button.textContent = this.expanded ? "Close distribution" : "Interval distribution";
+      button.textContent = probeText("interval", this.lang);
       const range = this.view?.selectedInterval;
       const dataKey = JSON.stringify([this.recording?.databaseId || this.recording?.key, this.recording?.dataVersion, range?.start, range?.end]);
       const key = JSON.stringify([dataKey, this.expanded]);
@@ -190,11 +202,11 @@
       const status = panel.querySelector("[data-interval-status]"), list = panel.querySelector("[data-rates]");
       list.replaceChildren();
       panel.querySelector("[data-distribution]").hidden = true;
-      if (!range) { status.textContent = "Select a labeled clip or drag a time interval on the signals."; return; }
+      if (!range) { status.textContent = probeText("choose", this.lang); return; }
       if (!this.recording?.databaseId && !this.intervalReader) { status.textContent = "Load a recording to calculate interval rates."; return; }
       if (this.result && this.resultKey === dataKey) { this.renderDistribution(); return; }
       this.result = null; this.resultKey = null;
-      status.textContent = "Calculating interval rates… First use prepares a reusable time index.";
+      status.textContent = probeText("loading", this.lang);
       this.intervalTimer = setTimeout(async () => {
         const abort = new AbortController(); this.intervalAbort = abort;
         try {

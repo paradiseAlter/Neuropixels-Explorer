@@ -12,10 +12,10 @@
   const PALETTES = Object.freeze({
     dark: Object.freeze({
       canvas: Object.freeze({
-        background: "#0f1012",
-        grid: "#24272c",
-        axis: "#5f6670",
-        text: "#818892",
+        background: "#1D3047",
+        grid: "#30465F",
+        axis: "#9BB1CC",
+        text: "#B1C1D7",
         spike: "#dbe9f7",
         rate: "#86b8eb",
         rateFill: "rgba(87, 143, 197, .16)",
@@ -28,7 +28,7 @@
         refractory: "rgba(199, 104, 104, .10)"
       }),
       probe: Object.freeze({
-        background: "#0d0f11",
+        background: "#192B40",
         emptyText: "#68727d",
         headerText: "#b7c0ca",
         mutedText: "#63707c",
@@ -71,8 +71,8 @@
     }),
     light: Object.freeze({
       canvas: Object.freeze({
-        background: "#f7f8fa",
-        grid: "#d8dde3",
+        background: "#FFFFFF",
+        grid: "#DFE6EF",
         axis: "#747e88",
         text: "#4c5661",
         spike: "#244f73",
@@ -87,7 +87,7 @@
         refractory: "rgba(178, 43, 43, .10)"
       }),
       probe: Object.freeze({
-        background: "#f7f8fa",
+        background: "#FFFFFF",
         emptyText: "#68737e",
         headerText: "#26333e",
         mutedText: "#68737e",

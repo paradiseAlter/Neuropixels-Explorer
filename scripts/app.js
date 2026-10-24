@@ -160,6 +160,13 @@
   };
 
   elements.videoHost?.append(elements.videoPanel);
+  document.getElementById("probe-dock").append(document.getElementById("mini-probe"));
+  document.getElementById("toggle-probe-dock").addEventListener("click", (event) => {
+    const dock = document.getElementById("probe-dock");
+    dock.hidden = !dock.hidden;
+    event.currentTarget.setAttribute("aria-expanded", String(!dock.hidden));
+    document.querySelector(".observation-bench").classList.toggle("probe-hidden", dock.hidden);
+  });
   // The editor and time strip belong to the video, not a new workspace row.
   elements.videoTransport.after(document.getElementById("annotation-timeline"));
   elements.videoBody.append(document.getElementById("annotation-panel"));
@@ -170,7 +177,17 @@
     if (!child.classList.contains("video-stage")) videoControls.append(child);
   }
   elements.videoBody.append(videoControls);
-  elements.videoTransport.after(videoControls.querySelector(".video-tools"));
+  const videoHeaderActions = elements.videoPanel.querySelector(".video-sync-header-actions");
+  videoHeaderActions.prepend(document.getElementById("annotation-toggle"), document.getElementById("video-alignment"));
+  elements.videoPanel.querySelector(".video-sync-header > div").append(document.getElementById("video-link-note"));
+  const playbackOptions = document.createElement("details");
+  playbackOptions.className = "playback-options";
+  playbackOptions.innerHTML = '<summary data-design-copy="playbackOptions">Playback details</summary><div></div>';
+  playbackOptions.querySelector("div").append(elements.videoTransport.querySelector(".video-seek"), elements.videoTransport.querySelector(".video-custom-rate"), elements.videoTransport.querySelector(".video-jump"));
+  document.getElementById("annotation-timeline").after(playbackOptions);
+  elements.videoSpeed.addEventListener("change", () => {
+    if (elements.videoSpeed.value === "custom") playbackOptions.open = true;
+  });
 
   const state = {
     dataMode: "folder",
@@ -209,7 +226,7 @@
     activeActivityOverview: null,
     activityLayoutSummary: null,
     videoSplitPercent: 44,
-    videoStackedPercent: 45,
+    videoStackedPercent: 50,
     workspacePresentation: "side",
     pendingVideoCursorTime: null,
     experimentView: {
@@ -243,18 +260,19 @@
       ? (videoIsEmphasized() ? "videoStackedFocusPercent" : "videoStackedPercent")
       : (videoIsEmphasized() ? "videoFocusSplitPercent" : "videoSplitPercent");
   }
-  function defaultVideoSplit() { return videoIsEmphasized() ? 60 : state.workspacePresentation === "stacked" ? 45 : 44; }
+  function defaultVideoSplit() { return videoIsEmphasized() ? 60 : state.workspacePresentation === "stacked" ? 50 : 44; }
   function restoreVideoSplit() { setVideoSplitPercent(state[videoSplitKey()] || defaultVideoSplit()); }
   function setVideoSplitPercent(value) {
     const focused = videoIsEmphasized();
     const stacked = state.workspacePresentation === "stacked";
     const requested = Math.max(25, Math.min(focused ? 70 : 60, Number(value) || defaultVideoSplit()));
     state[videoSplitKey()] = requested;
-    const width = Math.max(1, elements.experimentBody.clientWidth - 24);
-    const height = Math.max(1, elements.experimentBody.clientHeight - 22);
+    const bodyStyle = getComputedStyle(elements.experimentBody);
+    const width = Math.max(1, elements.experimentBody.clientWidth - parseFloat(bodyStyle.paddingLeft) - parseFloat(bodyStyle.paddingRight));
+    const height = Math.max(1, elements.experimentBody.clientHeight - parseFloat(bodyStyle.paddingTop) - parseFloat(bodyStyle.paddingBottom));
     // The lower neural pane needs 230 px plus the separator and gaps, including in annotation mode.
     const maximum = stacked ? Math.max(25, Math.min(65, (height - 250) / height * 100))
-      : Math.min(focused ? 70 : 55, Math.max(25, (width - 540) / width * 100));
+      : Math.min(focused ? 70 : 55, Math.max(25, (width - 420) / width * 100));
     const minimum = stacked ? Math.min(maximum, 210 / height * 100) : 25;
     const percentValue = Math.max(minimum, Math.min(requested, maximum));
     elements.experimentBody?.style.setProperty(stacked ? "--video-region-height" : "--video-region-width", `${percentValue}%`);
@@ -309,7 +327,7 @@
       setVideoSplitPercent(event.key === "Home" ? defaultVideoSplit() : Number(splitter.getAttribute("aria-valuenow")) + (["ArrowLeft", "ArrowDown"].includes(event.key) ? 2 : -2));
     });
     for (const button of document.querySelectorAll("[data-workspace-layout]")) button.addEventListener("click", () => setWorkspacePresentation(button.dataset.workspaceLayout));
-    setWorkspacePresentation(new URLSearchParams(location.search).get("layout"));
+    setWorkspacePresentation(new URLSearchParams(location.search).get("layout") || "stacked");
     const resize = restoreVideoSplit;
     new ResizeObserver(resize).observe(body);
     new MutationObserver(resize).observe(document.getElementById("mini-probe"), { attributes: true, attributeFilter: ["class"] });
