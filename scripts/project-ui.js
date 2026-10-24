@@ -46,7 +46,14 @@
     sourceNote:["Your files stay where they are. Project links are saved on this computer.","文件保留在原位置，关联关系会自动保存在这台电脑上。","Los archivos permanecen en su ubicación. Los enlaces se guardan en este equipo."],
     recent:["Recent projects","最近打开","Proyectos recientes"], catalog:["Open available recordings","打开已有记录","Abrir registros disponibles"],
     addVideo:["Add video to this recording","为当前记录添加视频","Añadir vídeo a este registro"], changeVideo:["Change video","更换视频","Cambiar vídeo"],
-    videoHint:["Choose a video from any folder","从任意文件夹选择对应视频","Elige un vídeo de cualquier carpeta"],
+    videoHint:["Add the matching video using the project controls above. Play, align and annotate it here.","从顶部项目操作栏添加对应视频，在这里播放、对齐和标注。","Añade el vídeo desde los controles del proyecto. Reproduce, alinea y anota aquí."],
+    projectMenu:["Project ▾","项目 ▾","Proyecto ▾"],
+    videoShort:["Add video","添加视频","Añadir vídeo"],
+    schematic:["Schematic · no data loaded","示意模型 · 尚未载入数据","Esquema · sin datos"],
+    sideLayout:["Side by side","左右布局","Lado a lado"],
+    stackedLayout:["Video above","视频在上","Vídeo arriba"],
+    layoutLabel:["Workspace layout","工作区布局","Diseño del espacio"],
+    validationVideo:["Generate validation video","生成验证视频","Generar vídeo de validación"],
     align:["Alignment","时间对齐","Alineación"], linked:["Linked · alignment unverified","已关联 · 尚未验证同步","Vinculado · sincronización sin verificar"],
     synced:["Linked · frame clock verified","已关联 · 帧时间已验证","Vinculado · reloj verificado"],
     choose:["Choose a recording","选择要打开的记录","Elige un registro"], physical:["Each physical probe opens as a separate recording.","每支物理探针作为一条独立记录打开。","Cada sonda física se abre como un registro independiente."],
@@ -81,6 +88,15 @@
     error:["Could not open","未能打开","No se pudo abrir"],
   };
   const tr = key => copy[key]?.[document.documentElement.lang==="zh-CN"?1:document.documentElement.lang==="es"?2:0] || key;
+  // Illustrations explain the empty workspace; they are never used as recording data.
+  const illustration = (kind) => {
+    const shapes = kind === "probe"
+      ? `<path class="diagram-shaft" d="M42 18h26v168l-13 24-13-24z M102 18h26v168l-13 24-13-24z"/>${Array.from({length:10},(_,i)=>`<rect class="diagram-channel" x="${i%2?57:47}" y="${30+i*15}" width="6" height="6"/><rect class="diagram-channel" x="${i%2?117:107}" y="${30+i*15}" width="6" height="6"/>`).join("")}<g class="diagram-unit"><circle cx="55" cy="66" r="7"/><circle cx="115" cy="126" r="7"/><circle cx="55" cy="151" r="5"/></g><path class="diagram-guide" d="M63 66h85M123 126h25"/><path class="diagram-signal" d="M148 66h8l4-12 6 28 5-16h20M148 126h8l4-8 6 19 5-11h20"/><text x="148" y="46">Unit</text><text x="40" y="232">x · depth</text>`
+      : kind === "video"
+        ? `<rect class="diagram-shaft" x="14" y="18" width="192" height="122" rx="8"/><path class="diagram-guide" d="M26 43V30h20m128 0h20v13M26 113v15h20m128 0h20v-15"/><path class="diagram-signal" d="M100 60l28 20-28 20z"/><path class="diagram-guide" d="M16 164h188"/><rect class="diagram-channel" x="42" y="154" width="44" height="20" rx="3"/><rect class="diagram-channel" x="130" y="154" width="54" height="20" rx="3"/><path class="diagram-signal" d="M110 148v34"/>`
+        : `<path class="diagram-guide" d="M12 48h196M12 91h196M12 134h196"/><path class="diagram-signal" d="M25 38v20m12-20v20m36-20v20m9-20v20m62-20v20m34-20v20M46 81v20m10-20v20m28-20v20m58-20v20m12-20v20m26-20v20M26 124v20m43-20v20m17-20v20m36-20v20m36-20v20m22-20v20"/><rect class="diagram-window" x="61" y="20" width="45" height="138"/>`;
+    return `<svg class="workspace-illustration illustration-${kind}" viewBox="0 0 220 ${kind==="probe"?245:190}" role="img" aria-label="${esc(tr("schematic"))}"><title>${esc(tr("schematic"))}</title>${shapes}</svg>`;
+  };
   class ProjectUI {
     constructor({state,video,annotations,openCatalog,home,resume,toast,folderFallback,onVideoExpand}) {
       Object.assign(this,{state,video,annotations,openCatalog,home,resume,toast,folderFallback,onVideoExpand});
@@ -90,9 +106,11 @@
       this.dialog=document.createElement("dialog"); this.dialog.className="project-dialog"; this.dialog.id="project-dialog";
       document.body.append(this.dialog);
       this.annotationEmpty=document.createElement("section");this.annotationEmpty.className="workspace-annotation-empty";
-      document.querySelector(".video-sync-body").append(this.annotationEmpty);
+      document.querySelector(".video-control-workbench").append(this.annotationEmpty);
       this.dialog.addEventListener("click",e=>{ if(e.target.closest("[data-close-project]")) this.dialog.close(); });
       this.menu=document.getElementById("open-menu");
+      this.projectActions=document.createElement("div");this.projectActions.className="project-main-actions";
+      document.querySelector(".open-control").before(this.projectActions);
       this.saveButton=document.createElement("button");this.saveButton.type="button";this.saveButton.id="save-project-button";this.saveButton.dataset.projectAction="save-project";
       document.querySelector(".open-control").after(this.saveButton);
       document.getElementById("open-folder-button").addEventListener("click",()=>this.toggleMenu());
@@ -136,19 +154,25 @@
     toggleMenu(value=this.menu.hidden) { this.menu.hidden=!value; document.getElementById("open-folder-button").setAttribute("aria-expanded",String(value)); if(value)this.menu.querySelector("button")?.focus(); }
     render() {
       const button=(key,action,sub="")=>`<button type="button" data-project-action="${action}"><strong>${esc(tr(key))}</strong>${sub?`<span>${esc(tr(sub))}</span>`:""}</button>`;
-      document.getElementById("open-folder-button").textContent=tr("open");
+      document.getElementById("open-folder-button").textContent=tr("projectMenu");
+      this.projectActions.innerHTML=`<button type="button" class="primary-button" data-project-action="new">${esc(tr("newProject"))}</button><button type="button" data-project-action="open-project">${esc(tr("openProject"))}</button><button type="button" data-project-action="video" ${this.state.activeRecording?"":"disabled"} title="${esc(tr(this.state.activeRecording?"videoHelp":"emptyHint"))}">${esc(tr(this.video.source?"changeVideo":"videoShort"))}</button>`;
+      document.querySelector(".workspace-layout-choice").setAttribute("aria-label",tr("layoutLabel"));
+      document.querySelector('[data-workspace-layout="side"] [data-layout-label]').textContent=tr("sideLayout");
+      document.querySelector('[data-workspace-layout="stacked"] [data-layout-label]').textContent=tr("stackedLayout");
       this.saveButton.textContent=tr("saveProject");this.saveButton.disabled=!this.state.activeRecording;
       const status=document.getElementById("data-status-summary");
       if(this.active){status.removeAttribute("data-i18n");status.textContent=tr("inspect");}
       document.getElementById("home-button").title=tr("home");
       document.getElementById("home-button").setAttribute("aria-label",tr("home"));
       this.menu.innerHTML=button("newProject","new")+button("openProject","open-project")+(this.state.activeRecording?button("inspect","inspect")+button("addVideo","video")+button("saveProject","save-project")+button("saveAs","save-as"):"")+(this.catalogCount?button("catalog","catalog"):"")+(this.projects.length?`<div class="project-menu-heading">${esc(tr("recent"))}</div>`:"")+this.projects.slice(0,6).map(p=>`<button data-project-action="recent" data-id="${esc(p.id)}"><strong>${esc(p.name)}</strong><span>${esc(p.file||p.source||p.recordingIds.join(", "))}</span></button>`).join("");
+      if(this.state.activeRecording) this.menu.insertAdjacentHTML("beforeend",`<details class="project-validation"><summary>${esc(tr("validationVideo"))}</summary>${button("validationVideo","validation-video")}</details>`);
       for(const [id,key] of [["replace-video","changeVideo"],["choose-local-video","addVideo"],["video-alignment","align"]]) {
         const node=document.getElementById(id); node.removeAttribute("data-i18n"); node.textContent=tr(key);
       }
       const empty=document.getElementById("video-empty");
       empty.querySelector("strong").removeAttribute("data-i18n"); empty.querySelector("strong").textContent=tr("emptyVideo");
       empty.querySelector("p").removeAttribute("data-i18n"); empty.querySelector("p").textContent=tr("videoHint");
+      empty.querySelector(".video-empty-mark").innerHTML=illustration("video");
       this.renderVideoExpand();
       this.syncVideo();
     }
@@ -171,13 +195,13 @@
       document.getElementById("data-status-button").disabled=empty;
       const intro=document.getElementById("workspace-empty-intro");intro.hidden=!empty;
       this.annotationEmpty.hidden=!!this.video.source;
-      this.annotationEmpty.innerHTML=`<strong>${esc(tr("emptyAnnotation"))}</strong><p>${esc(tr("emptyAnnotationHint"))}</p>`;
+      this.annotationEmpty.innerHTML=`<div class="annotation-schematic" aria-hidden="true"><i></i><i></i><i></i><b></b></div><strong>${esc(tr("emptyAnnotation"))}</strong><p>${esc(tr("emptyAnnotationHint"))}</p>`;
       if(!empty)return;
       document.getElementById("experiment-recording-name").textContent=tr("emptyTitle");
       document.getElementById("experiment-time-readout").textContent="— s";
       document.getElementById("activity-status").textContent=tr("emptyActivity");
-      intro.innerHTML=`<div><h2>${esc(tr("emptyTitle"))}</h2><p>${esc(tr("emptyHint"))}</p><div class="workspace-project-actions"><button type="button" class="primary-button" data-project-action="new">${esc(tr("newProject"))}</button><button type="button" data-project-action="open-project">${esc(tr("openProject"))}</button></div><small>Kilosort · Allen Brain ecephys NWB</small></div><div class="workspace-unit-empty"><strong>${esc(tr("emptyUnit"))}</strong><p>${esc(tr("emptyUnitHint"))}</p></div>`;
-      document.getElementById("mini-probe").innerHTML=`<header><strong>2D PROBE</strong><span>${esc(tr("emptyProbe"))}</span></header><div class="workspace-probe-empty"><strong>${esc(tr("emptyInterval"))}</strong><strong>${esc(tr("emptyTemplate"))}</strong><p>${esc(tr("emptyProbeHint"))}</p></div>`;
+      intro.innerHTML=`<div>${illustration("activity")}<h2>${esc(tr("emptyTitle"))}</h2><p>${esc(tr("emptyHint"))}</p><small>Kilosort · Allen Brain ecephys NWB</small></div><div class="workspace-unit-empty"><strong>${esc(tr("emptyUnit"))}</strong><p>${esc(tr("emptyUnitHint"))}</p></div>`;
+      document.getElementById("mini-probe").innerHTML=`<header><strong>2D PROBE</strong><span>${esc(tr("emptyProbe"))}</span></header><div class="workspace-probe-empty">${illustration("probe")}<small>${esc(tr("schematic"))}</small><strong>${esc(tr("emptyInterval"))}</strong><strong>${esc(tr("emptyTemplate"))}</strong><p>${esc(tr("emptyProbeHint"))}</p></div>`;
     }
     show(html) { this.dialog.innerHTML=`<button type="button" class="dialog-close" data-close-project aria-label="${esc(tr("close"))}">×</button>${html}`; if(!this.dialog.open)this.dialog.showModal(); }
     newProject() {
@@ -222,6 +246,7 @@
     }
     async action(action,node) {
       try {
+        if(action==="validation-video")return document.getElementById("generate-synthetic-video").click();
         if(action==="new")return this.newProject();
         if(action==="open-project"){await this.annotations.flush();return await this.pick(action);}
         if(action==="inspect")return await this.inspect();

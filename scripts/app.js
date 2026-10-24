@@ -163,6 +163,14 @@
   // The editor and time strip belong to the video, not a new workspace row.
   elements.videoTransport.after(document.getElementById("annotation-timeline"));
   elements.videoBody.append(document.getElementById("annotation-panel"));
+  // Keep the player and its tools in separate panes when video sits above neural activity.
+  const videoControls = document.createElement("div");
+  videoControls.className = "video-control-workbench";
+  for (const child of [...elements.videoBody.children]) {
+    if (!child.classList.contains("video-stage")) videoControls.append(child);
+  }
+  elements.videoBody.append(videoControls);
+  elements.videoTransport.after(videoControls.querySelector(".video-tools"));
 
   const state = {
     dataMode: "folder",
@@ -200,7 +208,9 @@
     activityOverviewCache: new Map(),
     activeActivityOverview: null,
     activityLayoutSummary: null,
-    videoSplitPercent: 35,
+    videoSplitPercent: 44,
+    videoStackedPercent: 45,
+    workspacePresentation: "side",
     pendingVideoCursorTime: null,
     experimentView: {
       visibleRange: { start: 0, end: 0 },
@@ -225,21 +235,46 @@
     const expand = document.getElementById("expand-video");
     expand.setAttribute("aria-pressed", String(Boolean(state.videoEnlarged)));
     expand.hidden = Boolean(state.videoAnnotating);
-    setVideoSplitPercent(videoIsEmphasized() ? state.videoFocusSplitPercent || 66 : state.videoSplitPercent || 35);
+    restoreVideoSplit();
   }
 
+  function videoSplitKey() {
+    return state.workspacePresentation === "stacked"
+      ? (videoIsEmphasized() ? "videoStackedFocusPercent" : "videoStackedPercent")
+      : (videoIsEmphasized() ? "videoFocusSplitPercent" : "videoSplitPercent");
+  }
+  function defaultVideoSplit() { return videoIsEmphasized() ? 60 : state.workspacePresentation === "stacked" ? 45 : 44; }
+  function restoreVideoSplit() { setVideoSplitPercent(state[videoSplitKey()] || defaultVideoSplit()); }
   function setVideoSplitPercent(value) {
     const focused = videoIsEmphasized();
-    const requested = Math.max(25, Math.min(focused ? 72 : 50, Number(value) || (focused ? 66 : 35)));
-    state[focused ? "videoFocusSplitPercent" : "videoSplitPercent"] = requested;
-    // Reserve a readable neural texture after its anatomy gutter and Probe.
+    const stacked = state.workspacePresentation === "stacked";
+    const requested = Math.max(25, Math.min(focused ? 70 : 60, Number(value) || defaultVideoSplit()));
+    state[videoSplitKey()] = requested;
     const width = Math.max(1, elements.experimentBody.clientWidth - 24);
-    const contextWidth = document.querySelector(".mini-probe.probe-expanded") ? 844 : 620;
-    const maximum = Math.min(focused ? 72 : 50, Math.max(25, (width - contextWidth - 20) / width * 100));
-    const percentValue = Math.min(requested, maximum);
-    elements.experimentBody?.style.setProperty("--video-region-width", `${percentValue}%`);
+    const height = Math.max(1, elements.experimentBody.clientHeight - 22);
+    // The lower neural pane needs 230 px plus the separator and gaps, including in annotation mode.
+    const maximum = stacked ? Math.max(25, Math.min(65, (height - 250) / height * 100))
+      : Math.min(focused ? 70 : 55, Math.max(25, (width - 540) / width * 100));
+    const minimum = stacked ? Math.min(maximum, 210 / height * 100) : 25;
+    const percentValue = Math.max(minimum, Math.min(requested, maximum));
+    elements.experimentBody?.style.setProperty(stacked ? "--video-region-height" : "--video-region-width", `${percentValue}%`);
     elements.videoSplitter?.setAttribute("aria-valuenow", String(Math.round(percentValue)));
+    elements.videoSplitter?.setAttribute("aria-valuemin", String(Math.round(minimum)));
     elements.videoSplitter?.setAttribute("aria-valuemax", String(Math.round(maximum)));
+  }
+
+  function setWorkspacePresentation(layout) {
+    state.workspacePresentation = layout === "stacked" ? "stacked" : "side";
+    const stacked = state.workspacePresentation === "stacked";
+    elements.experimentBody.classList.toggle("video-above", stacked);
+    // DOM order follows the visual order for keyboard and screen-reader navigation.
+    if (stacked) elements.experimentBody.prepend(elements.videoHost, elements.videoSplitter);
+    else elements.experimentBody.append(elements.videoSplitter, elements.videoHost);
+    elements.videoSplitter.setAttribute("aria-orientation", stacked ? "horizontal" : "vertical");
+    for (const button of document.querySelectorAll("[data-workspace-layout]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.workspaceLayout === state.workspacePresentation));
+    }
+    restoreVideoSplit();
   }
 
   function installVideoSplitter() {
@@ -256,7 +291,9 @@
     splitter.addEventListener("pointermove", (event) => {
       if (!splitter.hasPointerCapture?.(event.pointerId)) return;
       const rectangle = body.getBoundingClientRect();
-      setVideoSplitPercent((rectangle.right - event.clientX) / Math.max(1, rectangle.width) * 100);
+      setVideoSplitPercent(state.workspacePresentation === "stacked"
+        ? (event.clientY - rectangle.top) / Math.max(1, rectangle.height) * 100
+        : (rectangle.right - event.clientX) / Math.max(1, rectangle.width) * 100);
     });
     const finish = (event) => {
       if (splitter.hasPointerCapture?.(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
@@ -264,14 +301,16 @@
     };
     splitter.addEventListener("pointerup", finish);
     splitter.addEventListener("pointercancel", finish);
-    splitter.addEventListener("dblclick", () => setVideoSplitPercent(videoIsEmphasized() ? 66 : 35));
+    splitter.addEventListener("dblclick", () => setVideoSplitPercent(defaultVideoSplit()));
     splitter.addEventListener("keydown", (event) => {
-      if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+      const stacked = state.workspacePresentation === "stacked";
+      if (!(stacked ? ["ArrowUp", "ArrowDown", "Home"] : ["ArrowLeft", "ArrowRight", "Home"]).includes(event.key)) return;
       event.preventDefault();
-      setVideoSplitPercent(event.key === "Home" ? (videoIsEmphasized() ? 66 : 35) : Number(splitter.getAttribute("aria-valuenow")) + (event.key === "ArrowLeft" ? 2 : -2));
+      setVideoSplitPercent(event.key === "Home" ? defaultVideoSplit() : Number(splitter.getAttribute("aria-valuenow")) + (["ArrowLeft", "ArrowDown"].includes(event.key) ? 2 : -2));
     });
-    setVideoSplitPercent(35);
-    const resize = () => setVideoSplitPercent(videoIsEmphasized() ? state.videoFocusSplitPercent || 66 : state.videoSplitPercent || 35);
+    for (const button of document.querySelectorAll("[data-workspace-layout]")) button.addEventListener("click", () => setWorkspacePresentation(button.dataset.workspaceLayout));
+    setWorkspacePresentation(new URLSearchParams(location.search).get("layout"));
+    const resize = restoreVideoSplit;
     new ResizeObserver(resize).observe(body);
     new MutationObserver(resize).observe(document.getElementById("mini-probe"), { attributes: true, attributeFilter: ["class"] });
   }

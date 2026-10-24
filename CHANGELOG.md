@@ -3,6 +3,16 @@
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 
+## [4.9.0-beta.1] - 2026-10-25
+
+- Group New project, Open project and Add / Change video in the top toolbar;
+  use consistent video control sizes and neutral colors, with New project accented.
+- Explain the empty Probe, neural activity and video workspace with inline SVG
+  illustrations and enlarge the video region before and after loading data.
+- Add a Video above layout alongside Side by side. Preserve Unit, interval,
+  video position and both Probe panels when switching; resize with pointer or
+  keyboard while video tools scroll independently of the image.
+
 ## [4.8.0-beta.1] - 2026-10-23
 
 - Build one standalone HTML with embedded scripts, styles and HDF5/WASM. Read

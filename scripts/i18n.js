@@ -703,7 +703,7 @@
       "workspace.activityEmpty": "没有可用的活动总览。",
       "workspace.hint": "单击分组聚焦或单元展开 · 单击解剖信息强调 · 拖动选择时间 · 滚轮缩放 · 双击复位",
       "workspace.videoRegionAria": "同步行为视频区域",
-      "workspace.videoSplitter": "调整神经活动与行为视频区域宽度"
+      "workspace.videoSplitter": "调整神经活动与行为视频区域大小"
     },
     es: {
       "workspace.aria": "Área de actividad, anatomía y conducta del experimento",
