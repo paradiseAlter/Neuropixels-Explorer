@@ -1,6 +1,6 @@
 # Event response preview
 
-This is the reviewable 4.11.0-beta.1 event-analysis checkpoint, not completion of
+This is the reviewable 4.12.0-beta.1 event-analysis checkpoint, not completion of
 the long-running behavior/dynamics project. The saved standalone HTML calculates
 responses locally. Python is used only for an independent developer reference.
 
@@ -12,15 +12,24 @@ Unit IDs, a response window and a bin width. Provide valid acquisition intervals
 as a JSON array of `[start, end]` pairs in neural seconds. The application does
 not replace unknown coverage with the last spike, the video duration or a trial
 table's extent. User-entered coverage is explicitly unverified.
+When the imported NWB actually supplies `units/obs_intervals`, **Use source
+observation intervals** intersects the valid intervals of every selected Unit,
+preserving gaps. Missing or malformed Unit coverage cannot be promoted to valid
+coverage. This is a source-reported observation claim, not independent validation
+of continuous acquisition. The checked Allen VBN sample has no such field.
 
 Set clusters to zero for responses only, or select a cluster count, feature
 normalization and seed. The separate Worker can be cancelled without cancelling
 the shared activity Worker. Results show a selected Unit's mean rate and binned
 trial raster. **Show Unit at event** returns to the existing shared neural-time
 cursor and Unit, including the original annotation segment when applicable.
-**Export analysis JSON** exports results and provenance separately. Results are
-not yet restored from a `.neuroproject` package or after closing/reopening the
-analysis dialog. Recompute from the retained source data and configuration.
+**Export analysis JSON** exports results and provenance separately. In a browser
+project, **Save analysis in project** saves the latest result for this Recording.
+Export the project package for a portable backup. Opening Event responses again
+restores the saved result only after its exact source content, event selection,
+annotations and time mapping pass validation. Computation alone does not replace
+a previously saved result. Raw-folder inputs must first become a browser project
+to use result persistence. Different Recordings retain separate saved results.
 
 ## Event contract
 
@@ -75,10 +84,49 @@ fail explicitly. These groups are not cell types, causal effects or evidence
 of significant/stable clusters. Cross-validation, stability analyses and a
 scientific choice of cluster count remain outstanding.
 
-`neuropixels-event-analysis/1` export contains the response, optional clusters
-and provenance: creation time, source file names/sizes/mtime, source event
-metadata, exclusions and `coverageOrigin: user-declared-unverified`. File
-metadata is contextual provenance, not a cryptographic content guarantee.
+`neuropixels-event-analysis/1` export contains the response, optional clusters,
+input content fingerprints and provenance: creation time, source file
+names/sizes/mtime, source event metadata, exclusions and `coverageOrigin`.
+That origin is `user-declared-unverified` or
+`source-reported-unit-intersection`; the latter retains NWB source details.
+Names and modification times are contextual provenance, not proof of identity.
+
+## Project persistence and compatibility
+
+The optional `event-analysis` asset has Recording identity and path
+`analyses/event-response/<encoded-recording-id>.neuroanalysis`. The existing
+`neuropixels-browser-project/1` package and IndexedDB version 1 are unchanged.
+Old packages without analysis still open. Analysis bytes are not passed to
+Kilosort ingestion. Saving atomically replaces only the same Recording's prior
+analysis; other assets and the current stored project metadata are preserved.
+Annotation writes are flushed first, not overwritten by the analysis transaction.
+Failed saves preserve the preceding stored result. Imported packages retain the
+existing behavior of receiving a new project ID without changing the original.
+
+Analysis assets start with `NEUROEA1`, a uint32 little-endian JSON byte length,
+then UTF-8 metadata, uint32 little-endian counts and float64 little-endian rates.
+Schema `neuropixels-event-analysis-binary/1` records exact array lengths and
+SHA-256 checksums of metadata and tensors. Metadata is limited to 16 MiB and the full asset to 256 MiB.
+Unsupported schema/response versions, malformed dimensions, invalid identities,
+truncation, tensor corruption or rate/count disagreement are rejected. A failed
+restore leaves the source project usable and reports the reason; it does not
+silently recompute or delete the saved asset. Checksums detect corruption, not
+authenticity or biological validity of a third-party package.
+
+`sha256-ordered-chunks/1` fingerprints read immutable source Blobs in 1 MiB
+chunks. The final SHA-256 covers an ordered JSON object with domain
+`neuropixels-source/1`, `chunkBytes`, `size` and the individual chunk hashes.
+This is deliberately a versioned chunk-tree digest, not a conventional whole-file
+SHA-256. Required roles are spike times, spike clusters and the sample-rate file;
+event and coverage assets are included when present. Restoration also compares
+the exact event-set digest, sample rate, selected event identities and coverage
+provenance. A same-size source change, review/label change or changed TimeMapping
+therefore requires recomputation. Hashing is cancellable and bounded in memory,
+but scans the relevant source files before computation/restoration. No source
+files are uploaded and no external preprocessing is required.
+Video bytes themselves are not part of this neural-response fingerprint. The
+saved annotation identity, intervals, labels, review state and mapping are checked;
+this does not independently authenticate the video or the annotator's judgments.
 
 ## Validation
 
@@ -86,6 +134,9 @@ metadata is contextual provenance, not a cryptographic content guarantee.
   half-open counts, coverage gaps and precision guards, deterministic grouping,
   bounded NPY reading, Worker protocol, Allen event adaptation and event asset
   project roundtrip.
+- `node tests/validate-event-persistence.cjs`: 20 focused checks for source
+  coverage, gap-preserving intersections, exact binary arrays, corruption and
+  incompatible source rejection, cancellation and old package compatibility.
 - `node scripts/build-standalone.cjs` and
   `node tests/validate-browser-project.cjs`: standalone bundle syntax and existing
   binary project compatibility.
@@ -97,6 +148,12 @@ metadata is contextual provenance, not a cryptographic content guarantee.
   user's browser profile nor downloads packages. The fixture includes paired
   trains, original interval tables, event IDs, independently computed counts and
   an explicit numerical test coverage domain.
+- Optional actual HDF5/WASM coverage adaptation: generate a tiny developer fixture
+  with `python tests/prepare-event-coverage-fixture.py <output.nwb>` using an
+  existing h5py/numpy environment, then set `EVENT_ANALYSIS_COVERAGE_NWB` when
+  running the browser check. It tests the adapter's HDF5 layout and selected-Unit
+  identity through the actual bundled Worker. It is a synthetic schema-contract
+  fixture, not a certified NWB dataset or observed acquisition coverage.
 
 On 2026-11-12, Allen session 1064644573/probeC yielded the expected 98 VISp Units
 under the established reference filter. Three sampled Units and 205 active image
@@ -105,15 +162,23 @@ rates exactly matched independent Python comparisons. The actual standalone
 application reproduced these counts in headless Chrome. Export, stale-result
 guard, reviewed-annotation mapping, source return, cancellation and a 480 px
 Chinese viewport passed without uncaught errors. Desktop and narrow screenshots
-were inspected. The coverage supplied for this comparison is a numerical test
+were inspected. The 4.12 browser check also saves, exports and imports an 8.1 MB
+project containing the real-data response, restores all 153,750 counts exactly,
+preserves the original project, rejects same-size changed source content and a
+corrupt tensor, and opens an old package with no analysis. Atomic-save rollback
+and preservation of newer stored project metadata are checked. Reviewed
+annotation restoration, rejection after TimeMapping changes and source-coverage
+restoration are checked in the same project. Video-package reload with saved
+analysis remains a separate end-to-end acceptance case.
+The coverage supplied for the real-data comparison is a numerical test
 domain, not independently verified acquisition coverage. This does not validate
 the whole 349-Unit probe, biological clusters, end alignment or a dynamics model.
 
 ## Remaining stages
 
-Project-bound result persistence, richer population/cluster summaries, acquisition
-coverage provenance, source-data fingerprints, broader browser/real-data scaling
-and scientific robustness remain to be implemented or validated. Optional video
+Richer population/cluster summaries, independent acquisition coverage validation,
+broader browser/real-data scaling, video-package/annotation-analysis reload and
+scientific robustness remain to be implemented or validated. Optional video
 features and continuous dynamics remain separate work. Dynamics must use true
 continuous activity, not concatenated event means. No line-attractor conclusion
 or universal NWB-Zarr support is claimed by this checkpoint.

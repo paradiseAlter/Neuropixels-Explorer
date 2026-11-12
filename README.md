@@ -219,8 +219,9 @@ cache keys and Python package version. Beta tags use `v4.0.0-beta.N`; the Python
 package uses the equivalent PEP 440 spelling `4.0.0bN`. Commit and create an
 annotated tag for each reviewable release; never move an existing tag.
 
-## Event response preview (4.11.0-beta.1)
+## Event response preview (4.12.0-beta.1)
 
 The standalone HTML now computes start-aligned responses from experimental events
 or reviewed behavior annotations. See [Event responses](docs/contracts/EVENT_RESPONSES.md)
-for usage, coverage requirements, numerical meaning and remaining limitations.
+for usage, source observation coverage, project-bound result restoration, numerical
+meaning and remaining limitations.

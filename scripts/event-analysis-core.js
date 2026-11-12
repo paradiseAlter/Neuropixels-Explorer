@@ -126,6 +126,21 @@
       unitIds,eventIds:events.map(e=>e.id),events,excludedEvents:excluded,binEdges:edges,counts,rateHz:rates,
       shape:[trains.length,events.length,n],parameters:{start,end,binWidth:width,alignment:'start',eventType:options.eventType||null,activeOnly:!!options.activeOnly,coverage:options.coverage.map(c=>c.slice())}};
   }
+  function commonCoverage(input,unitIds,recordingId){
+    check(input?.schema==='neuropixels-recording-coverage/1'&&input.timebase==='neural_seconds'&&input.recordingId===recordingId,'Coverage belongs to another recording or uses an unsupported format');
+    check(input.source?.kind==='NWB.units.obs_intervals'&&input.source.status==='source-reported','Unsupported acquisition coverage source');
+    check(Array.isArray(input.units)&&input.units.length<=100000&&Array.isArray(unitIds)&&unitIds.length>0&&new Set(unitIds).size===unitIds.length,'Invalid coverage Unit selection');
+    const lookup=new Map();for(const unit of input.units){check(Number.isSafeInteger(unit.unitId)&&!lookup.has(unit.unitId),'Invalid or duplicate coverage Unit');lookup.set(unit.unitId,unit.intervals);}
+    let common=null;
+    for(const id of unitIds){
+      check(lookup.has(id),`No source observation coverage for Unit ${id}`);const intervals=validateCoverage(lookup.get(id));
+      if(common==null){common=intervals;continue;}
+      const next=[];let a=0,b=0;
+      while(a<common.length&&b<intervals.length){const start=Math.max(common[a][0],intervals[b][0]),end=Math.min(common[a][1],intervals[b][1]);if(end>start)next.push([start,end]);if(common[a][1]<intervals[b][1])a++;else b++;}
+      common=next;
+    }
+    check(common?.length,'Selected Units have no common observation coverage');return {intervals:common,source:input.source,unitIds:unitIds.slice()};
+  }
   function clusterResponses(response, options={}) {
     const [rows,,cols]=response.shape, k=options.k ?? 3, mode=options.normalization ?? 'shape';
     check(Number.isSafeInteger(k) && k>=1 && k<=32, 'Cluster count must be 1 to 32');
@@ -158,5 +173,5 @@
       interpretation:'Groups describe selected event-response features, not cell types or causal effects.'};
   }
   const workerSource = () => `const EventAnalysis = (${createEventAnalysis.toString()})();`;
-  return {SCHEMA,VERSION,validateEventSet,fromAnnotations,lowerBound,computeResponses,clusterResponses,workerSource};
+  return {SCHEMA,VERSION,validateEventSet,fromAnnotations,lowerBound,validateCoverage,commonCoverage,computeResponses,clusterResponses,workerSource};
 });

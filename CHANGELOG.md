@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.12.0-beta.1
+
+- Save the latest event-response analysis per Recording in browser project packages and restore exact counts/rates only after source-content, event and mapping checks. Existing project packages remain compatible.
+- Preserve source-reported NWB Unit observation intervals and intersect selected Units without filling gaps or inventing missing acquisition coverage.
+- Reject corrupted or stale saved analyses without deleting the project; keep save transactions separate from annotation writes.
+
 ## 4.11.0-beta.1
 
 - Add browser-native Event responses for experimental events and reviewed behavior annotations, with explicit acquisition coverage, exact half-open spike counts, optional reproducible response grouping, cancellation and source return.

@@ -43,7 +43,7 @@
       const assets=await this.store.request('assets',project.id);
       if(!assets?.length)throw new Error('此项目的缓存文件已被清理，请打开导出的 .neuroproject 项目包。');
       await this.activate(project);this.assets=assets;
-      await this.openFiles(assets.filter(a=>a.role!=='video').map(fileFrom));
+      await this.openFiles(assets.filter(a=>a.role!=='video'&&a.role!=='event-analysis').map(fileFrom));
       this.dialog.close();this.render();
     }
     async create(files,source={}) {
@@ -141,6 +141,21 @@
       const blob=S.pack(this.active,this.assets,this.documents),url=URL.createObjectURL(blob),a=document.createElement('a');
       a.href=url;a.download=this.active.name.replace(/[<>:"/\\|?*]/g,'_')+'.neuroproject';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
       this.toast('已导出项目包 · 包含神经数据、视频、对齐与标注');
+    }
+    getEventAnalysis(recording) {
+      if(!this.active||!recording)return null;
+      const matches=(this.assets||[]).filter(a=>a.role==='event-analysis'&&a.recordingId===recording.key);
+      if(matches.length>1)throw new Error('Project contains ambiguous saved analyses for this Recording');
+      return matches[0]?.blob||null;
+    }
+    async saveEventAnalysis(recording,blob) {
+      await this.ensureProject();const id=this.active.id,key=recording.key;
+      if(this.state.activeRecording!==recording)throw new Error('Recording changed before analysis save');
+      await this.annotations.flush();
+      if(this.active?.id!==id||this.state.activeRecording!==recording)throw new Error('Project changed before analysis save');
+      const asset={path:`analyses/event-response/${encodeURIComponent(key)}.neuroanalysis`,name:'event-response.neuroanalysis',role:'event-analysis',recordingId:key,type:'application/octet-stream',blob};
+      const {project,assets}=await this.store.saveAnalysis(id,key,asset);
+      if(this.active?.id===id){this.active=project;this.assets=assets;}
     }
     alignment() {
       if(!this.video.source)return;

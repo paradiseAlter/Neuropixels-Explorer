@@ -45,6 +45,25 @@ function readAllenEvents(file, recordingId, session) {
   return {schema:'neuropixels-events/1',recordingId,timebase:'neural_seconds',source:{kind:'Allen NWB',session},events,excluded,coverage:null};
 }
 
+function readAllenCoverage(units, chosen, ids, recordingId, session, probe) {
+  const data=units.get('obs_intervals');if(!data)return null;
+  const shape=data.shape;
+  const result={schema:'neuropixels-recording-coverage/1',recordingId,timebase:'neural_seconds',source:{kind:'NWB.units.obs_intervals',session,probe,status:'source-reported'},units:[],excluded:[]};
+  // NWB stores ragged observation intervals as N x 2, indexed by Unit row.
+  if(!Array.isArray(shape)||shape.length!==2||shape[1]!==2||!Number.isSafeInteger(shape[0])||shape[0]>200000){result.excluded.push({reason:'unsupported_observation_interval_shape'});return result;}
+  const values=Array.from(data.value),raw=Array.isArray(values[0])?values.flat():values;
+  const index=units.get('obs_intervals_index'),stops=index?Array.from(index.value,Number):null;
+  if(raw.length!==shape[0]*2||(stops&&(stops.length!==ids.length||stops.some((n,i)=>!Number.isSafeInteger(n)||n<0||n>(shape[0])||(i>0&&n<stops[i-1]))||stops.at(-1)!==shape[0]))||(!stops&&shape[0]!==ids.length)){
+    result.excluded.push({reason:'invalid_observation_interval_index'});return result;
+  }
+  for(const i of chosen){
+    const first=stops?(i?stops[i-1]:0):i,last=stops?stops[i]:i+1,intervals=[];let previous=-Infinity,valid=last>first;
+    for(let row=first;row<last;row++){const start=Number(raw[row*2]),end=Number(raw[row*2+1]);if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||start<previous){valid=false;break;}intervals.push([start,end]);previous=end;}
+    if(valid)result.units.push({unitId:ids[i],intervals});else result.excluded.push({unitId:ids[i],reason:'invalid_observation_intervals'});
+  }
+  return result;
+}
+
 async function readAllen(file, probeName, progress = () => {}) {
   const e = file.get('general/extracellular_ephys/electrodes'), u = file.get('units');
   if (!e || !u?.get('spike_times_index') || !u.get('peak_channel_id')) throw new Error('需要 Allen ecephys NWB Units、peak_channel_id 和电极表；当前文件缺少这些数据。');
@@ -84,6 +103,7 @@ async function readAllen(file, probeName, progress = () => {}) {
   const positions = []; for(let i=0;i<electrodeIds.length;i++)if(Number(probeIds[i])===pid)positions.push(Number(x[i]),Number(y[i]));
   const session = String(file.get('identifier').value);
   const folder = `allen-${session}-${probeName}`;
+  const coverage=readAllenCoverage(u,chosen,ids,folder,session,probeName);
   const files = [
     ['spike_times.npy',npy(times,'<f8')], ['spike_clusters.npy',npy(clusters,'<i4')],
     ['channel_positions.npy',npy(new Float64Array(positions),'<f8',[positions.length/2,2])],
@@ -91,7 +111,7 @@ async function readAllen(file, probeName, progress = () => {}) {
     ['explorer-events.json',JSON.stringify(readAllenEvents(file,folder,session))],
     ['cluster_group.tsv','cluster_id\tgroup\n'+chosen.map(i=>`${ids[i]}\t${quality[i]}`).join('\n')],
     ['explorer-units.json',JSON.stringify({session, probe:probeName, units:metadata, source:'Allen NWB peak-channel coordinates; no Kilosort templates'})]
-  ].map(([name,data])=>({name,path:`${folder}/${name}`,data}));
+  ].concat(coverage?[['explorer-coverage.json',JSON.stringify(coverage)]]:[]).map(([name,data])=>({name,path:`${folder}/${name}`,data}));
   return { files, session, probe:probeName, spikeCount:total, unitCount:chosen.length };
 }
 if (typeof self !== 'undefined' && typeof h5wasm !== 'undefined') self.onmessage = async ({data}) => {
@@ -104,4 +124,4 @@ if (typeof self !== 'undefined' && typeof h5wasm !== 'undefined') self.onmessage
   } catch(e) { self.postMessage({error:e.message}); }
   finally {file?.close();if(FS){try{FS.unmount('/work');FS.rmdir('/work');}catch{}}}
 };
-if(typeof module==='object')module.exports={readAllen,readAllenEvents,npy};
+if(typeof module==='object')module.exports={readAllen,readAllenEvents,readAllenCoverage,npy};

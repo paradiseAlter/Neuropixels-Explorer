@@ -1,25 +1,31 @@
 // SPDX-License-Identifier: MIT
 (() => {
   'use strict';
-  const E=window.NeuropixelsEventAnalysis, core=window.NeuropixelExplorerCore;
+  const E=window.NeuropixelsEventAnalysis, P=window.NeuropixelsEventAnalysisStorage, core=window.NeuropixelExplorerCore;
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const COPY={
     en:{title:'Event responses',intro:'Align Unit spikes to event starts, then compare response profiles.',source:'Event source',experiment:'Experimental events',annotation:'Reviewed behavior annotations',type:'Event type / label',units:'Unit IDs, separated by commas',useSelected:'Use selected Unit',useAll:'Use all available Units',coverage:'Valid neural recording intervals (seconds, JSON)',coverageHelp:'Enter acquisition coverage, for example [[0,3600],[3610,7200]]. A last spike or video duration is not recording coverage. User-entered coverage remains unverified.',start:'Window start (s)',end:'Window end (s)',bin:'Bin width (s)',k:'Clusters (0 = response only)',normalization:'Cluster features',shape:'Within-Unit z-score',rate:'Unscaled rate (Hz)',seed:'Random seed',active:'Active experimental block only',run:'Compute responses',cancel:'Cancel computation',close:'Back to signals',ready:'Choose events and Units, then specify valid recording intervals.',loading:'Reading event metadata…',computing:'Computing in a separate worker…',cancelled:'Computation cancelled. Source data are unchanged.',empty:'No matching events. Import experimental events with the recording or review behavior labels first.',unavailable:'Open a local Recording with spike arrays first. Indexed-service event analysis is not available yet.',coverageNote:'Coverage is user-declared and unverified. Events with incomplete windows are excluded.',limit:'Exploratory response groups are not cell types or causal effects. No significance or cluster-stability claim is made.',stale:'Inputs changed. Recompute before exporting or returning to source.',export:'Export analysis JSON',return:'Show Unit at event',event:'Source event',selected:'Selected Unit',mean:'Mean response (Hz)',raster:'Trial raster (binned spike counts)',group:'Response group',excluded:'Excluded',invalid:'Enter comma-separated integer Unit IDs.',readError:'Could not read events: ',done:'Computed',trials:'events',bins:'bins',note:'This preview exports separately. Analysis results are not yet restored from a project package.'},
     'zh-CN':{title:'事件响应',intro:'按事件起点对齐 Unit spike，再比较响应形状。',source:'事件来源',experiment:'实验事件',annotation:'已复核行为标注',type:'事件类型 / 标签',units:'Unit ID，以逗号分隔',useSelected:'使用所选 Unit',useAll:'使用全部可用 Unit',coverage:'有效神经记录区间（秒，JSON）',coverageHelp:'填写采集有效区间，例如 [[0,3600],[3610,7200]]。最后一次 spike 或视频时长不是记录覆盖范围；手动填写仍标记为未验证。',start:'窗口起点（秒）',end:'窗口终点（秒）',bin:'分箱宽度（秒）',k:'聚类数（0 = 仅响应）',normalization:'聚类特征',shape:'Unit 内 z-score',rate:'原始发放率（Hz）',seed:'随机种子',active:'仅活跃实验区块',run:'计算响应',cancel:'取消计算',close:'返回信号',ready:'选择事件和 Unit，并填写有效记录区间。',loading:'正在读取事件元数据…',computing:'正在独立 Worker 中计算…',cancelled:'计算已取消，源数据未改变。',empty:'没有匹配事件。请随记录导入实验事件，或先复核行为标签。',unavailable:'请先打开包含 spike 数组的本地 Recording。暂不支持索引服务中的事件分析。',coverageNote:'覆盖范围由用户填写，尚未验证；窗口覆盖不完整的事件会被排除。',limit:'这些探索性分组不是细胞类型或因果效应，也不代表显著性或聚类稳定性已经验证。',stale:'输入已改变，请重新计算后再导出或回看来源。',export:'导出分析 JSON',return:'在事件处查看 Unit',event:'原始事件',selected:'所选 Unit',mean:'平均响应（Hz）',raster:'试次栅格（分箱 spike 数）',group:'响应分组',excluded:'已排除',invalid:'请填写以逗号分隔的整数 Unit ID。',readError:'无法读取事件：',done:'已计算',trials:'个事件',bins:'个分箱',note:'当前预览单独导出分析结果，项目包尚不恢复分析结果。'},
     es:{title:'Respuestas a eventos',intro:'Alinea los spikes al inicio de los eventos y compara los perfiles.',source:'Origen',experiment:'Eventos experimentales',annotation:'Anotaciones revisadas',type:'Tipo / etiqueta',units:'IDs de Unit separados por comas',useSelected:'Usar Unit seleccionado',useAll:'Usar todos los Units',coverage:'Intervalos válidos de registro neural (segundos, JSON)',coverageHelp:'Introduce la cobertura de adquisición, por ejemplo [[0,3600],[3610,7200]]. El último spike o la duración del vídeo no definen la cobertura. La entrada manual no está verificada.',start:'Inicio (s)',end:'Fin (s)',bin:'Ancho de intervalo (s)',k:'Grupos (0 = solo respuesta)',normalization:'Características',shape:'Z-score dentro de cada Unit',rate:'Tasa sin escalar (Hz)',seed:'Semilla',active:'Solo bloque experimental activo',run:'Calcular respuestas',cancel:'Cancelar cálculo',close:'Volver a señales',ready:'Elige eventos y Units e introduce la cobertura válida.',loading:'Leyendo eventos…',computing:'Calculando en un worker separado…',cancelled:'Cálculo cancelado. Los datos originales no cambiaron.',empty:'No hay eventos. Importa eventos o revisa las anotaciones.',unavailable:'Abre primero un Recording local con arrays de spikes. El servicio indexado aún no admite este análisis.',coverageNote:'Cobertura declarada por el usuario, sin verificar. Se excluyen ventanas incompletas.',limit:'Los grupos exploratorios no son tipos celulares ni efectos causales. No se ha validado significación ni estabilidad.',stale:'Las entradas cambiaron. Vuelve a calcular antes de exportar.',export:'Exportar análisis JSON',return:'Ver Unit en el evento',event:'Evento original',selected:'Unit seleccionado',mean:'Respuesta media (Hz)',raster:'Raster de ensayos (recuento por intervalo)',group:'Grupo de respuesta',excluded:'Excluidos',invalid:'Introduce IDs enteros separados por comas.',readError:'No se pueden leer eventos: ',done:'Calculado',trials:'eventos',bins:'intervalos',note:'Esta vista exporta por separado. El paquete de proyecto aún no restaura los resultados.'}
   };
+  const EXTRA={
+    en:{save:'Save analysis in project',saved:'Analysis saved. Export the project package to retain a portable copy.',restored:'Restored saved analysis; source content verified.',checking:'Checking source content…',sourceCoverage:'Use source observation intervals',sourceCoverageNote:'Coverage comes from NWB observation intervals common to all selected Units. This preserves the source claim; it is not independent acquisition validation.',note:'Save analysis in project to restore the latest saved result for this Recording. Project export includes its counts, rates and provenance.',saveUnavailable:'Create or open a browser project before saving analysis.',restoreFailed:'Saved analysis was not restored: '},
+    'zh-CN':{save:'将分析保存到项目',saved:'分析已保存。导出项目包可保留可迁移副本。',restored:'已恢复分析，来源内容核对通过。',checking:'正在核对来源内容…',sourceCoverage:'使用来源观测区间',sourceCoverageNote:'采用 NWB 中所有所选 Unit 的共同观测区间。这保留来源声明，不等于独立验证了采集覆盖。',note:'保存到项目后，可恢复此 Recording 最近一次保存的分析；项目导出包含计数、发放率与来源信息。',saveUnavailable:'请先创建或打开浏览器项目再保存分析。',restoreFailed:'未恢复已保存分析：'},
+    es:{save:'Guardar análisis en el proyecto',saved:'Análisis guardado. Exporta el proyecto para conservar una copia portátil.',restored:'Análisis restaurado; contenido de origen verificado.',checking:'Verificando contenido de origen…',sourceCoverage:'Usar intervalos de observación de origen',sourceCoverageNote:'Cobertura común a todos los Units seleccionados según NWB. Conserva la declaración del origen, sin validación independiente de adquisición.',note:'Guarda el análisis para restaurar el último resultado de este Recording. El proyecto exportado incluye recuentos, tasas y procedencia.',saveUnavailable:'Crea o abre un proyecto de navegador antes de guardar.',restoreFailed:'No se restauró el análisis guardado: '}
+  };
+  for(const [language,extra]of Object.entries(EXTRA))Object.assign(COPY[language],extra);
   class EventAnalysisUI {
     constructor(options) {
       Object.assign(this,options);this.epoch=0;this.recordingKey=null;
       this.dialog=document.createElement('dialog');this.dialog.className='event-analysis-dialog';this.dialog.id='event-analysis-dialog';document.body.append(this.dialog);
       this.button.onclick=()=>this.open();
-      this.dialog.addEventListener('close',()=>this.cancel(false));
+      this.dialog.addEventListener('close',()=>{if(!this.dialog.open)this.cancel(false);});
       this.dialog.addEventListener('cancel',()=>this.cancel(false));
       this.dialog.addEventListener('click',e=>this.action(e.target.closest('[data-ea-action]')?.dataset.eaAction));
       this.dialog.addEventListener('change',e=>{
         if(e.target.name==='source'){this.result=null;this.populateTypes();}
         else if(e.target.name==='resultUnit'||e.target.name==='resultEvent')this.draw();
-        else {this.result=null;this.resultPanel?.replaceChildren();}
+        else {this.result=null;this.resultPanel?.replaceChildren();if(['unitIds','coverage'].includes(e.target.name))this.coverageProof=null;}
       });
       this.update();
     }
@@ -34,14 +40,14 @@
     status(text,error=false){const node=this.dialog.querySelector('[data-ea-status]');if(node){node.textContent=text;node.dataset.error=String(error);}}
     async open(){
       this.update();const r=this.state.activeRecording;if(!r?.spikeTimesFile||!r?.spikeClustersFile){this.toast(this.t('unavailable'));return;}
-      this.cancel(false);this.result=null;this.events=null;
+      this.cancel(false);this.result=null;this.events=null;this.coverage=null;this.coverageProof=null;
       const field=(name,label,value,type='number')=>`<label>${esc(this.t(label))}<input name="${name}" type="${type}" ${type==='number'?'step="any"':''} value="${esc(value)}" required></label>`;
       this.dialog.innerHTML=`<header><div><h2>${esc(this.t('title'))}</h2><p>${esc(this.t('intro'))}</p></div><button type="button" data-ea-action="close">${esc(this.t('close'))}</button></header>
         <details data-ea-settings open><summary>${esc(this.t('source'))} / ${esc(this.t('units'))}</summary><form><div class="event-analysis-fields">
         <label>${esc(this.t('source'))}<select name="source"><option value="experiment">${esc(this.t('experiment'))}</option><option value="annotation">${esc(this.t('annotation'))}</option></select></label>
         <label>${esc(this.t('type'))}<select name="eventType"></select></label>
         <label class="event-wide">${esc(this.t('units'))}<input name="unitIds" type="text" required value="${esc(this.state.experimentView.selectedUnitId??'')}"><span class="event-inline"><button type="button" data-ea-action="selected">${esc(this.t('useSelected'))}</button><button type="button" data-ea-action="all">${esc(this.t('useAll'))}</button></span></label>
-        <label class="event-wide">${esc(this.t('coverage'))}<input name="coverage" type="text" required placeholder="[[0,3600]]"><small>${esc(this.t('coverageHelp'))}</small></label>
+        <label class="event-wide">${esc(this.t('coverage'))}<input name="coverage" type="text" required placeholder="[[0,3600]]"><small>${esc(this.t('coverageHelp'))}</small><span><button type="button" data-ea-action="source-coverage" disabled>${esc(this.t('sourceCoverage'))}</button></span></label>
         ${field('start','start',-1)}${field('end','end',1.5)}${field('binWidth','bin',.01)}${field('k','k',0)}
         <label>${esc(this.t('normalization'))}<select name="normalization"><option value="shape">${esc(this.t('shape'))}</option><option value="rate">${esc(this.t('rate'))}</option></select></label>${field('seed','seed',1)}
         <label class="event-check event-wide"><input name="activeOnly" type="checkbox" checked>${esc(this.t('active'))}</label>
@@ -50,9 +56,46 @@
       this.dialog.setAttribute('aria-label',this.t('title'));this.dialog.querySelector('form').onsubmit=e=>{e.preventDefault();this.run();};
       this.resultPanel=this.dialog.querySelector('[data-ea-results]');this.dialog.showModal();this.status(this.t('loading'));
       const epoch=++this.epoch;
-      try {if(r.eventsFile){if(r.eventsFile.size>32*1024*1024)throw Error('Event file exceeds 32 MiB');this.events=E.validateEventSet(JSON.parse(await r.eventsFile.text()),r.key);}
+      try {if(r.eventsFile){if(r.eventsFile.size>32*1024*1024)throw Error('Event file exceeds 32 MiB');const events=E.validateEventSet(JSON.parse(await r.eventsFile.text()),r.key);if(epoch!==this.epoch)return;this.events=events;}
+        if(r.coverageFile){if(r.coverageFile.size>16*1024*1024)throw Error('Coverage file exceeds 16 MiB');const coverage=JSON.parse(await r.coverageFile.text());if(epoch!==this.epoch)return;this.coverage=coverage;this.dialog.querySelector('[data-ea-action="source-coverage"]').disabled=false;}
         if(epoch!==this.epoch)return;if(!this.events?.events.length&&this.annotations.doc)this.input('source').value='annotation';this.populateTypes();
+        await this.restore(r,epoch);
       }catch(error){if(epoch===this.epoch)this.status(this.t('readError')+error.message,true);}
+    }
+    selectedIds(){const raw=this.input('unitIds').value.trim().split(/[\s,]+/);if(!raw.length||raw.some(x=>!/^\d+$/.test(x)))throw Error(this.t('invalid'));return raw.map(Number);}
+    sourceFiles(r){return [{role:'spikeTimes',file:r.spikeTimesFile},{role:'spikeClusters',file:r.spikeClustersFile},{role:'sampleRate',file:r.byName.get('params.py')},...(r.eventsFile?[{role:'events',file:r.eventsFile}]:[]),...(r.coverageFile?[{role:'coverage',file:r.coverageFile}]:[])];}
+    sourceCoverage(){
+      try {const unitIds=this.selectedIds(),proof=E.commonCoverage(this.coverage,unitIds,this.state.activeRecording.key);this.input('coverage').value=JSON.stringify(proof.intervals);this.coverageProof={text:this.input('coverage').value,unitIds:unitIds.join(','),source:proof.source};this.result=null;this.resultPanel.replaceChildren();this.status(this.t('sourceCoverageNote'));}catch(error){this.status(error.message,true);}
+    }
+    async restore(recording,epoch){
+      try {
+        const blob=await this.getSavedAnalysis?.(recording);if(!blob||epoch!==this.epoch)return;
+        this.ioAbort=new AbortController();const signal=this.ioAbort.signal;this.busy(true);this.status(this.t('checking'));
+        const saved=await P.unpack(blob);if(epoch!==this.epoch)return;
+        const available=new Set((this.getUnits()||[]).map(u=>u.id));if(saved.response.unitIds.some(id=>!available.has(id)))throw Error('Saved Units are not available in this Recording');
+        this.input('source').value=saved.input.sourceKind;this.populateTypes();
+        const p=saved.response.parameters;for(const key of ['start','end','binWidth','eventType'])this.input(key).value=String(p[key]);
+        this.input('unitIds').value=saved.response.unitIds.join(', ');this.input('coverage').value=JSON.stringify(p.coverage);this.input('activeOnly').checked=p.activeOnly;
+        this.input('k').value=String(saved.clusters?.k||0);this.input('seed').value=String(saved.clusters?.seed??1);this.input('normalization').value=saved.clusters?.normalization||'shape';
+        if(saved.provenance.coverageOrigin==='source-reported-unit-intersection'){
+          const proof=E.commonCoverage(this.coverage,saved.response.unitIds,recording.key);if(JSON.stringify(proof.intervals)!==JSON.stringify(p.coverage))throw Error('Source observation intervals changed');
+          this.coverageProof={text:this.input('coverage').value,unitIds:saved.response.unitIds.join(','),source:proof.source};
+        }
+        const signature=this.signature();await P.verifySources(saved,this.sourceFiles(recording),this.source(),recording.sampleRate,signal,()=>this.status(this.t('checking')));
+        if(epoch!==this.epoch)return;if(signature!==this.signature()){this.status(this.t('stale'),true);return;}
+        this.result={...saved,signature};this.renderResult();this.status(this.t('restored'));
+      }catch(error){if(epoch===this.epoch&&error.name!=='AbortError')this.status(this.t('restoreFailed')+error.message,true);}
+      finally{if(epoch===this.epoch)this.busy(false);}
+    }
+    async save(){
+      if(this.saving)return;const result=this.result,r=this.state.activeRecording;
+      try {
+        if(!this.canSave?.())throw Error(this.t('saveUnavailable'));
+        if(!result||result.signature!==this.signature())throw Error(this.t('stale'));
+        this.saving=true;const blob=await P.pack(result);
+        if(result!==this.result||result.signature!==this.signature())throw Error(this.t('stale'));
+        await this.saveAnalysis(r,blob);if(result===this.result)this.status(this.t('saved'));
+      }catch(error){this.status(error.message,true);}finally{this.saving=false;}
     }
     source(){
       if(this.input('source').value==='annotation'){
@@ -72,9 +115,11 @@
       if(!action)return;
       if(action==='close'){this.dialog.close();return;}
       if(action==='cancel'){this.cancel();return;}
+      if(action==='source-coverage'){this.sourceCoverage();return;}
+      if(action==='save'){this.save();return;}
       if(action==='selected'||action==='all'){
         const ids=action==='selected'?[this.state.experimentView.selectedUnitId].filter(v=>v!=null):(this.getUnits()||[]).map(u=>u.id);
-        this.input('unitIds').value=ids.join(', ');this.result=null;this.resultPanel.replaceChildren();return;
+        this.input('unitIds').value=ids.join(', ');this.coverageProof=null;this.result=null;this.resultPanel.replaceChildren();return;
       }
       if(!this.result)return;
       if(this.signature()!==this.result.signature){this.status(this.t('stale'),true);return;}
@@ -84,17 +129,16 @@
       }
       if(action==='export'){
         const {response,clusters,provenance}=this.result;
-        const data={schema:'neuropixels-event-analysis/1',provenance,response:{...response,counts:Array.from(response.counts),rateHz:Array.from(response.rateHz)},clusters};
+        const data={schema:'neuropixels-event-analysis/1',provenance,input:this.result.input,response:{...response,counts:Array.from(response.counts),rateHz:Array.from(response.rateHz)},clusters};
         const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='event-analysis.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
       }
     }
-    cancel(show=true){this.epoch++;this.worker?.terminate();this.worker=null;if(this.workerUrl)URL.revokeObjectURL(this.workerUrl);this.workerUrl=null;this.busy(false);if(show)this.status(this.t('cancelled'));}
-    busy(active){this.dialog.querySelectorAll('form input, form select, [data-ea-run], [data-ea-action="all"], [data-ea-action="selected"]').forEach(n=>n.disabled=active);const cancel=this.dialog.querySelector('[data-ea-action="cancel"]');if(cancel)cancel.hidden=!active;if(!active&&this.input('activeOnly'))this.input('activeOnly').disabled=this.input('source')?.value==='annotation';}
+    cancel(show=true){this.epoch++;this.ioAbort?.abort();this.ioAbort=null;this.worker?.terminate();this.worker=null;if(this.workerUrl)URL.revokeObjectURL(this.workerUrl);this.workerUrl=null;this.busy(false);if(show)this.status(this.t('cancelled'));}
+    busy(active){this.dialog.querySelectorAll('form input, form select, [data-ea-run], [data-ea-action="all"], [data-ea-action="selected"], [data-ea-action="source-coverage"]').forEach(n=>n.disabled=active);const cancel=this.dialog.querySelector('[data-ea-action="cancel"]');if(cancel)cancel.hidden=!active;if(!active&&this.input('activeOnly')){this.input('activeOnly').disabled=this.input('source')?.value==='annotation';this.dialog.querySelector('[data-ea-action="source-coverage"]').disabled=!this.coverage;}}
     async run(){
       this.cancel(false);this.result=null;this.resultPanel.replaceChildren();
       try {
-        const raw=this.input('unitIds').value.trim().split(/[\s,]+/);if(!raw.length||raw.some(x=>!/^\d+$/.test(x)))throw Error(this.t('invalid'));
-        const unitIds=raw.map(Number),available=new Set((this.getUnits()||[]).map(u=>u.id));if(unitIds.some(id=>!available.has(id)))throw Error('A selected Unit does not belong to this Recording');
+        const unitIds=this.selectedIds(),available=new Set((this.getUnits()||[]).map(u=>u.id));if(unitIds.some(id=>!available.has(id)))throw Error('A selected Unit does not belong to this Recording');
         const events=this.source(),r=this.state.activeRecording;
         const options={recordingId:r.key,start:Number(this.input('start').value),end:Number(this.input('end').value),binWidth:Number(this.input('binWidth').value),coverage:JSON.parse(this.input('coverage').value),eventType:this.input('eventType').value,activeOnly:this.input('source').value==='experiment'&&this.input('activeOnly').checked};
         if(!options.eventType)throw Error(this.t('empty'));
@@ -103,7 +147,11 @@
         const k=Number(this.input('k').value);if(!Number.isSafeInteger(k)||k<0||k>32)throw Error('Cluster count must be an integer from 0 to 32');
         const clusters=k?{k,seed:Number(this.input('seed').value),normalization:this.input('normalization').value}:null;
         const signature=this.signature(),epoch=++this.epoch;
-        const provenance={createdAt:new Date().toISOString(),recordingId:r.key,source:events.source||null,excludedSourceEvents:events.excluded||[],coverageOrigin:'user-declared-unverified',sourceFiles:[r.spikeTimesFile,r.spikeClustersFile].map(f=>({name:f.name,size:f.size,lastModified:f.lastModified})),interpretation:this.t('limit')};
+        const sourceCoverage=this.coverageProof?.text===this.input('coverage').value&&this.coverageProof.unitIds===unitIds.join(',');
+        const provenance={createdAt:new Date().toISOString(),recordingId:r.key,source:events.source||null,excludedSourceEvents:events.excluded||[],coverageOrigin:sourceCoverage?'source-reported-unit-intersection':'user-declared-unverified',coverageSource:sourceCoverage?this.coverageProof.source:null,sourceFiles:[r.spikeTimesFile,r.spikeClustersFile].map(f=>({name:f.name,size:f.size,lastModified:f.lastModified})),interpretation:this.t('limit')};
+        this.ioAbort=new AbortController();const signal=this.ioAbort.signal;this.busy(true);this.status(this.t('checking'));
+        const input={sourceKind:this.input('source').value,sampleRate:r.sampleRate,eventDigest:await P.digestJSON(events),sourceFingerprints:await P.sourceFingerprints(this.sourceFiles(r),signal)};
+        if(epoch!==this.epoch)return;if(signature!==this.signature()){this.cancel(false);this.status(this.t('stale'),true);return;}
         this.workerUrl=URL.createObjectURL(new Blob([core.createEventWorkerSource(E.workerSource())],{type:'text/javascript'}));this.worker=new Worker(this.workerUrl);this.busy(true);this.status(this.t('computing'));
         this.worker.onerror=e=>{if(epoch!==this.epoch)return;this.cancel(false);this.status(e.message,true);};
         this.worker.onmessage=({data})=>{
@@ -112,22 +160,22 @@
           this.cancel(false);
           if(data.error){this.status(data.error,true);return;}
           if(signature!==this.signature()){this.status(this.t('stale'),true);return;}
-          this.result={response:data.response,clusters:data.clusters,signature,provenance};this.renderResult();
+          this.result={response:data.response,clusters:data.clusters,signature,provenance,input};this.renderResult();
         };
         this.worker.postMessage({files:{spikeTimes:r.spikeTimesFile,spikeClusters:r.spikeClustersFile},sampleRate:r.sampleRate,unitIds,events,options,clusters});
-      }catch(error){this.cancel(false);this.status(error.message,true);}
+      }catch(error){if(error.name==='AbortError')return;this.cancel(false);this.status(error.message,true);}
     }
     renderResult(){
       const {response:r,clusters:c}=this.result;
       this.dialog.querySelector('[data-ea-settings]').open=false;this.dialog.scrollTop=0;
       this.status(`${this.t('done')}: ${r.shape[0]} Units / ${r.shape[1]} ${this.t('trials')} / ${r.shape[2]} ${this.t('bins')}. ${this.t('excluded')}: ${r.excludedEvents.length}`);
-      this.resultPanel.innerHTML=`<p class="event-warning">${esc(this.t('coverageNote'))}</p><div class="event-analysis-fields">
+      this.resultPanel.innerHTML=`<p class="event-warning">${esc(this.t(this.result.provenance.coverageOrigin==='source-reported-unit-intersection'?'sourceCoverageNote':'coverageNote'))}</p><div class="event-analysis-fields">
         <label>${esc(this.t('selected'))}<select name="resultUnit">${r.unitIds.map(id=>{const index=c?.unitIds.indexOf(id),label=index>=0?` / ${this.t('group')} ${c.labels[index]+1}`:'';return `<option value="${id}">Unit ${id}${esc(label)}</option>`;}).join('')}</select></label>
         <label>${esc(this.t('event'))}<select name="resultEvent">${r.events.map((e,i)=>`<option value="${i}">${esc(e.sourceId)} / ${e.start.toFixed(3)} s</option>`).join('')}</select></label></div>
         <figure><figcaption>${esc(this.t('mean'))}</figcaption><svg data-ea-curve viewBox="0 0 760 170" role="img" aria-label="${esc(this.t('mean'))}"></svg></figure>
         <figure><figcaption>${esc(this.t('raster'))}</figcaption><canvas data-ea-raster width="760" height="240" role="img" aria-label="${esc(this.t('raster'))}"></canvas></figure>
         <p data-ea-source></p><p>${esc(this.t('limit'))}</p><p>${esc(this.t('note'))}</p>
-        <div class="event-analysis-actions"><button type="button" data-ea-action="return">${esc(this.t('return'))}</button><button type="button" data-ea-action="export">${esc(this.t('export'))}</button></div>`;
+        <div class="event-analysis-actions"><button type="button" data-ea-action="return">${esc(this.t('return'))}</button><button type="button" data-ea-action="export">${esc(this.t('export'))}</button><button type="button" data-ea-action="save" ${this.canSave?.()?'':'disabled'}>${esc(this.t('save'))}</button></div>`;
       this.draw();
     }
     draw(){

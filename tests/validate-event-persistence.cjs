@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: MIT
+'use strict';
+const assert=require('node:assert/strict'),E=require('../scripts/event-analysis-core.js'),P=require('../scripts/event-analysis-storage.js'),S=require('../scripts/browser-storage.js'),{readAllenCoverage}=require('../scripts/browser-nwb-worker.js');
+let checks=0;const test=(name,fn)=>{fn();checks++;};
+const group=values=>({get:name=>values[name]}),col=value=>({value});
+const coverage=readAllenCoverage(group({obs_intervals:{shape:[3,2],value:new Float64Array([0,2,3,6,1,5])},obs_intervals_index:col([2,3])}),[0,1],[7,9],'rec','session','probeC');
+test('NWB ragged source provenance',()=>{assert.deepEqual(coverage.units,[{unitId:7,intervals:[[0,2],[3,6]]},{unitId:9,intervals:[[1,5]]}]);assert.equal(coverage.source.status,'source-reported');});
+test('missing coverage remains unknown',()=>assert.equal(readAllenCoverage(group({}),[0],[7],'rec','s','probeC'),null));
+test('common coverage preserves gaps',()=>assert.deepEqual(E.commonCoverage(coverage,[7,9],'rec').intervals,[[1,2],[3,5]]));
+test('coverage identity and missing Unit fail',()=>{assert.throws(()=>E.commonCoverage(coverage,[7,9],'other'),/another recording/);assert.throws(()=>E.commonCoverage(coverage,[42],'rec'),/Unit 42/);});
+test('malformed coverage is never promoted',()=>{const bad=readAllenCoverage(group({obs_intervals:{shape:[1,2],value:[0,5]},obs_intervals_index:col([5])}),[0],[7],'rec','s','p');assert.equal(bad.units.length,0);assert.equal(bad.excluded[0].reason,'invalid_observation_interval_index');assert.throws(()=>E.commonCoverage(bad,[7],'rec'),/No source/);});
+test('fixed per-Unit coverage and invalid row isolation',()=>{const c=readAllenCoverage(group({obs_intervals:{shape:[2,2],value:[0,5,9,4]}}),[0,1],[7,9],'rec','s','p');assert.equal(c.units.length,1);assert.equal(c.excluded[0].unitId,9);});
+test('selected Unit indices retain original identity',()=>{const c=readAllenCoverage(group({obs_intervals:{shape:[3,2],value:[0,5,1,6,2,7]}}),[2],[7,9,11],'rec','s','p');assert.deepEqual(c.units,[{unitId:11,intervals:[[2,7]]}]);});
+const events={schema:E.SCHEMA,recordingId:'rec',timebase:'neural_seconds',events:[{id:'a',sourceId:'a',type:'stim',kind:'point',sourceKind:'experiment',start:2,end:null},{id:'b',sourceId:'b',type:'stim',kind:'point',sourceKind:'experiment',start:4,end:null}]};
+const response=E.computeResponses([{unitId:7,spikes:[1.2,2.2,2.8,4.4]},{unitId:9,spikes:[1.8,3.2,4.1]}],events,{recordingId:'rec',start:-1,end:1,binWidth:.5,coverage:[[0,6]],eventType:'stim'});
+const sources=[{role:'spikeTimes',file:new Blob(['12345'])},{role:'spikeClusters',file:new Blob(['77979'])},{role:'sampleRate',file:new Blob(['sample_rate = 1'])}];
+(async()=>{
+ const record={response,clusters:E.clusterResponses(response,{k:2,seed:42}),provenance:{recordingId:'rec',coverageOrigin:'user-declared-unverified'},input:{sourceKind:'experiment',sampleRate:1,eventDigest:await P.digestJSON(events),sourceFingerprints:await P.sourceFingerprints(sources)}};
+ const blob=await P.pack(record),restored=await P.unpack(blob);assert.deepEqual(restored.response,response);assert.deepEqual(restored.clusters,record.clusters);checks++;
+ await P.verifySources(restored,sources,events,1);checks++;
+ await assert.rejects(P.verifySources(restored,[{role:'spikeTimes',file:new Blob(['12346'])},...sources.slice(1)],events,1),/content changed/);checks++;
+ await assert.rejects(P.verifySources(restored,sources,{...events,events:events.events.slice(0,1)},1),/Events/);
+ await assert.rejects(P.verifySources(restored,sources,events,2),/parameters/);checks++;
+ await assert.rejects(P.verifySources({...restored,response:{...restored.response,events:restored.response.events.slice().reverse()}},sources,events,1),/selection disagrees/);checks++;
+ const bytes=new Uint8Array(await blob.arrayBuffer());bytes[bytes.length-1]^=1;await assert.rejects(P.unpack(new Blob([bytes])),/checksum/);await assert.rejects(P.unpack(blob.slice(0,-1)),/Truncated/);checks++;
+ const prefix=new Uint8Array(await blob.slice(0,12).arrayBuffer()),length=new DataView(prefix.buffer).getUint32(8,true),metadata=JSON.parse(await blob.slice(12,12+length).text());metadata.record.clusters.seed=43;const json=new TextEncoder().encode(JSON.stringify(metadata));new DataView(prefix.buffer).setUint32(8,json.length,true);await assert.rejects(P.unpack(new Blob([prefix,json,blob.slice(12+length)])),/metadata checksum/);checks++;
+ await assert.rejects(P.pack({...record,clusters:{...record.clusters,seed:-1}}),/cluster provenance/);checks++;
+ const badRate={...record,response:{...response,rateHz:Float64Array.from(response.rateHz,()=>999)}};await assert.rejects(P.pack(badRate),/disagrees/);checks++;
+ await assert.rejects(P.pack({...record,response:{...response,version:'future/9'}}),/version/);checks++;
+ const controller=new AbortController();controller.abort();await assert.rejects(P.fingerprint(new Blob(['x']),controller.signal),e=>e.name==='AbortError');checks++;
+ const projectBlob=S.pack({id:'p',name:'Roundtrip'},[{path:'analyses/event-response/rec.neuroanalysis',name:'event-response.neuroanalysis',role:'event-analysis',recordingId:'rec',blob}],{}),project=await S.unpack(projectBlob);
+ assert.equal(project.assets[0].role,'event-analysis');assert.deepEqual((await P.unpack(project.assets[0].blob)).response,response);checks++;
+ const old=await S.unpack(S.pack({id:'old',name:'Older project'},[],{}));assert.equal(old.assets.length,0);assert.equal(S.SCHEMA,'neuropixels-browser-project/1');checks++;
+ console.log(JSON.stringify({status:'PASS',checks,scope:'source-reported per-Unit coverage, common valid intervals, checksummed analysis asset, exact tensors, source-content mismatch, cancellation, project/1 compatibility'}));
+})().catch(error=>{console.error(error);process.exitCode=1;});

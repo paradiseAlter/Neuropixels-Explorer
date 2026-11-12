@@ -22,7 +22,8 @@
     "channel_geometry.csv",
     "channel_map.npy",
     "channel_shanks.npy",
-    "explorer-events.json"
+    "explorer-events.json",
+    "explorer-coverage.json"
   ]);
   const ROLE_BY_NAME = Object.freeze({
     "spike_times.npy": "spike_times",
@@ -293,6 +294,7 @@
       spikeTimesFile,
       spikeClustersFile,
       eventsFile: group.byName.get("explorer-events.json") || null,
+      coverageFile: group.byName.get("explorer-coverage.json") || null,
       sampleRate,
       spikeCount: timesHeader.count,
       duration: Number(lastSample || 0) / sampleRate,

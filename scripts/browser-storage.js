@@ -32,6 +32,19 @@
         tx.oncomplete = resolve; tx.onerror = tx.onabort = () => reject(tx.error || new Error("Project cache failed"));
       }); } finally { db.close(); }
     }
+    async saveAnalysis(projectId, recordingId, asset) {
+      const db=await this.db();
+      try { return await new Promise((resolve,reject)=>{
+        const tx=db.transaction(['projects','assets'],'readwrite'),p=tx.objectStore('projects').get(projectId),a=tx.objectStore('assets').get(projectId);let completed=0,result;
+        const save=()=>{if(++completed!==2)return;
+          if(!p.result||!Array.isArray(a.result)||!p.result.recordingIds?.includes(recordingId)){tx.abort();return;}
+          const project={...p.result,updated:Date.now()},assets=a.result.filter(item=>!(item.role==='event-analysis'&&item.recordingId===recordingId));assets.push(asset);
+          tx.objectStore('projects').put(project,projectId);tx.objectStore('assets').put(assets,projectId);result={project,assets};
+        };
+        p.onsuccess=a.onsuccess=save;
+        tx.oncomplete=()=>resolve(result);tx.onerror=tx.onabort=()=>reject(tx.error||p.error||a.error||new Error('Project changed before analysis save'));
+      }); } finally { db.close(); }
+    }
   }
   function pack(project, assets, annotations) {
     const manifest = { schema: SCHEMA, project, annotations, assets: assets.map(({ blob, ...a }) => ({ ...a, size: blob.size })) };
