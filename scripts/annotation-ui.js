@@ -86,7 +86,7 @@
     frameHelp: ["0-based frame numbers use nominal FPS; for variable-frame-rate video use seconds.", "帧号从 0 开始，按标称帧率换算；变帧率视频请使用秒数。", "Fotogramas desde 0, según FPS nominales; usa segundos para frecuencia variable."],
     seconds: ["video seconds", "视频秒", "segundos de vídeo"],
     featureTitle: ["Model features / keypoints", "模型特征 / 关键点", "Características / puntos del modelo"],
-    featureHelp: ["Export a data-only model request, then import timed feature or 2-D keypoint JSON. Grouping runs here; no model or code is executed. Missing samples remain gaps and all groups need review. Local videos up to 512 MiB; feature files up to 25 MB.", "导出模型输入数据，再导入带时间的特征或二维关键点 JSON。本页运行分组，不执行外部模型或代码。缺失样本保留为空隙，所有分组均待确认。支持不超过 512 MiB 的本地视频、25 MB 的特征文件。", "Exporta datos para tu modelo e importa JSON con tiempos. La agrupación es local; no se ejecuta ningún modelo ni código externo. Se conservan los huecos y todos los grupos requieren revisión. Vídeo local hasta 512 MiB; JSON hasta 25 MB."],
+    featureHelp: ["Export a data-only model request, then import timed feature or 2-D keypoint JSON. Grouping runs here; no model or code is executed. Missing samples remain gaps and all groups need review. Local files or selected local-service videos up to 512 MiB; feature files up to 25 MB. The service returns a content fingerprint, not video bytes.", "导出模型输入数据，再导入带时间的特征或二维关键点 JSON。本页运行分组，不执行外部模型或代码。缺失样本保留为空隙，所有分组均待确认。支持不超过 512 MiB 的本地文件或本地服务项目视频，以及 25 MB 的特征文件。服务只返回内容指纹，不搬运视频。", "Exporta datos para tu modelo e importa JSON con tiempos. La agrupación es local; no se ejecuta ningún modelo ni código externo. Se conservan los huecos y todos los grupos requieren revisión. Archivo local o vídeo del proyecto local hasta 512 MiB; JSON hasta 25 MB. El servicio devuelve una huella, no el vídeo."],
     featureExport: ["Export model input", "导出模型输入", "Exportar entrada del modelo"],
     featureImport: ["Import features and group", "导入特征并分组", "Importar y agrupar"],
     featureConfidence: ["Minimum keypoint confidence", "关键点置信度下限", "Confianza mínima del punto"],
@@ -309,7 +309,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.14.1-beta.1</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.15.0-beta.1</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -670,22 +670,27 @@
     syncDraft() {const start=this.video.mapping.videoToNeural(this.draft.start),end=this.video.mapping.videoToNeural(this.draft.end);this.setView({selectedInterval:Number.isFinite(start)&&Number.isFinite(end)?{start,end}:null});this.video.seekVideo(this.draft.start);}
     async processFeatures(file) {
       if (this.abort) return;
-      const localFile = this.video.localFile, key = this.key;
-      if (!this.doc || !["file", "url"].includes(this.video.source?.kind) || !(localFile instanceof Blob)) throw new Error("Attach a local video file before exchanging model features");
-      if (localFile.size > 512 * 1024 * 1024) throw new Error("Feature exchange currently supports local videos up to 512 MiB");
+      const localFile = this.video.localFile, source = this.video.source, descriptor = source?.descriptor, streamId = descriptor?.video_stream_id, sourceUrl = this.video.elements.video.src, key = this.key;
+      const hasBlob = localFile instanceof Blob;
+      if (!this.doc || !["file", "url"].includes(source?.kind) || (!hasBlob && (source.kind !== "url" || !this.linkedVideoFingerprint))) throw new Error("Attach a local video file or open a selected service-project video before exchanging model features");
+      if ((hasBlob ? localFile.size : this.doc.context.videoSize) > 512 * 1024 * 1024) throw new Error("Feature exchange currently supports local videos up to 512 MiB");
       if (file && file.size > F.LIMITS.bytes) throw new Error("Feature file exceeds 25 MB");
       const context = A.clone(this.doc.context), options = { count: 8, minConfidence: .8, normalization: "zscore", seed: 42, ...this.featureOptions };
       const abort = new AbortController(); this.abort = abort; this.featureOpen = true; this.progressText = tr("featureWorking"); this.render();
-      const ensure = () => { if (abort.signal.aborted || key !== this.key || localFile !== this.video.localFile) throw new DOMException("Cancelled", "AbortError"); };
+      const ensure = () => { if (abort.signal.aborted || key !== this.key || localFile !== this.video.localFile || source !== this.video.source || descriptor !== source.descriptor || streamId !== source.descriptor?.video_stream_id || sourceUrl !== this.video.elements.video.src) throw new DOMException("Cancelled", "AbortError"); };
       let worker, workerUrl;
       try {
         ensure();
         const P = window.NeuropixelsEventAnalysisStorage;
-        if (this.featureFingerprintCache?.file !== localFile) {
-          const value = await P.fingerprint(localFile, abort.signal); ensure();
-          this.featureFingerprintCache = { file: localFile, value };
+        if (hasBlob) {
+          if (this.featureFingerprintCache?.file !== localFile) {
+            const value = await P.fingerprint(localFile, abort.signal); ensure();
+            this.featureFingerprintCache = { file: localFile, value };
+          }
+          context.videoFingerprint = this.featureFingerprintCache.value;
+        } else {
+          context.videoFingerprint = await this.linkedVideoFingerprint(source, context, abort.signal); ensure();
         }
-        context.videoFingerprint = this.featureFingerprintCache.value;
         if (!file) {
           ensure(); const request = F.modelInput(context, this.doc, this.video.mapping.toJSON());
           this.download(JSON.stringify(request, null, 2), "model-input.json", "application/json");
@@ -757,7 +762,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.14.1-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.15.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

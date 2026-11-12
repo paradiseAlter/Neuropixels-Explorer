@@ -1365,8 +1365,10 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
                 if host.split(":")[0] not in {"localhost", "127.0.0.1"} or (origin and origin != "http://" + host) or not self.headers.get("Content-Type", "").startswith("application/json"):
                     self._json({"message": "Local project actions require the Explorer's own window"}, HTTPStatus.FORBIDDEN)
                     return
-                payload = self._read_json(maximum_bytes=64 * 1024 * 1024)
-                if parsed.path == "/api/local/attach":
+                payload = self._read_json(maximum_bytes=4096 if parsed.path == "/api/local/video-fingerprint" else 64 * 1024 * 1024)
+                if parsed.path == "/api/local/video-fingerprint":
+                    self._json(self.server.service.local_projects.video_fingerprint(payload))
+                elif parsed.path == "/api/local/attach":
                     self._json(self.server.service.local_projects.attach_granted(payload["recordingId"], payload["token"], payload.get("projectId")))
                 elif parsed.path == "/api/local/annotations":
                     self._json(self.server.service.local_projects.annotation(payload))

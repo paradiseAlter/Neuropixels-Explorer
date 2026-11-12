@@ -1,13 +1,14 @@
 # Optional video feature exchange
 
-This 4.14.1-beta.1 checkpoint adds a data-only boundary for external model
+This 4.15.0-beta.1 checkpoint adds a data-only boundary for external model
 outputs. It does not ship, load or run a pretrained behavior model, arbitrary
 JavaScript, Python, or a remote inference service. The existing manual annotation
 and event-response paths do not depend on it.
 
 ## User workflow
 
-Open a local video or a browser project containing its video. In **Annotate →
+Open a local video, a browser project containing its video, or a selected video
+in the optional local service project. In **Annotate →
 Clips & grouping → Model features / keypoints**, export **model-input.json**.
 It contains the current recording/video identity, a bounded-memory content
 fingerprint, annotation document and video/neural mapping snapshot. It does not
@@ -24,9 +25,40 @@ Cancel, native review-dialog dismissal, the annotation toggle, closing the edito
 and changing video/recording discard obsolete work.
 
 Browser project videos retain their existing local Blob for bounded fingerprint
-reads, without fetching or copying a remote video. The first checkpoint supports
-local videos up to 512 MiB and feature JSON up to 25 MB. Remote/indexed video
-URLs without an accessible local Blob are not supported by this exchange path.
+reads, without fetching or copying a remote video. Selected local-service project
+videos use the bounded metadata-only bridge below. Both paths support videos up
+to 512 MiB and feature JSON up to 25 MB. Arbitrary remote URLs and generic indexed
+streams that have not been selected into a local project remain unsupported.
+
+## Selected local-service video identity
+
+The service path does not fetch the whole video into the browser or create a
+video Blob. `POST /api/local/video-fingerprint` accepts only `projectId`,
+`recordingId`, and `videoStreamId`. Its JSON body is capped at 4096 bytes. Existing
+loopback Host, same-origin and JSON checks apply. The endpoint accepts only the
+video already selected into that exact project/recording and its existing opaque
+file grant. It accepts no paths/URLs, creates no grants and changes no settings.
+The browser verifies the current same-origin `/api/local/media/<token>` source.
+
+The server requires a regular, nonempty video no larger than 512 MiB. It reads
+fixed chunks of at most 1 MiB up to the initial size, plus one EOF-check byte,
+and returns the identical `sha256-ordered-chunks/1` fingerprint. File descriptor,
+path identity, size/timestamps and project binding are checked before/after the
+read. Changed or truncated sources are rejected. The response is
+`neuropixels-video-fingerprint/1` with echoed project/recording/video IDs,
+`videoName`, `videoSize`, and `fingerprint`; it contains no path or media bytes.
+Errors are sanitized. Only one hash can run per service instance; concurrent
+requests receive 409 immediately. Identity is freshly computed for each operation,
+not reused from a size/timestamp-only fingerprint cache.
+
+The client validates the response and guards source object, descriptor/token,
+URL and project identity, including same-name/same-size replacement. Cancel and
+closing the editor abort the fetch; source/project changes also discard stale
+results, but may not immediately abort it. A server read already underway may
+finish its single bounded scan
+before noticing the disconnected client; cancellation does not promise to stop
+server disk I/O immediately. This is content identity at request time, not an
+immutable-file guarantee or evidence of synchronization/behavior validity.
 
 ## Shared data contract
 
@@ -191,9 +223,21 @@ fresh catalog. Its actual browser UI restored the source/results, saved a QA-onl
 group name, saved the project file and restored the exact document after reload.
 All clips remained unreviewed and the video/neural clock remained unverified.
 A wrong-recording write was rejected without replacing the existing document.
-This tests result persistence, not direct feature import on streamed media:
-service video URLs currently lack the local Blob required by the exchange path.
-The UI rejects a new model-input export there without changing annotations.
+That earlier check covered result persistence only. The 4.15 selected-project
+bridge additionally exported a model request and imported the same real feature
+values without a video Blob, generating 8 groups / 32 new unreviewed clips while
+preserving prior runs. Six measured fingerprint responses were 401 bytes each.
+Malformed responses, cancel, same-name source replacement, project change and
+dialog dismissal left annotations unchanged. Saving/reloading the project
+restored the complete document. No external application requests were made.
 Standalone binary packages and service linked-file JSON projects remain distinct
 formats; the validation explicitly adapted recording context and source digest,
 not an automatic package converter.
+
+Focused bridge checks: `node tests/validate-streamed-video-features.cjs` covers
+23 frontend binding, response and stale/abort cases. `python -m unittest discover
+-s tests/python -p test_video_fingerprint.py -v` covers 10 server cases, including
+independent browser-hash parity, multichunk/empty files, regular-file and size
+checks, growth/truncation/replacement, binding, no-cache, busy/lock recovery,
+origin/body limits and no persistent state writes. Empty files have a defined
+hash for algorithm parity but are not accepted as videos.

@@ -105,6 +105,7 @@
     constructor({state,video,annotations,openCatalog,home,resume,toast,folderFallback,onVideoExpand}) {
       Object.assign(this,{state,video,annotations,openCatalog,home,resume,toast,folderFallback,onVideoExpand});
       this.browserStore=annotations.store;
+      annotations.linkedVideoFingerprint=(source,context,signal)=>this.linkedVideoFingerprint(source,context,signal);
       annotations.onSaveProject=()=>this.action("save-project");
       this.projects=[]; this.available=false;
       this.dialog=document.createElement("dialog"); this.dialog.className="project-dialog"; this.dialog.id="project-dialog";
@@ -143,9 +144,35 @@
       new MutationObserver(()=>this.render()).observe(document.documentElement,{attributes:true,attributeFilter:["lang"]});
       this.render(); this.refresh(true);
     }
-    async request(path,body) {
-      const r=await fetch(path,body ? {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)} : {cache:"no-store"});
+    async request(path,body,signal) {
+      const r=await fetch(path,{...(body ? {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)} : {cache:"no-store"}),signal});
       const value=await r.json(); if(!r.ok) throw new Error(value.message||value.error||r.statusText); return value;
+    }
+    async linkedVideoFingerprint(source,context,signal) {
+      const projectId=this.active?.id, recordingId=context.recordingKey, descriptor=source?.descriptor;
+      const videoStreamId=descriptor?.video_stream_id, url=this.video.elements.video.src;
+      const selected=this.active?.videos?.[recordingId];
+      if(!this.available || source?.kind!=="url" || !["http:","https:"].includes(location.protocol) ||
+        !projectId || !this.active.recordingIds?.includes(recordingId) || !/^[0-9a-f]{32}$/.test(videoStreamId||"") ||
+        descriptor?.recording_id!==recordingId || selected?.video_stream_id!==videoStreamId) {
+        throw new Error("Open a selected local-project video before exchanging model features");
+      }
+      const media=new URL(url,location.href);
+      if(media.origin!==location.origin || media.pathname!==`/api/local/media/${videoStreamId}` || media.search || media.hash) {
+        throw new Error("Feature exchange requires the selected project's same-origin video stream");
+      }
+      const result=await this.request("/api/local/video-fingerprint",{projectId,recordingId,videoStreamId},signal);
+      if(signal?.aborted || this.active?.id!==projectId || this.video.source!==source || source.descriptor!==descriptor ||
+        descriptor.video_stream_id!==videoStreamId || this.video.elements.video.src!==url ||
+        this.active?.videos?.[recordingId]?.video_stream_id!==videoStreamId) throw new DOMException("Cancelled","AbortError");
+      const f=result.fingerprint;
+      if(result.schema!=="neuropixels-video-fingerprint/1" || result.projectId!==projectId || result.recordingId!==recordingId ||
+        result.videoStreamId!==videoStreamId || result.videoName!==context.videoName || result.videoSize!==context.videoSize ||
+        f?.algorithm!=="sha256-ordered-chunks/1" || f.chunkBytes!==1048576 || f.size!==context.videoSize ||
+        !Number.isSafeInteger(f.size) || f.size<=0 || f.size>512*1024*1024 || !/^[a-f0-9]{64}$/.test(f.digest)) {
+        throw new Error("Invalid selected-video content fingerprint response");
+      }
+      return f;
     }
     async refresh(restore=false) {
       if(!["http:","https:"].includes(location.protocol)) return;

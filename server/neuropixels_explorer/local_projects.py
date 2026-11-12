@@ -24,10 +24,11 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from .ingest import EXACT_ROLES, UNIT_METADATA_NAMES, VIDEO_EXTENSIONS, media_type
+from .ingest import EXACT_ROLES, UNIT_METADATA_NAMES, VIDEO_EXTENSIONS, IngestError, media_type
 from .migrations import SCHEMA_VERSION
 from . import project_files
 from .project_checks import inspect_files
+from .video_fingerprint import fingerprint_path, MAX_VIDEO_BYTES
 
 
 def native_pick(kind):
@@ -49,6 +50,7 @@ class LocalProjects:
         self.file = self.paths.data_root / ".explorer-local.json"
         self.lock = threading.RLock()
         self.operation_lock = threading.Lock()
+        self.video_fingerprint_lock = threading.Lock()
         self.jobs, self.candidates = {}, {}
         self.state = json.loads(self.file.read_text(encoding="utf-8")) if self.file.exists() else {"assets": {}, "projects": []}
 
@@ -99,6 +101,55 @@ class LocalProjects:
                 project.update(dirty=True, updatedAt=self.now())
                 self.save()
             return {"document": docs.get(key)}
+
+    def _fingerprint_target(self, payload):
+        if set(payload) != {"projectId", "recordingId", "videoStreamId"} or not all(
+            isinstance(payload.get(key), str) and 0 < len(payload[key]) <= 256
+            for key in ("projectId", "recordingId", "videoStreamId")
+        ) or not re.fullmatch(r"[0-9a-f]{32}", payload["videoStreamId"]):
+            raise ValueError("Invalid selected-project video identity")
+        project = next((p for p in self.state["projects"] if p["id"] == payload["projectId"]), None)
+        rid, token = payload["recordingId"], payload["videoStreamId"]
+        video = project.get("videos", {}).get(rid) if project and rid in project.get("recordingIds", []) else None
+        grant = self.state["assets"].get(token)
+        if not video or video.get("recording_id") != rid or video.get("video_stream_id") != token or not grant:
+            raise ValueError("Video is not selected in this project and recording")
+        if not isinstance(video.get("video_name"), str) or not video["video_name"] or video.get("byte_size") != grant.get("size"):
+            raise ValueError("Selected video metadata does not match its file")
+        if not isinstance(grant.get("size"), int) or not 0 < grant["size"] <= MAX_VIDEO_BYTES:
+            raise ValueError("Feature exchange supports nonempty selected videos up to 512 MiB")
+        if Path(grant.get("path", "")).suffix.lower() not in VIDEO_EXTENSIONS:
+            raise ValueError("Selected source is not a video file")
+        return json.loads(json.dumps(video)), dict(grant)
+
+    def video_fingerprint(self, payload):
+        # Do not serialize unrelated project work behind a bounded disk read.
+        with self.lock:
+            video, grant = self._fingerprint_target(payload)
+        if not self.video_fingerprint_lock.acquire(blocking=False):
+            raise IngestError("video_fingerprint_busy", "Another video identity check is running; try again shortly", status=409)
+        try:
+            token = payload["videoStreamId"]
+            try:
+                path = self.paths.resolve_asset("@local/" + token)
+            except (OSError, ValueError, KeyError) as error:
+                raise ValueError("Linked video is missing or changed; select it again") from error
+            fingerprint = fingerprint_path(path)
+            with self.lock:
+                current_video, current_grant = self._fingerprint_target(payload)
+                if current_video != video or current_grant != grant:
+                    raise ValueError("Project video changed during the identity check")
+                try:
+                    if self.paths.resolve_asset("@local/" + token) != path:
+                        raise ValueError("Linked video changed")
+                except (OSError, ValueError, KeyError) as error:
+                    raise ValueError("Linked video changed during the identity check") from error
+            if fingerprint["size"] != video["byte_size"]:
+                raise ValueError("Selected video size changed during the identity check")
+            return {"schema": "neuropixels-video-fingerprint/1", **payload,
+                    "videoName": video["video_name"], "videoSize": video["byte_size"], "fingerprint": fingerprint}
+        finally:
+            self.video_fingerprint_lock.release()
 
     def checks(self, recording_id, project_id=None):
         paths, issues = {}, {}

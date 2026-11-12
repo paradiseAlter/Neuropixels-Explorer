@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.15.0-beta.1
+
+- Enable model-input export and feature grouping for videos already selected in a local-service project, without copying the video into the browser. The service performs bounded content hashing and returns only identity metadata.
+- Enforce exact project/video binding, same-origin requests, size/concurrency limits, file-change checks and stale/cancel guards. Existing file-based standalone behavior and data contracts remain compatible; no external model execution or scientific validation is implied.
+
 ## 4.14.1-beta.1
 
 - Correct optional feature grouping at numerical boundaries: exactly constant long sequences are rejected, and small valid raw-unit differences no longer collapse during initialization. New runs record method version 2; saved version 1 runs remain readable and unchanged.
