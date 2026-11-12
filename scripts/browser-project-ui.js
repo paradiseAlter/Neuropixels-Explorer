@@ -130,7 +130,7 @@
       if(key && this.loadedVideoKey!==key){
         const asset=this.assets?.find(a=>a.path===descriptor.asset);if(asset){
           if(this.videoUrl)URL.revokeObjectURL(this.videoUrl);this.videoUrl=URL.createObjectURL(asset.blob);this.loadedVideoKey=key;
-          this.video.loadUrl(this.videoUrl,descriptor);
+          this.video.loadUrl(this.videoUrl,descriptor,{localFile:asset.blob});
         }
       }else if(!descriptor)this.loadedVideoKey=null;
       if(this.active)document.getElementById('dataset-title').textContent=this.active.name;

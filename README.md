@@ -225,3 +225,5 @@ The standalone HTML now computes start-aligned responses from experimental event
 or reviewed behavior annotations. See [Event responses](docs/contracts/EVENT_RESPONSES.md)
 for usage, population/group views, split-half sensitivity, source coverage, project
 restoration and remaining interpretation limits.
+
+可选视频特征与模型数据交换：[Video feature contract](docs/contracts/VIDEO_FEATURES.md)。

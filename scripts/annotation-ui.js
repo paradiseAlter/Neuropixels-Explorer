@@ -3,6 +3,7 @@
   "use strict";
   const A = window.NeuropixelsAnnotations;
   const D = window.NeuropixelsBehaviorDiscovery;
+  const F = window.NeuropixelsVideoFeatures;
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const COPY = {
     open: ["Annotate", "标注行为", "Anotar"],
@@ -83,7 +84,17 @@
     frameStart: ["Start frame", "起始帧", "Fotograma inicial"],
     frameEnd: ["End frame (exclusive)", "结束帧（不含）", "Fotograma final (exclusivo)"],
     frameHelp: ["0-based frame numbers use nominal FPS; for variable-frame-rate video use seconds.", "帧号从 0 开始，按标称帧率换算；变帧率视频请使用秒数。", "Fotogramas desde 0, según FPS nominales; usa segundos para frecuencia variable."],
-    seconds: ["video seconds", "视频秒", "segundos de vídeo"]
+    seconds: ["video seconds", "视频秒", "segundos de vídeo"],
+    featureTitle: ["Model features / keypoints", "模型特征 / 关键点", "Características / puntos del modelo"],
+    featureHelp: ["Export a data-only model request, then import timed feature or 2-D keypoint JSON. Grouping runs here; no model or code is executed. Missing samples remain gaps and all groups need review. Local videos up to 512 MiB; feature files up to 25 MB.", "导出模型输入数据，再导入带时间的特征或二维关键点 JSON。本页运行分组，不执行外部模型或代码。缺失样本保留为空隙，所有分组均待确认。支持不超过 512 MiB 的本地视频、25 MB 的特征文件。", "Exporta datos para tu modelo e importa JSON con tiempos. La agrupación es local; no se ejecuta ningún modelo ni código externo. Se conservan los huecos y todos los grupos requieren revisión. Vídeo local hasta 512 MiB; JSON hasta 25 MB."],
+    featureExport: ["Export model input", "导出模型输入", "Exportar entrada del modelo"],
+    featureImport: ["Import features and group", "导入特征并分组", "Importar y agrupar"],
+    featureConfidence: ["Minimum keypoint confidence", "关键点置信度下限", "Confianza mínima del punto"],
+    featureScale: ["Feature scaling", "特征标准化", "Escala de características"],
+    featureZ: ["Per-feature z-score", "逐特征 z-score", "Z-score por característica"],
+    featureNone: ["Keep feature units", "保留特征单位", "Conservar unidades"],
+    featurePose: ["Pose centering, rotation and scale follow the file's declared named anchors. No temporal smoothing or short-bout merging is applied.", "姿态平移、旋转与尺度处理按文件声明的具名锚点执行。不平滑时间，也不合并短片段。", "La postura usa los anclajes declarados en el archivo. No se suaviza el tiempo ni se unen episodios breves."],
+    featureWorking: ["Checking video identity and grouping features…", "正在核对视频身份并处理特征…", "Verificando vídeo y agrupando…"]
   };
   const tr = (key) => COPY[key]?.[document.documentElement.lang === "zh-CN" ? 1 : document.documentElement.lang === "es" ? 2 : 0] || key;
   class DraftStore {
@@ -146,7 +157,7 @@
       this.stripObserver=new ResizeObserver(()=>this.drawTimeline(true));this.stripObserver.observe(strip);
       button.addEventListener("click", () => { this.opened = !this.opened; this.render(); });
       document.addEventListener("keydown", e => {
-        if (!e.defaultPrevented && e.key === "Escape" && this.opened && !this.reviewMode && !document.querySelector("dialog[open]")) { e.preventDefault(); this.opened = false; this.render(); button.focus(); }
+        if (!e.defaultPrevented && e.key === "Escape" && this.opened && !this.reviewMode && !document.querySelector("dialog[open]")) { e.preventDefault(); this.abort?.abort(); this.opened = false; this.render(); button.focus(); }
         if (e.defaultPrevented || !this.opened || this.reviewMode || this.labelDialog.open || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
         if (e.code === "Space") { e.preventDefault(); this.video.togglePlayback(); }
         if (e.key.toLowerCase() === "i") this.panel.querySelector('[data-action="quick-start"]')?.click();
@@ -167,7 +178,7 @@
       strip.addEventListener("pointerup", (e) => this.dragEnd(e));
       strip.addEventListener("pointercancel", () => { this.drag = null; this.brush = null; this.draft = null; this.preview.hidden = true; this.render(); });
       panel.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") { e.preventDefault(); if (this.reviewMode) this.reviewMode = false; else this.opened = false; this.render(); button.focus(); }
+        if (e.key === "Escape") { e.preventDefault(); this.abort?.abort(); if (this.reviewMode) this.reviewMode = false; else this.opened = false; this.render(); button.focus(); }
         if (e.key === "Enter" && e.target.dataset.field === "label") { e.preventDefault(); this.panel.querySelector('[data-action="quick-save"]')?.click(); }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); this.onSaveProject ? this.onSaveProject() : this.downloadProject(); }
       });
@@ -176,6 +187,7 @@
     buttonHTML(action, key, extra = "") { return `<button type="button" data-action="${action}" ${extra}>${esc(tr(key))}</button>`; }
     async update() {
       const recording = this.getRecording(), source = this.video?.source;
+      if (this.featureFingerprintCache?.file !== this.video?.localFile) this.featureFingerprintCache = null;
       const duration = Number(source?.duration || 0);
       const context = recording && source && duration > 0 ? {
         key: JSON.stringify([recording.databaseId ?? recording.key, source.kind, source.name, source.size ?? null]),
@@ -184,6 +196,7 @@
       } : null;
       if ((context?.key || null) !== this.key) {
         this.abort?.abort(); this.persist();
+        this.progressText = "";
         this.key = context?.key || null; this.doc = null; this.history = []; this.future = []; this.selected.clear(); this.group = ""; this.page = 0; this.loop = null; this.draft = null; this.reviewMode = false; this.window = null; this.activeTrack = null; this.pendingLabel = ""; this.manualWindow=false;this.frameRate=null;this.previewEnd=null;this.preview.hidden=true;this.previewTime=null;this.previewUrl=null;this.previewVideo.removeAttribute("src");this.previewVideo.load();this.libraryForm=null;this.labelDialog.close();
         this.render();
         if (context) {
@@ -296,7 +309,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.13.1-beta.1</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.14.0-beta.1</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -328,6 +341,12 @@
         <section class="annotation-edit"><strong>${esc(tr("detail"))}</strong><div class="annotation-fields">${field("start", start.toFixed(3), "number")}${field("end", end.toFixed(3), "number")}${field("label", active ? A.label(doc, active) : "")}${field("subject", active?.subject || "animal-1")}${field("track", active?.track || "behavior")}</div>
         <div class="annotation-edit-actions">${B("start", "markStart")}${B("end", "markEnd")}${B("range", "useRange")}${B("add", "add")}${B("edit", "edit")}${B("split", "split")}${B("merge", "merge")}${B("loop", "loop", `aria-pressed="${Boolean(this.loop)}"`)}${B("label", "apply")}${B("confirm", "confirm")}${B("regroup", "regroup")}${B("remove", "remove")}</div>
         <details class="annotation-algorithm" ${autoOpen ? "open" : ""}><summary>${esc(tr("auto"))}</summary><p>${esc(tr("autoHelp"))}</p><div class="annotation-auto-controls"><label>${esc(tr("count"))}<input data-clusters type="number" min="2" max="32" value="${esc(this.autoCount)}"></label><label>${esc(tr("minimum"))}<input data-minimum type="number" min="0.2" max="10" step="0.2" value="${esc(this.autoMinimum)}"></label>${B("run", "run", this.abort ? "disabled" : "")}${B("cancel", "cancel", this.abort ? "" : "disabled")}</div></details>
+        <details class="annotation-features" ${this.featureOpen ? "open" : ""}><summary>${esc(tr("featureTitle"))}</summary><p>${esc(tr("featureHelp"))}</p><p>${esc(tr("featurePose"))}</p><div class="annotation-auto-controls">
+        <label>${esc(tr("count"))}<input data-feature-option="count" type="number" min="2" max="32" value="${esc(this.featureOptions?.count ?? 8)}"></label>
+        <label>${esc(tr("featureConfidence"))}<input data-feature-option="minConfidence" type="number" min="0" max="1" step="0.05" value="${esc(this.featureOptions?.minConfidence ?? .8)}"></label>
+        <label>${esc(tr("featureScale"))}<select data-feature-option="normalization"><option value="zscore" ${this.featureOptions?.normalization !== "none" ? "selected" : ""}>${esc(tr("featureZ"))}</option><option value="none" ${this.featureOptions?.normalization === "none" ? "selected" : ""}>${esc(tr("featureNone"))}</option></select></label>
+        ${B("feature-export", "featureExport", this.abort ? "disabled" : "")}${B("feature-import", "featureImport", this.abort ? "disabled" : "")}${B("cancel", "cancel", this.abort ? "" : "disabled")}
+        <input data-feature-file type="file" accept=".json,application/json" hidden></div></details>
         <p data-progress role="status">${esc(this.progressText || "")}</p></section></div>
         ${this.group ? `<section class="annotation-samples"><strong>${esc(tr("samples"))}</strong><div data-samples></div></section>` : ""}
         <footer class="annotation-footer" data-storage>${esc(tr(this.storageStatus))}</footer>`;
@@ -534,6 +553,8 @@
     }
     async onChange(e) {
       try {
+        if (e.target.dataset.featureOption) { this.abort?.abort(); this.featureOptions ||= {}; this.featureOptions[e.target.dataset.featureOption] = e.target.dataset.featureOption === "normalization" ? e.target.value : Number(e.target.value); this.featureOpen = true; }
+        if (e.target.hasAttribute("data-feature-file") && e.target.files[0]) await this.processFeatures(e.target.files[0]);
         if (e.target.matches("[data-field=label]") && !this.reviewMode) this.pendingLabel=e.target.value;
         if (e.target.hasAttribute("data-frame-rate")) {
           const fps=Number(e.target.value);if(!Number.isFinite(fps)||fps<1||fps>1000)throw new Error("FPS must be between 1 and 1000");
@@ -559,7 +580,7 @@
       const selected = e.target.closest("[data-select]"); if (selected) { this.select(selected.dataset.select); return; }
       const action = e.target.closest("[data-action]")?.dataset.action; if (!action) return;
       try {
-        if (action === "close") { if (this.reviewMode) this.reviewMode=false; else this.opened = false; this.render(); this.button.focus(); return; }
+        if (action === "close") { this.abort?.abort(); if (this.reviewMode) this.reviewMode=false; else this.opened = false; this.render(); this.button.focus(); return; }
         if (!this.doc) return;
         if (action === "labels") { this.libraryForm=this.input("start")?this.values():null;this.pendingLabel=this.libraryForm?.label||this.pendingLabel;this.renderLabelLibrary(); this.labelDialog.showModal(); this.labelDialog.querySelector("[data-label-name]").focus(); return; }
         if (action === "preview-clip") { const clip=this.values(); if(!Number.isFinite(clip.start)||!Number.isFinite(clip.end)||clip.start<0||clip.end<=clip.start||clip.end>this.doc.context.duration)throw new Error("Choose a valid interval inside the video"); this.video.seekVideo(clip.start); this.previewEnd=clip.end; this.video.play(); return; }
@@ -584,6 +605,8 @@
         if (action === "save") this.downloadProject();
         if (action === "csv") this.download(A.toCSV(this.doc, this.video.mapping), "annotations.csv", "text/csv");
         if (action === "import") this.panel.querySelector("[data-import]").click();
+        if (action === "feature-import") { this.featureOpen = true; this.panel.querySelector("[data-feature-file]").click(); }
+        if (action === "feature-export") await this.processFeatures(null);
         if (action === "undo" && this.history.length) { this.future.push(this.doc); this.doc = this.history.pop(); this.loop = null; this.selected.clear(); this.persist(); this.render(); }
         if (action === "redo" && this.future.length) { this.history.push(this.doc); this.doc = this.future.pop(); this.loop = null; this.selected.clear(); this.persist(); this.render(); }
         if (action === "scheme") this.commit(A.addScheme(this.doc, this.panel.querySelector("[data-new-scheme]").value));
@@ -645,6 +668,53 @@
     }
     pointerTime(e) {const rect=this.strip.querySelector("svg").getBoundingClientRect(),r=this.videoRange();return Math.max(0,Math.min(this.doc.context.duration,Math.round((r.start+Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width))*(r.end-r.start))*this.fps())/this.fps()));}
     syncDraft() {const start=this.video.mapping.videoToNeural(this.draft.start),end=this.video.mapping.videoToNeural(this.draft.end);this.setView({selectedInterval:Number.isFinite(start)&&Number.isFinite(end)?{start,end}:null});this.video.seekVideo(this.draft.start);}
+    async processFeatures(file) {
+      if (this.abort) return;
+      const localFile = this.video.localFile, key = this.key;
+      if (!this.doc || !["file", "url"].includes(this.video.source?.kind) || !(localFile instanceof Blob)) throw new Error("Attach a local video file before exchanging model features");
+      if (localFile.size > 512 * 1024 * 1024) throw new Error("Feature exchange currently supports local videos up to 512 MiB");
+      if (file && file.size > F.LIMITS.bytes) throw new Error("Feature file exceeds 25 MB");
+      const context = A.clone(this.doc.context), options = { count: 8, minConfidence: .8, normalization: "zscore", seed: 42, ...this.featureOptions };
+      const abort = new AbortController(); this.abort = abort; this.featureOpen = true; this.progressText = tr("featureWorking"); this.render();
+      const ensure = () => { if (abort.signal.aborted || key !== this.key || localFile !== this.video.localFile) throw new DOMException("Cancelled", "AbortError"); };
+      let worker, workerUrl;
+      try {
+        ensure();
+        const P = window.NeuropixelsEventAnalysisStorage;
+        if (this.featureFingerprintCache?.file !== localFile) {
+          const value = await P.fingerprint(localFile, abort.signal); ensure();
+          this.featureFingerprintCache = { file: localFile, value };
+        }
+        context.videoFingerprint = this.featureFingerprintCache.value;
+        if (!file) {
+          ensure(); const request = F.modelInput(context, this.doc, this.video.mapping.toJSON());
+          this.download(JSON.stringify(request, null, 2), "model-input.json", "application/json");
+          this.progressText = tr("featureExport"); return;
+        }
+        const input = JSON.parse(await file.text()); ensure();
+        const asset = F.validate(input, context), assetDigest = await P.digestJSON(asset); ensure();
+        workerUrl = URL.createObjectURL(new Blob([F.workerSource()], { type: "text/javascript" })); worker = new Worker(workerUrl);
+        const result = await new Promise((resolve, reject) => {
+          const stop = () => { worker.terminate(); reject(new DOMException("Cancelled", "AbortError")); };
+          abort.signal.addEventListener("abort", stop, { once: true });
+          worker.onmessage = event => { abort.signal.removeEventListener("abort", stop); event.data.error ? reject(new Error(event.data.error)) : resolve(event.data.result); };
+          worker.onerror = error => { abort.signal.removeEventListener("abort", stop); reject(new Error(error.message)); };
+          worker.postMessage({ input: asset, context, options });
+        });
+        ensure();
+        const runId = crypto.randomUUID?.() || `features-${Date.now()}`;
+        const next = A.importCandidates(this.doc, F.candidates(asset, result, runId, assetDigest));
+        if (new TextEncoder().encode(JSON.stringify(next)).length > 50000000) throw new Error("Combined annotation sources exceed 50 MB; use a smaller feature asset");
+        this.commit(next);
+        this.progressText = `${result.groups}/${result.requestedGroups} groups · ${result.segments.length} clips · ${result.sampleIds.length} samples · ${result.excluded.length} excluded · ${result.converged ? "converged" : "iteration limit"} · ${asset.model.name}/${asset.model.version} · ${result.preprocessing.pose.mode} · ${tr("suggested")}`;
+        this.toast(tr("imported"));
+      } catch (error) {
+        if (key === this.key) this.progressText = error.name === "AbortError" ? tr("cancelled") : error.message;
+      } finally {
+        worker?.terminate(); if (workerUrl) URL.revokeObjectURL(workerUrl);
+        if (this.abort === abort) this.abort = null; this.render();
+      }
+    }
     async analyze() {
       if (this.abort) return;
       if (this.video.source?.kind === "synthetic") throw new Error(tr("autoVideo"));
@@ -687,7 +757,7 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.13.1-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+          run: { id: runId, method: D.VERSION, version: "4.14.0-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
             license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.14.0-beta.1
+
+- Add optional data-only model input export and timestamped feature/keypoint import with local content-checked video identity, explicit missingness and named-anchor pose transforms.
+- Group eligible samples in a bounded browser Worker without bridging missing intervals; preserve source features, parameters and unreviewed candidates through complete project reload. No pretrained model, external-code execution or scientific behavior claim is included.
+
 ## 4.13.1-beta.1
 
 - Keep NWB invalid_times out of experimental event choices, preserve bounded raw validity metadata and warn that scope-specific masks have not been applied. Older cached assets containing these mistaken events require explicit reimport.

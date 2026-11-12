@@ -141,6 +141,7 @@
       this.syntheticStartedAt = null;
       this.syntheticStartedTime = 0;
       this.objectUrl = null;
+      this.localFile = null;
       this.collapsed = false;
       this._install();
       this._renderEmpty();
@@ -263,6 +264,7 @@
       this.pause();
       this._releaseObjectUrl();
       this.objectUrl = URL.createObjectURL(file);
+      this.localFile = file;
       this.source = { kind: "file", name: file.name || this.t("video.localFile"), size: file.size, lastModified: file.lastModified, duration: 0, fps: DEFAULT_FPS, automatic };
       this.mapping = new TimeMapping({ method: "manual_offset", verificationStatus: "unverified" });
       this.currentVideoTime = 0;
@@ -274,9 +276,10 @@
       this._emitState();
     }
 
-    loadUrl(url, descriptor = {}) {
+    loadUrl(url, descriptor = {}, { localFile = null } = {}) {
       this.pause();
       this._releaseObjectUrl();
+      if (String(url).startsWith("blob:") && localFile instanceof Blob) this.localFile = localFile;
       this.source = {
         kind: "url",
         size: descriptor.byte_size == null ? undefined : Number(descriptor.byte_size),
@@ -639,6 +642,7 @@
     _releaseObjectUrl() {
       if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
       this.objectUrl = null;
+      this.localFile = null;
     }
 
     destroy() {
