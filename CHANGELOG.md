@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.15.1-beta.1
+
+- Prevent stale source observation intervals from being reused as if manually declared after changing Units or failing a coverage lookup. Recheck source coverage before computation and clear restored coverage when analysis restoration fails. Explicit manual input remains unverified.
+- Add UI and browser regressions for coverage origin, missing Unit metadata and restoration failure without changing event, analysis or project formats.
+
 ## 4.15.0-beta.1
 
 - Enable model-input export and feature grouping for videos already selected in a local-service project, without copying the video into the browser. The service performs bounded content hashing and returns only identity metadata.

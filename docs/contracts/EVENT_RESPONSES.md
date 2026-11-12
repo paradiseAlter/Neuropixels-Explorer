@@ -1,6 +1,6 @@
 # Event response preview
 
-This is the reviewable 4.13.1-beta.1 event-analysis checkpoint, not completion of
+This is the reviewable 4.15.1-beta.1 event-analysis checkpoint, not completion of
 the long-running behavior/dynamics project. The saved standalone HTML calculates
 responses locally. Python is used only for an independent developer reference.
 
@@ -17,6 +17,12 @@ observation intervals** intersects the valid intervals of every selected Unit,
 preserving gaps. Missing or malformed Unit coverage cannot be promoted to valid
 coverage. This is a source-reported observation claim, not independent validation
 of continuous acquisition. The checked Allen VBN sample has no such field.
+Automatically filled coverage is bound to the selected Units. Changing Unit IDs
+or using the selected/all-Units controls clears that source-derived input. A failed
+source lookup or analysis restore also clears coverage instead of leaving an old
+value to be treated as user input. Before computing, an unchanged source proof is
+checked again against the current Unit selection and observation metadata.
+An explicitly edited manual interval remains user-declared and unverified.
 Annotation inputs can additionally select an exact subject and track; empty
 selectors mean all subjects/tracks. Their saved values are restored before event
 identity checks. Unreviewed or differently filtered intervals retain exclusion

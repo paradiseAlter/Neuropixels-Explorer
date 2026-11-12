@@ -36,7 +36,7 @@
         else if(e.target.name==='populationGroup')this.drawPopulation();
         else if(e.target.name==='populationUnit'){this.input('resultUnit').value=e.target.value;this.selectUnit?.(Number(e.target.value));this.draw();}
         else if(e.target.name==='resultUnit'||e.target.name==='resultEvent'){if(e.target.name==='resultUnit'){this.selectUnit?.(Number(e.target.value));const members=this.input('populationUnit');if([...members.options].some(o=>o.value===e.target.value))members.value=e.target.value;else members.selectedIndex=-1;}this.draw();}
-        else {this.result=null;this.resultPanel?.replaceChildren();if(['unitIds','coverage'].includes(e.target.name))this.coverageProof=null;}
+        else {this.result=null;this.resultPanel?.replaceChildren();if(e.target.name==='unitIds')this.invalidateSourceCoverage();else if(e.target.name==='coverage')this.coverageProof=null;}
       });
       this.update();
     }
@@ -77,13 +77,29 @@
     }
     selectedIds(){const raw=this.input('unitIds').value.trim().split(/[\s,]+/);if(!raw.length||raw.some(x=>!/^\d+$/.test(x)))throw Error(this.t('invalid'));return raw.map(Number);}
     sourceFiles(r){return [{role:'spikeTimes',file:r.spikeTimesFile},{role:'spikeClusters',file:r.spikeClustersFile},{role:'sampleRate',file:r.byName.get('params.py')},...(r.eventsFile?[{role:'events',file:r.eventsFile}]:[]),...(r.coverageFile?[{role:'coverage',file:r.coverageFile}]:[])];}
+    clearCoverage(){this.input('coverage').value='';this.coverageProof=null;}
+    invalidateSourceCoverage(){if(this.coverageProof)this.clearCoverage();}
+    coverageIntervals(unitIds){
+      const text=this.input('coverage').value;
+      if(this.coverageProof){
+        if(text!==this.coverageProof.text)this.coverageProof=null;
+        else try {
+          const proof=E.commonCoverage(this.coverage,unitIds,this.state.activeRecording.key);
+          if(this.coverageProof.unitIds!==unitIds.join(',')||JSON.stringify(proof.intervals)!==text)throw Error('Source observation intervals changed; select coverage again');
+          this.coverageProof.source=proof.source;
+        }catch(error){this.clearCoverage();throw error;}
+      }
+      if(!text.trim())throw Error(this.t('coverageHelp'));
+      return JSON.parse(text);
+    }
     sourceCoverage(){
+      this.clearCoverage();this.result=null;this.resultPanel.replaceChildren();
       try {const unitIds=this.selectedIds(),proof=E.commonCoverage(this.coverage,unitIds,this.state.activeRecording.key);this.input('coverage').value=JSON.stringify(proof.intervals);this.coverageProof={text:this.input('coverage').value,unitIds:unitIds.join(','),source:proof.source};this.result=null;this.resultPanel.replaceChildren();this.status(this.t('sourceCoverageNote'));}catch(error){this.status(error.message,true);}
     }
     async restore(recording,epoch){
       try {
         const blob=await this.getSavedAnalysis?.(recording);if(!blob||epoch!==this.epoch)return;
-        this.ioAbort=new AbortController();const signal=this.ioAbort.signal;this.busy(true);this.status(this.t('checking'));
+        this.restoring=true;this.ioAbort=new AbortController();const signal=this.ioAbort.signal;this.busy(true);this.status(this.t('checking'));
         const saved=await P.unpack(blob);if(epoch!==this.epoch)return;
         const available=new Set((this.getUnits()||[]).map(u=>u.id));if(saved.response.unitIds.some(id=>!available.has(id)))throw Error('Saved Units are not available in this Recording');
         this.input('source').value=saved.input.sourceKind;this.populateFilters();for(const key of ['subject','track'])this.input(key).value=saved.input.annotationFilters?.[key]||'';this.populateTypes();
@@ -96,10 +112,10 @@
           this.coverageProof={text:this.input('coverage').value,unitIds:saved.response.unitIds.join(','),source:proof.source};
         }
         const signature=this.signature();await P.verifySources(saved,this.sourceFiles(recording),this.source(),recording.sampleRate,signal,()=>this.status(this.t('checking')));
-        if(epoch!==this.epoch)return;if(signature!==this.signature()){this.status(this.t('stale'),true);return;}
+        if(epoch!==this.epoch)return;if(signature!==this.signature()){this.clearCoverage();this.status(this.t('stale'),true);return;}
         this.result={...saved,signature};this.renderResult();this.status(this.t('restored'));
-      }catch(error){if(epoch===this.epoch&&error.name!=='AbortError')this.status(this.t('restoreFailed')+error.message,true);}
-      finally{if(epoch===this.epoch)this.busy(false);}
+      }catch(error){if(epoch===this.epoch&&error.name!=='AbortError'){this.clearCoverage();this.result=null;this.resultPanel?.replaceChildren();this.status(this.t('restoreFailed')+error.message,true);}}
+      finally{if(epoch===this.epoch){this.restoring=false;this.busy(false);}}
     }
     async save(){
       if(this.saving)return;const result=this.result,r=this.state.activeRecording;
@@ -137,7 +153,7 @@
       if(action==='save'){this.save();return;}
       if(action==='selected'||action==='all'){
         const ids=action==='selected'?[this.state.experimentView.selectedUnitId].filter(v=>v!=null):(this.getUnits()||[]).map(u=>u.id);
-        this.input('unitIds').value=ids.join(', ');this.coverageProof=null;this.result=null;this.resultPanel.replaceChildren();return;
+        this.input('unitIds').value=ids.join(', ');this.invalidateSourceCoverage();this.result=null;this.resultPanel.replaceChildren();return;
       }
       if(!this.result)return;
       if(this.signature()!==this.result.signature){this.status(this.t('stale'),true);return;}
@@ -152,14 +168,14 @@
         const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='event-analysis.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
       }
     }
-    cancel(show=true){this.epoch++;this.ioAbort?.abort();this.ioAbort=null;this.worker?.terminate();this.worker=null;if(this.workerUrl)URL.revokeObjectURL(this.workerUrl);this.workerUrl=null;this.busy(false);if(show)this.status(this.t('cancelled'));}
+    cancel(show=true){if(this.restoring){this.clearCoverage();this.restoring=false;}this.epoch++;this.ioAbort?.abort();this.ioAbort=null;this.worker?.terminate();this.worker=null;if(this.workerUrl)URL.revokeObjectURL(this.workerUrl);this.workerUrl=null;this.busy(false);if(show)this.status(this.t('cancelled'));}
     busy(active){this.dialog.querySelectorAll('form input, form select, [data-ea-run], [data-ea-action="all"], [data-ea-action="selected"], [data-ea-action="source-coverage"]').forEach(n=>n.disabled=active);const cancel=this.dialog.querySelector('[data-ea-action="cancel"]');if(cancel)cancel.hidden=!active;if(!active&&this.input('activeOnly')){this.input('activeOnly').disabled=this.input('source')?.value==='annotation';for(const key of ['subject','track'])this.input(key).disabled=this.input('source')?.value!=='annotation';this.dialog.querySelector('[data-ea-action="source-coverage"]').disabled=!this.coverage;}}
     async run(){
       this.cancel(false);this.result=null;this.resultPanel.replaceChildren();
       try {
         const unitIds=this.selectedIds(),available=new Set((this.getUnits()||[]).map(u=>u.id));if(unitIds.some(id=>!available.has(id)))throw Error('A selected Unit does not belong to this Recording');
         const events=this.source(),r=this.state.activeRecording;
-        const options={recordingId:r.key,start:Number(this.input('start').value),end:Number(this.input('end').value),binWidth:Number(this.input('binWidth').value),coverage:JSON.parse(this.input('coverage').value),eventType:this.input('eventType').value,activeOnly:this.input('source').value==='experiment'&&this.input('activeOnly').checked};
+        const options={recordingId:r.key,start:Number(this.input('start').value),end:Number(this.input('end').value),binWidth:Number(this.input('binWidth').value),coverage:this.coverageIntervals(unitIds),eventType:this.input('eventType').value,activeOnly:this.input('source').value==='experiment'&&this.input('activeOnly').checked};
         if(!options.eventType)throw Error(this.t('empty'));
         // Preflight coverage, selection and response allocation before reading spike files.
         E.computeResponses(unitIds.map(unitId=>({unitId,spikes:[]})),events,options);
