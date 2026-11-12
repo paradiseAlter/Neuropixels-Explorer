@@ -169,5 +169,31 @@ Existing event-response/annotation suites must still pass after integration.
 This checkpoint does not resolve the real Allen sample's acquisition coverage,
 confirm any real behavior, validate an external model, establish cluster purity,
 or complete continuous dynamics/line-attractor analysis. Synthetic adapter and
-numeric agreement are software evidence only. Service-mode persistence of this
-new feature payload has not received the browser-project end-to-end check.
+numeric agreement are software evidence only.
+
+Additional checks on 2026-11-12 used an existing real-video motion/appearance
+output from the public DeepLabCut open-field example. Of its 389 rows and 33
+features, the all-zero initial row and final row without a subsequent endpoint
+were omitted. The producer explicitly assigned coarse 5 Hz forward review bins;
+these are not measured decoded-frame boundaries or neural acquisition coverage.
+The unchanged standalone HTML, opened directly with `file://`, exported a model
+request and accepted the real values through its native file input. It produced
+8 groups / 32 unreviewed clips from 387 rows. The complete source, result and
+review state survived project export, full page reload and package import. No
+application HTTP requests were made. Generated export Blobs were captured by the
+test harness; the operating-system download manager was not part of this check.
+A deliberately unmatched synthetic neural scaffold was used only to open the
+workspace. No paired neural analysis or model/behavior accuracy was inferred.
+
+The optional indexed service also retained this complete feature payload through
+HTTP draft save/read, service restart, linked-project save and reopening in a
+fresh catalog. Its actual browser UI restored the source/results, saved a QA-only
+group name, saved the project file and restored the exact document after reload.
+All clips remained unreviewed and the video/neural clock remained unverified.
+A wrong-recording write was rejected without replacing the existing document.
+This tests result persistence, not direct feature import on streamed media:
+service video URLs currently lack the local Blob required by the exchange path.
+The UI rejects a new model-input export there without changing annotations.
+Standalone binary packages and service linked-file JSON projects remain distinct
+formats; the validation explicitly adapted recording context and source digest,
+not an automatic package converter.
