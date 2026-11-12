@@ -20,6 +20,9 @@
     es:{population:'Población y grupos de respuesta',allGroups:'Todos los Units',ungrouped:'Units sin grupo',members:'Miembros',groupMean:'Media con igual peso por Unit (Hz)',heatmap:'Mapa z-score dentro de cada Unit',heatmapNote:'Solo visualización: z-score entre intervalos, no cambio respecto a una línea base. Colores limitados a ±3. Los bloques promedian Units/intervalos adyacentes; elige el Unit exacto en la lista.',stability:'Comprobar sensibilidad entre mitades (4 divisiones)',stabilityTitle:'Sensibilidad entre mitades con k fijo',stabilityNote:'ARI compara asignaciones entre mitades permitiendo permutar etiquetas. Las divisiones reutilizan eventos. No es replicación independiente, intervalo de confianza, prueba de significación ni evidencia de tipos celulares.',subject:'Sujeto de anotación',track:'Pista de anotación',all:'Todos',showUnit:'Ver Unit sin cambiar el tiempo',stabilityNotRun:'No solicitado',splits:'divisiones válidas'}
   };
   for(const [language,extra]of Object.entries(POPULATION_COPY))Object.assign(COPY[language],extra);
+  COPY.en.invalidTimes='This NWB contains invalid_times metadata. Its scope has not been applied to events, spikes or observation coverage. Probe, stimulus and other tags are not interchangeable. Review the original validity information before interpreting these responses. Metadata and limitations are retained in analysis provenance.';
+  COPY['zh-CN'].invalidTimes='此 NWB 包含 invalid_times 元数据，其作用范围尚未应用到事件、spike 或观察覆盖区间。探针、刺激及其他标签不能混用。解释响应前，请检查原始有效性信息。分析来源会保留该元数据和限制。';
+  COPY.es.invalidTimes='Este NWB contiene metadatos invalid_times. Su ámbito no se ha aplicado a eventos, spikes ni cobertura. Las etiquetas de sonda, estímulo y otros ámbitos no son intercambiables. Revisa la validez original antes de interpretar las respuestas. Los metadatos y límites se conservan en la procedencia.';
   class EventAnalysisUI {
     constructor(options) {
       Object.assign(this,options);this.epoch=0;this.recordingKey=null;
@@ -48,7 +51,7 @@
     status(text,error=false){const node=this.dialog.querySelector('[data-ea-status]');if(node){node.textContent=text;node.dataset.error=String(error);}}
     async open(){
       this.update();const r=this.state.activeRecording;if(!r?.spikeTimesFile||!r?.spikeClustersFile){this.toast(this.t('unavailable'));return;}
-      this.cancel(false);this.result=null;this.events=null;this.coverage=null;this.coverageProof=null;
+      this.cancel(false);this.result=null;this.events=null;this.coverage=null;this.coverageProof=null;this.sourceError=null;
       const field=(name,label,value,type='number')=>`<label>${esc(this.t(label))}<input name="${name}" type="${type}" ${type==='number'?'step="any"':''} value="${esc(value)}" required></label>`;
       this.dialog.innerHTML=`<header><div><h2>${esc(this.t('title'))}</h2><p>${esc(this.t('intro'))}</p></div><button type="button" data-ea-action="close">${esc(this.t('close'))}</button></header>
         <details data-ea-settings open><summary>${esc(this.t('source'))} / ${esc(this.t('units'))}</summary><form><div class="event-analysis-fields">
@@ -62,15 +65,15 @@
         <label class="event-check event-wide"><input name="activeOnly" type="checkbox" checked>${esc(this.t('active'))}</label>
         <label class="event-check event-wide"><input name="stability" type="checkbox">${esc(this.t('stability'))}</label>
         </div><div class="event-analysis-actions"><button class="primary-button" type="submit" data-ea-run>${esc(this.t('run'))}</button><button type="button" data-ea-action="cancel" hidden>${esc(this.t('cancel'))}</button></div></form></details>
-        <p data-ea-status role="status" aria-live="polite"></p><section data-ea-results></section>`;
+        <p class="event-warning" data-ea-invalid-times hidden></p><p data-ea-status role="status" aria-live="polite"></p><section data-ea-results></section>`;
       this.dialog.setAttribute('aria-label',this.t('title'));this.dialog.querySelector('form').onsubmit=e=>{e.preventDefault();this.run();};
       this.resultPanel=this.dialog.querySelector('[data-ea-results]');this.dialog.showModal();this.status(this.t('loading'));
       const epoch=++this.epoch;
       try {if(r.eventsFile){if(r.eventsFile.size>32*1024*1024)throw Error('Event file exceeds 32 MiB');const events=E.validateEventSet(JSON.parse(await r.eventsFile.text()),r.key);if(epoch!==this.epoch)return;this.events=events;}
         if(r.coverageFile){if(r.coverageFile.size>16*1024*1024)throw Error('Coverage file exceeds 16 MiB');const coverage=JSON.parse(await r.coverageFile.text());if(epoch!==this.epoch)return;this.coverage=coverage;this.dialog.querySelector('[data-ea-action="source-coverage"]').disabled=false;}
-        if(epoch!==this.epoch)return;if(!this.events?.events.length&&this.annotations.doc)this.input('source').value='annotation';this.populateFilters();this.populateTypes();
+        if(epoch!==this.epoch)return;const warning=this.dialog.querySelector('[data-ea-invalid-times]');warning.hidden=!this.events?.source?.invalidTimes;warning.textContent=warning.hidden?'':this.t('invalidTimes');if(!this.events?.events.length&&this.annotations.doc)this.input('source').value='annotation';this.populateFilters();this.populateTypes();
         await this.restore(r,epoch);
-      }catch(error){if(epoch===this.epoch)this.status(this.t('readError')+error.message,true);}
+      }catch(error){if(epoch===this.epoch){this.sourceError=error;this.status(this.t('readError')+error.message,true);}}
     }
     selectedIds(){const raw=this.input('unitIds').value.trim().split(/[\s,]+/);if(!raw.length||raw.some(x=>!/^\d+$/.test(x)))throw Error(this.t('invalid'));return raw.map(Number);}
     sourceFiles(r){return [{role:'spikeTimes',file:r.spikeTimesFile},{role:'spikeClusters',file:r.spikeClustersFile},{role:'sampleRate',file:r.byName.get('params.py')},...(r.eventsFile?[{role:'events',file:r.eventsFile}]:[]),...(r.coverageFile?[{role:'coverage',file:r.coverageFile}]:[])];}
@@ -109,6 +112,7 @@
       }catch(error){this.status(error.message,true);}finally{this.saving=false;}
     }
     source(){
+      if(this.sourceError)throw this.sourceError;
       if(this.input('source').value==='annotation'){
         const r=this.state.activeRecording;
         if(this.annotations.doc?.context?.recordingKey!==String(r.databaseId??r.key))throw Error('Annotations are not loaded for the current Recording');
@@ -164,7 +168,7 @@
         const stability=this.input('stability').checked?{repeats:4,seed:Number(this.input('seed').value)}:null;
         const signature=this.signature(),epoch=++this.epoch;
         const sourceCoverage=this.coverageProof?.text===this.input('coverage').value&&this.coverageProof.unitIds===unitIds.join(',');
-        const provenance={createdAt:new Date().toISOString(),recordingId:r.key,source:events.source||null,excludedSourceEvents:events.excluded||[],coverageOrigin:sourceCoverage?'source-reported-unit-intersection':'user-declared-unverified',coverageSource:sourceCoverage?this.coverageProof.source:null,sourceFiles:[r.spikeTimesFile,r.spikeClustersFile].map(f=>({name:f.name,size:f.size,lastModified:f.lastModified})),interpretation:this.t('limit')};
+        const provenance={createdAt:new Date().toISOString(),recordingId:r.key,source:events.source||null,invalidTimes:this.events?.source?.invalidTimes||null,excludedSourceEvents:events.excluded||[],coverageOrigin:sourceCoverage?'source-reported-unit-intersection':'user-declared-unverified',coverageSource:sourceCoverage?this.coverageProof.source:null,sourceFiles:[r.spikeTimesFile,r.spikeClustersFile].map(f=>({name:f.name,size:f.size,lastModified:f.lastModified})),interpretation:this.t('limit')};
         this.ioAbort=new AbortController();const signal=this.ioAbort.signal;this.busy(true);this.status(this.t('checking'));
         const input={sourceKind:this.input('source').value,annotationFilters:this.input('source').value==='annotation'?{subject:this.input('subject').value,track:this.input('track').value}:null,sampleRate:r.sampleRate,eventDigest:await P.digestJSON(events),sourceFingerprints:await P.sourceFingerprints(this.sourceFiles(r),signal)};
         if(epoch!==this.epoch)return;if(signature!==this.signature()){this.cancel(false);this.status(this.t('stale'),true);return;}

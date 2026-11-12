@@ -31,4 +31,10 @@ with h5py.File(output, "w") as f:
                        "obs_intervals_index": [2, 3, 4]}.items():
         units[key] = value
     units["quality"] = np.array(["good"] * 3, dtype=h5py.string_dtype())
+    invalid = f.create_group("intervals/invalid_times")
+    invalid["id"] = [1, 2]
+    invalid["start_time"] = [2., 4.]
+    invalid["stop_time"] = [3., 4.5]
+    invalid["tags"] = np.array(["EcephysProbe", "5", "probeC", "EcephysSession", "42", "stimulus"], dtype=h5py.string_dtype())
+    invalid["tags_index"] = [3, 6]
 print(f"{output}: {output.stat().st_size} bytes")

@@ -8,11 +8,49 @@ function npy(array, descr, shape = [array.length]) {
   out.set(new TextEncoder().encode(header), 10); out.set(new Uint8Array(array.buffer, array.byteOffset, array.byteLength), 10 + header.length);
   return out.buffer;
 }
+// Preserve validity metadata separately. NWB tags are user-defined; Allen's labels
+// affect different data types, so they cannot be converted into a global spike mask.
+function readInvalidTimes(table) {
+  if (!table) return null;
+  const result={schema:'neuropixels-nwb-invalid-times/1',sourceTable:'intervals/invalid_times',
+    timebase:'neural_seconds',policy:'preserved-not-applied',rows:[],issues:[]};
+  const problem=reason=>{result.issues.push({reason});};
+  try {
+    if(!table.keys){problem('invalid_table');return result;}
+    const keys=new Set(table.keys());
+    if(keys.has('timeseries'))result.timeseriesReferences='present-not-decoded';
+    const bounded=(name,limit,required=true)=>{
+      const dataset=table.get(name);if(!dataset){if(required)throw Error('missing_'+name);return null;}
+      if(!Array.isArray(dataset.shape)||dataset.shape.length!==1||!Number.isSafeInteger(dataset.shape[0])||dataset.shape[0]<0||dataset.shape[0]>limit)throw Error('unsupported_or_oversized_'+name);
+      const values=Array.from(dataset.value);if(values.length!==dataset.shape[0])throw Error('invalid_'+name+'_length');return values;
+    };
+    const starts=bounded('start_time',10000),stops=bounded('stop_time',10000),ids=bounded('id',10000,false);
+    result.sourceRowCount=starts.length;
+    if(stops.length!==starts.length||(ids&&ids.length!==starts.length))throw Error('column_length_mismatch');
+    let tags=null,indices=null;
+    try {
+      tags=bounded('tags',50000,false);indices=bounded('tags_index',10000,false);
+      if(indices&&(!tags||indices.length!==starts.length||indices.some((v,i)=>!Number.isSafeInteger(Number(v))||Number(v)<0||Number(v)>tags.length||(i&&Number(v)<Number(indices[i-1])))||Number(indices.at(-1)||0)!==tags.length))throw Error('invalid_tags_index');
+      if(tags&&!indices&&tags.length!==starts.length)throw Error('unindexed_tags_length_mismatch');
+      if(tags){let chars=0;tags=tags.map(v=>{if(typeof v!=='string'||v.length>1000||(chars+=v.length)>1000000)throw Error('unsupported_or_oversized_tags');return v;});}
+    }catch(error){tags=null;indices=null;problem(error.message);}
+    for(let i=0;i<starts.length;i++){
+      const start=Number(starts[i]),end=Number(stops[i]),sourceId=String(ids?ids[i]:i);
+      if(!Number.isFinite(start)||!Number.isFinite(end)||end<start||sourceId.length>1000){result.issues.push({row:i,reason:'invalid_interval_or_id'});continue;}
+      const row={sourceId,start,end,tags:tags?(indices?tags.slice(i?Number(indices[i-1]):0,Number(indices[i])):[tags[i]]):null};
+      result.rows.push(row);
+    }
+  }catch(error){problem(error.message);}
+  return result;
+}
 // Extract source events without inventing recording coverage or changing spike data.
 function readAllenEvents(file, recordingId, session) {
-  const intervals=file.get('intervals'), events=[], excluded=[];
-  if (!intervals?.keys) return {schema:'neuropixels-events/1',recordingId,timebase:'neural_seconds',source:{kind:'Allen NWB',session},events,excluded,coverage:null};
+  const intervals=file.get('intervals'), events=[], excluded=[],source={kind:'Allen NWB',session};
+  if (!intervals?.keys) return {schema:'neuropixels-events/1',recordingId,timebase:'neural_seconds',source,events,excluded,coverage:null};
+  const invalidTimes=readInvalidTimes(intervals.get('invalid_times'));
+  if(invalidTimes)source.invalidTimes=invalidTimes;
   for (const tableName of intervals.keys()) {
+    if(tableName==='invalid_times')continue;
     const table=intervals.get(tableName);
     if(!table?.keys)continue;
     const keys=new Set(table.keys());
@@ -42,7 +80,7 @@ function readAllenEvents(file, recordingId, session) {
         kind:end!=null&&end>start?'interval':'point',start,end,conditions});
     }
   }
-  return {schema:'neuropixels-events/1',recordingId,timebase:'neural_seconds',source:{kind:'Allen NWB',session},events,excluded,coverage:null};
+  return {schema:'neuropixels-events/1',recordingId,timebase:'neural_seconds',source,events,excluded,coverage:null};
 }
 
 function readAllenCoverage(units, chosen, ids, recordingId, session, probe) {
@@ -124,4 +162,4 @@ if (typeof self !== 'undefined' && typeof h5wasm !== 'undefined') self.onmessage
   } catch(e) { self.postMessage({error:e.message}); }
   finally {file?.close();if(FS){try{FS.unmount('/work');FS.rmdir('/work');}catch{}}}
 };
-if(typeof module==='object')module.exports={readAllen,readAllenEvents,readAllenCoverage,npy};
+if(typeof module==='object')module.exports={readAllen,readAllenEvents,readAllenCoverage,readInvalidTimes,npy};

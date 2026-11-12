@@ -1,6 +1,6 @@
 # Event response preview
 
-This is the reviewable 4.13.0-beta.1 event-analysis checkpoint, not completion of
+This is the reviewable 4.13.1-beta.1 event-analysis checkpoint, not completion of
 the long-running behavior/dynamics project. The saved standalone HTML calculates
 responses locally. Python is used only for an independent developer reference.
 
@@ -59,6 +59,42 @@ do not prevent importing the Recording. Invalid rows, inconsistent columns and
 the 100,000-event bound are reported as exclusions. Existing cached projects
 without the new event asset must be reimported or supplied with a compatible
 event asset; they are not silently upgraded by inventing events.
+
+## NWB invalidity metadata
+
+The reserved `/intervals/invalid_times` table is validity metadata, never an
+experimental event source. Its optional `source.invalidTimes` record uses
+`neuropixels-nwb-invalid-times/1`, preserves original IDs, start/stop seconds and
+literal tags (including ragged tags/index), and states `preserved-not-applied`.
+At most 10,000 rows, 50,000 tags, 1,000 characters per tag and 1,000,000 total tag
+characters are retained. Unsupported shapes, malformed rows/indexes or excess
+bounds retain explicit issues; timeseries references are flagged but not decoded.
+This is a bounded metadata copy, not a validated exposure mask. Negative times
+relative to the NWB reference are retained, not clipped.
+
+A persistent warning is shown for both experimental and annotation analyses.
+The metadata is included in analysis provenance and source fingerprints, even
+when events come from annotations. No invalidity mask is automatically applied
+to spikes, events or observation intervals. Allen stimulus, probe and all-probe
+labels have different meanings, and user-defined NWB tags cannot safely become
+a global neural missing-data mask. Observation coverage and analysis validity
+are separate. A user-declared interval does not resolve these source issues.
+
+Older cached event assets that mistakenly contain an invalid_times event are
+rejected with an explicit reimport instruction; saved results are not silently
+reinterpreted or deleted. Other event/project schema versions are unchanged.
+
+The checked real VBN file 1064644573 contains neither `units/obs_intervals` nor
+`intervals/invalid_times`; its session start and timestamps reference both equal
+2020-11-19T23:18:01+00:00. This absence does not establish continuous acquisition
+or prove that no upstream exclusions occurred. A small synthetic HDF5 fixture
+checks the adapter and warnings, not the real file's biological validity.
+
+Source semantics: [NWB invalid_times](https://nwb-schema.readthedocs.io/en/latest/format.html#groups-intervals-invalid-times),
+[NWB Units](https://nwb-schema.readthedocs.io/en/latest/format.html#units),
+and [Allen EcephysSession implementation](https://allensdk.readthedocs.io/en/latest/_modules/allensdk/brain_observatory/ecephys/ecephys_session.html).
+The Visual Coding EcephysSession behavior must not be assumed to describe
+VBN BehaviorEcephysSession or every historical source asset.
 
 ## Numerical meaning and limits
 
@@ -183,6 +219,11 @@ this does not independently authenticate the video or the annotator's judgments.
 - `node tests/validate-event-persistence.cjs`: 20 focused checks for source
   coverage, gap-preserving intersections, exact binary arrays, corruption and
   incompatible source rejection, cancellation and old package compatibility.
+- `node tests/validate-invalid-times.cjs`: 13 checks for reserved-table exclusion,
+  bounded literal scope metadata, malformed input, old-asset rejection, no inferred
+  masks and exact provenance persistence. The browser fixture also verifies ragged
+  tags through real WASM, persistent Chinese warning at 480 px, annotation-analysis
+  save/reopen, and legacy event rejection without starting a worker.
 - `node tests/validate-event-population.cjs`: 14 checks for equal-Unit means,
   identity/order, ARI, deterministic split provenance, constant exclusions,
   resource bounds, subject/track filters and diagnostic persistence/corruption.
@@ -239,7 +280,7 @@ the whole 349-Unit probe, biological clusters, end alignment or a dynamics model
 
 ## Remaining stages
 
-Independent acquisition coverage validation, broader browser/real-data scaling,
+Scope-specific invalidity adaptation, independent acquisition coverage validation, broader browser/real-data scaling,
 a repeated genuinely observed behavior case, held-out scientific robustness and
 scientific choice of k remain to be implemented or validated. Optional video
 features and continuous dynamics remain separate work. Dynamics must use true

@@ -20,6 +20,7 @@
       text(e.id, 'event ID'); check(!ids.has(e.id), 'Duplicate event ID'); ids.add(e.id);
       text(e.type, 'event type'); text(e.sourceId, 'source ID');
       check(['experiment', 'annotation'].includes(e.sourceKind), 'Invalid event source kind');
+      check(e.sourceKind!=='experiment'||!/^\/?intervals\/invalid_times\/?$/.test(e.sourceTable||''), 'NWB invalid_times is validity metadata, not an experimental event. Reimport the NWB with the current importer.');
       finite(e.start, 'event start'); check(e.start >= 0, 'Event start must be nonnegative');
       if (e.end != null) check(finite(e.end, 'event end') >= e.start, 'Event end precedes start');
       check(e.kind === 'point' || (e.kind === 'interval' && e.end > e.start), 'Invalid event kind or interval');

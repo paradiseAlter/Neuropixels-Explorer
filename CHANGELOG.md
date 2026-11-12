@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.13.1-beta.1
+
+- Keep NWB invalid_times out of experimental event choices, preserve bounded raw validity metadata and warn that scope-specific masks have not been applied. Older cached assets containing these mistaken events require explicit reimport.
+- Retain the same validity warning and provenance for annotation-derived responses and saved analyses; do not infer full acquisition coverage or globally mask different probe/stimulus scopes.
+
 ## 4.13.0-beta.1
 
 - Add response-group heatmaps, equal-Unit mean curves and exact member selection without changing shared time or anatomical order.
