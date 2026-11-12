@@ -354,6 +354,7 @@
   let miniProbe = null;
   let annotationController = null;
   let pinnedComparison = null;
+  let eventAnalysis = null;
 
   const plots = new PlotManager({
     detail: document.getElementById("spike-detail-canvas"),
@@ -502,6 +503,16 @@
     onVideoExpand: (enabled = !state.videoEnlarged) => setVideoEmphasis("video", enabled),
     openCatalog:openDatabaseCatalog, home:()=>showOnly("explorer"), resume:()=>showOnly("explorer"),
     toast:showToast, folderFallback:openPicker});
+  eventAnalysis = new window.NeuropixelsEventAnalysisUI({
+    state, annotations:annotationController, video:videoController, toast:showToast,
+    button:document.getElementById('event-analysis-button'),
+    getUnits:()=>state.activeActivityOverview?.units || recordingUnits(state.activeRecording),
+    returnToSource:(unitId,event)=>{
+      selectActivityUnit(unitId);
+      setExperimentView({cursorTime:event.start,visibleRange:{start:Math.max(0,event.start-1),end:event.start+1.5},selectedInterval:event.end>event.start?{start:event.start,end:event.end}:null});
+      if(event.sourceKind==='annotation')annotationController.select(event.sourceId,{openEditor:false});
+    }
+  });
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
   const number = (value) => Number(value || 0).toLocaleString();
@@ -609,6 +620,7 @@
     workspaceLayout.setTranslator?.(t);
     videoController?.setTranslator(t);
     annotationController?.render();
+    eventAnalysis?.update();
     if (!elements.helpDrawer.hidden) renderHelpContent();
     if (activeHelpControl) showContextHelp(activeHelpControl);
     if (state.recordings.length) {
@@ -983,6 +995,7 @@
   }
 
   function renderExperimentHeader() {
+    eventAnalysis?.update();
     const selectedReview = state.activeRecording && state.experimentView.selectedUnitId != null
       ? state.openUnits.get(viewKey(state.activeRecording, state.experimentView.selectedUnitId))?.result : null;
     miniProbe?.update(state.activeActivityOverview, state.experimentView, state.activeRecording, selectedReview);

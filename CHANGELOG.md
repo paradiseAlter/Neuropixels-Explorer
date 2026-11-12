@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.11.0-beta.1
+
+- Add browser-native Event responses for experimental events and reviewed behavior annotations, with explicit acquisition coverage, exact half-open spike counts, optional reproducible response grouping, cancellation and source return.
+- Preserve Allen NWB experimental event provenance in project assets; trial starts are not mistaken for image-change times.
+- Export analysis/provenance separately. This preview does not yet restore analysis results from project packages or establish scientific cluster validity.
+
 All notable Explorer changes are recorded here. Release source is preserved by
 Git tags rather than duplicated version directories on `main`.
 

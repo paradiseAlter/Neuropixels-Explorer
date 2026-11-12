@@ -21,7 +21,8 @@
     "channel_positions.npy",
     "channel_geometry.csv",
     "channel_map.npy",
-    "channel_shanks.npy"
+    "channel_shanks.npy",
+    "explorer-events.json"
   ]);
   const ROLE_BY_NAME = Object.freeze({
     "spike_times.npy": "spike_times",
@@ -255,6 +256,7 @@
       geometry: names.has("channel_positions.npy") || names.has("channel_geometry.csv"),
       probeGrouping: names.has("channel_shanks.npy") || names.has("channel_geometry.csv"),
       video: group.files.some((file) => /\.(mp4|webm|mov|avi|mkv)$/i.test(fileNameOf(file))),
+      events: names.has("explorer-events.json"),
       rawVoltage: names.has("continuous.dat")
     };
   }
@@ -290,6 +292,7 @@
       byName: group.byName,
       spikeTimesFile,
       spikeClustersFile,
+      eventsFile: group.byName.get("explorer-events.json") || null,
       sampleRate,
       spikeCount: timesHeader.count,
       duration: Number(lastSample || 0) / sampleRate,
@@ -898,6 +901,68 @@
     return { covered, duration: seconds, units: [...counts].map(([id, spikeCount]) => ({ id, spikeCount, rateHz: spikeCount / seconds })) };
   }
 
+  // Event analysis uses a separate, disposable Worker. Read paired NPY payloads
+  // in bounded blocks instead of duplicating the activity Worker's full cache.
+  async function readSelectedUnitTrains(files, sampleRate, unitIds, options = {}, progress = () => {}) {
+    if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Array.isArray(unitIds) || !unitIds.length || unitIds.length > 4096 || unitIds.some(id => !Number.isSafeInteger(id)) || new Set(unitIds).size !== unitIds.length) throw new Error('Invalid sample rate or Unit selection');
+    const maxSpikes = options.maxSelectedSpikes ?? 8000000, chunkRows = options.chunkRows ?? 262144;
+    if (!Number.isSafeInteger(maxSpikes) || maxSpikes < 1 || maxSpikes > 32000000 || !Number.isSafeInteger(chunkRows) || chunkRows < 1 || chunkRows > 1048576) throw new Error('Invalid spike reading memory limit');
+    async function header(file) {
+      if (!file?.slice || !Number.isSafeInteger(file.size)) throw new Error('Missing spike array file');
+      const prefix = await file.slice(0, 12).arrayBuffer(), bytes = new Uint8Array(prefix);
+      if (bytes.length < 12 || bytes[0] !== 0x93 || String.fromCharCode(...bytes.slice(1, 6)) !== 'NUMPY' || ![1, 2, 3].includes(bytes[6])) throw new Error('Invalid NPY spike array');
+      const lengthBytes = bytes[6] === 1 ? 2 : 4;
+      const length = lengthBytes === 2 ? new DataView(prefix).getUint16(8, true) : new DataView(prefix).getUint32(8, true);
+      if (length > 1048576) throw new Error('NPY header exceeds the supported limit');
+      const h = parseNpyHeaderBuffer(await file.slice(0, 8 + lengthBytes + length).arrayBuffer());
+      if (h.shape.length !== 1 || !Number.isSafeInteger(h.count) || h.count < 0 || !Number.isSafeInteger(h.dataOffset + h.count * h.itemSize) || h.dataOffset + h.count * h.itemSize !== file.size) throw new Error('Invalid shape or truncated NPY spike array');
+      if (!/^[<>=|][iuf][1248]$/.test(h.descr)) throw new Error('Unsupported spike array dtype');
+      return h;
+    }
+    const a = await header(files.spikeTimes), b = await header(files.spikeClusters);
+    if (a.count !== b.count || !/[iu][1248]$/.test(b.descr)) throw new Error('Spike array lengths differ or Unit IDs are not integers');
+    const arrays = new Map(unitIds.map(id => [id, []])); let total = 0, previous = -Infinity;
+    for (let offset = 0; offset < a.count; offset += chunkRows) {
+      const n = Math.min(chunkRows, a.count - offset);
+      const [times, ids] = await Promise.all([[files.spikeTimes, a], [files.spikeClusters, b]].map(async ([file, h]) => {
+        const buffer = await file.slice(h.dataOffset + offset * h.itemSize, h.dataOffset + (offset + n) * h.itemSize).arrayBuffer();
+        if (buffer.byteLength !== n * h.itemSize) throw new Error('Spike array changed or was truncated during reading');
+        return new DataView(buffer);
+      }));
+      for (let i = 0; i < n; i++) {
+        const sample = scalarFromDataView(times, i * a.itemSize, a.descr);
+        if (/[iu][1248]$/.test(a.descr) && !Number.isSafeInteger(sample)) throw new Error('Spike sample index exceeds exact integer precision');
+        const time = sample / sampleRate;
+        const id = scalarFromDataView(ids, i * b.itemSize, b.descr);
+        if (!Number.isFinite(time) || time < 0 || time < previous || !Number.isSafeInteger(id)) throw new Error('Spike arrays must have sorted nonnegative times and safe integer Unit IDs');
+        previous = time;
+        const selected = arrays.get(id);
+        if (selected) { if (++total > maxSpikes) throw new Error('Selected spike trains exceed the memory limit; select fewer Units'); selected.push(time); }
+      }
+      progress({ phase: 'reading-spikes', completed: offset + n, total: a.count });
+    }
+    return unitIds.map(unitId => ({ unitId, spikes: arrays.get(unitId) }));
+  }
+
+  function createEventWorkerSource(eventSource) {
+    if (typeof eventSource !== 'string' || !eventSource) throw new Error('Event analysis source is required');
+    return `"use strict";
+      const parseNpyHeaderBuffer = ${parseNpyHeaderBuffer.toString()};
+      const scalarFromDataView = ${scalarFromDataView.toString()};
+      const readSelectedUnitTrains = ${readSelectedUnitTrains.toString()};
+      ${eventSource}
+      self.onmessage = async ({data}) => {
+        try {
+          EventAnalysis.validateEventSet(data.events, data.options.recordingId);
+          const trains = await readSelectedUnitTrains(data.files, data.sampleRate, data.unitIds, data.limits, progress => self.postMessage({progress}));
+          self.postMessage({progress:{phase:'computing-responses'}});
+          const response = EventAnalysis.computeResponses(trains, data.events, data.options);
+          const clusters = data.clusters ? EventAnalysis.clusterResponses(response, data.clusters) : null;
+          self.postMessage({response,clusters}, [response.counts.buffer, response.rateHz.buffer]);
+        } catch (error) { self.postMessage({error:error?.message || String(error)}); }
+      };`;
+  }
+
   function createWorkerSource() {
     return `
       "use strict";
@@ -1036,6 +1101,8 @@
     parseNpyHeaderBuffer,
     readNpyHeader,
     parseNpyArrayBuffer,
+    readSelectedUnitTrains,
+    createEventWorkerSource,
     parseSampleRate,
     parseClusterLabels,
     parseClusterMetric,

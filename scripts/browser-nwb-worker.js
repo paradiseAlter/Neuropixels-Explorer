@@ -8,6 +8,43 @@ function npy(array, descr, shape = [array.length]) {
   out.set(new TextEncoder().encode(header), 10); out.set(new Uint8Array(array.buffer, array.byteOffset, array.byteLength), 10 + header.length);
   return out.buffer;
 }
+// Extract source events without inventing recording coverage or changing spike data.
+function readAllenEvents(file, recordingId, session) {
+  const intervals=file.get('intervals'), events=[], excluded=[];
+  if (!intervals?.keys) return {schema:'neuropixels-events/1',recordingId,timebase:'neural_seconds',source:{kind:'Allen NWB',session},events,excluded,coverage:null};
+  for (const tableName of intervals.keys()) {
+    const table=intervals.get(tableName);
+    if(!table?.keys)continue;
+    const keys=new Set(table.keys());
+    if(!keys.has('start_time'))continue;
+    const starts=table.get('start_time').value, stops=keys.has('stop_time')?table.get('stop_time').value:null;
+    const ids=keys.has('id')?table.get('id').value:null;
+    const fields={};
+    for(const name of ['active','is_change','omitted','image_name','stimulus_block','stimulus_name'])if(keys.has(name))fields[name]=table.get(name).value;
+    if((stops&&stops.length!==starts.length)||(ids&&ids.length!==starts.length)||Object.values(fields).some(v=>v.length!==starts.length)){
+      excluded.push({sourceTable:`intervals/${tableName}`,reason:'column_length_mismatch'});continue;
+    }
+    if(events.length+starts.length>100000){excluded.push({sourceTable:`intervals/${tableName}`,reason:'event_limit_exceeded'});continue;}
+    for(let i=0;i<starts.length;i++) {
+      const start=Number(starts[i]),end=stops?Number(stops[i]):null, sourceId=String(ids?ids[i]:i);
+      if(!Number.isFinite(start)||start<0||(end!=null&&(!Number.isFinite(end)||end<start))){excluded.push({sourceTable:`intervals/${tableName}`,sourceId,reason:'invalid_interval'});continue;}
+      const conditions={};
+      for(const [name,values] of Object.entries(fields)) {
+        const value=values[i];
+        if(['active','is_change','omitted'].includes(name)) {
+          if(value===true||value===1||value===1n)conditions[name]=true;
+          else if(value===false||value===0||value===0n)conditions[name]=false;
+        } else if(typeof value==='number') {if(Number.isFinite(value))conditions[name]=value;}
+        else conditions[name]=String(value);
+      }
+      events.push({id:`${tableName}:${sourceId}:${i}`,sourceId,sourceTable:`intervals/${tableName}`,sourceKind:'experiment',
+        type:fields.image_name && conditions.is_change===true?'image_change':fields.image_name && conditions.omitted===true?'omission':fields.image_name?'image_presentation':tableName,
+        kind:end!=null&&end>start?'interval':'point',start,end,conditions});
+    }
+  }
+  return {schema:'neuropixels-events/1',recordingId,timebase:'neural_seconds',source:{kind:'Allen NWB',session},events,excluded,coverage:null};
+}
+
 async function readAllen(file, probeName, progress = () => {}) {
   const e = file.get('general/extracellular_ephys/electrodes'), u = file.get('units');
   if (!e || !u?.get('spike_times_index') || !u.get('peak_channel_id')) throw new Error('需要 Allen ecephys NWB Units、peak_channel_id 和电极表；当前文件缺少这些数据。');
@@ -51,6 +88,7 @@ async function readAllen(file, probeName, progress = () => {}) {
     ['spike_times.npy',npy(times,'<f8')], ['spike_clusters.npy',npy(clusters,'<i4')],
     ['channel_positions.npy',npy(new Float64Array(positions),'<f8',[positions.length/2,2])],
     ['params.py',`sample_rate = ${rate}\n`],
+    ['explorer-events.json',JSON.stringify(readAllenEvents(file,folder,session))],
     ['cluster_group.tsv','cluster_id\tgroup\n'+chosen.map(i=>`${ids[i]}\t${quality[i]}`).join('\n')],
     ['explorer-units.json',JSON.stringify({session, probe:probeName, units:metadata, source:'Allen NWB peak-channel coordinates; no Kilosort templates'})]
   ].map(([name,data])=>({name,path:`${folder}/${name}`,data}));
@@ -66,4 +104,4 @@ if (typeof self !== 'undefined' && typeof h5wasm !== 'undefined') self.onmessage
   } catch(e) { self.postMessage({error:e.message}); }
   finally {file?.close();if(FS){try{FS.unmount('/work');FS.rmdir('/work');}catch{}}}
 };
-if(typeof module==='object')module.exports={readAllen,npy};
+if(typeof module==='object')module.exports={readAllen,readAllenEvents,npy};
