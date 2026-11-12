@@ -172,6 +172,55 @@
       inertia:matrix.reduce((sum,x,i)=>sum+distance(x,centers[labels[i]]),0),
       interpretation:'Groups describe selected event-response features, not cell types or causal effects.'};
   }
+  function responseSummary(response,clusters=null){
+    const [units,,bins]=response.shape;
+    check(units===response.unitIds.length&&response.rateHz.length===units*bins,'Invalid response summary input');
+    const assignment=new Map(clusters?.unitIds.map((id,i)=>[id,clusters.labels[i]])||[]),groups=[];
+    const keys=clusters?[...Array(clusters.k).keys(),null]:[null];
+    for(const key of keys){
+      const rows=response.unitIds.map((id,row)=>({id,row})).filter(x=>(assignment.get(x.id)??null)===key);if(!rows.length)continue;
+      const meanRateHz=Array(bins).fill(0);
+      for(const {row}of rows)for(let bin=0;bin<bins;bin++)meanRateHz[bin]+=response.rateHz[row*bins+bin]/rows.length;
+      groups.push({cluster:key,unitIds:rows.map(x=>x.id),meanRateHz});
+    }
+    return {schema:'neuropixels-response-summary/1',groups,unitOrder:groups.flatMap(g=>g.unitIds),meaning:'Equal-Unit mean of trial-averaged rates in Hz; not a confidence interval or a pooled spike rate.'};
+  }
+  function adjustedRandIndex(a,b){
+    check(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.length>=2,'ARI requires matched partitions with at least two members');
+    const cells=new Map(),rows=new Map(),cols=new Map(),choose=n=>n*(n-1)/2;
+    for(let i=0;i<a.length;i++){check(Number.isSafeInteger(a[i])&&Number.isSafeInteger(b[i]),'ARI labels must be integers');const key=`${a[i]}:${b[i]}`;cells.set(key,(cells.get(key)||0)+1);rows.set(a[i],(rows.get(a[i])||0)+1);cols.set(b[i],(cols.get(b[i])||0)+1);}
+    const sum=m=>[...m.values()].reduce((s,n)=>s+choose(n),0),x=sum(cells),r=sum(rows),c=sum(cols),expected=r*c/choose(a.length),max=(r+c)/2;
+    return Math.abs(max-expected)<1e-15?1:(x-expected)/(max-expected);
+  }
+  function splitHalfStability(response,clusters,options={},progress=()=>{}){
+    const repeats=options.repeats??4,seed=options.seed??1;
+    check(Number.isSafeInteger(repeats)&&repeats>=1&&repeats<=20&&Number.isSafeInteger(seed)&&seed>=0&&seed<=4294967295,'Invalid stability repeats or seed');
+    const parameters={repeats,seed,k:clusters?.k??0,normalization:clusters?.normalization??'shape',split:'seeded-balanced-random-event-halves/1',comparison:'adjusted-rand-index/1'},[units,trials,bins]=response.shape;
+    const base={schema:'neuropixels-response-stability/1',parameters,trialOrder:'response.eventIds',interpretation:'Descriptive event split-half sensitivity at fixed k. Repeats reuse events; this is not independent replication, a confidence interval, a significance test or evidence of cell types.'};
+    const unavailable=reason=>({...base,status:'unavailable',reason,runs:[]});
+    if(!clusters||clusters.k<2)return unavailable('At least two response groups are required');
+    if(trials<4)return unavailable('At least four accepted events are required');
+    if(units*bins*repeats*(trials+200*clusters.k)>100000000)return unavailable('Stability work limit exceeded; use fewer Units/events, wider bins or fewer groups');
+    const runs=[];let rng=seed>>>0;const next=()=>{rng=(Math.imul(rng,1664525)+1013904223)>>>0;return rng;};
+    for(let repeat=0;repeat<repeats;repeat++){
+      const order=Array.from({length:trials},(_,i)=>i);for(let i=trials-1;i>0;i--){const j=Math.floor(next()/4294967296*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+      const split=Math.floor(trials/2),left=order.slice(0,split),right=order.slice(split),fitSeed=next();
+      const run={repeat,leftEventIndices:left,leftEvents:left.length,rightEvents:right.length,fitSeed,status:'unavailable'};
+      try{
+        const fit=indices=>{const rateHz=new Float64Array(units*bins);for(let u=0;u<units;u++)for(const t of indices)for(let b=0;b<bins;b++)rateHz[u*bins+b]+=response.counts[(u*trials+t)*bins+b];for(let i=0;i<rateHz.length;i++)rateHz[i]/=indices.length*response.parameters.binWidth;return clusterResponses({...response,shape:[units,indices.length,bins],rateHz},{k:clusters.k,seed:fitSeed,normalization:clusters.normalization});};
+        const a=fit(left),b=fit(right),lookup=new Map(b.unitIds.map((id,i)=>[id,b.labels[i]])),shared=a.unitIds.filter(id=>lookup.has(id));
+        run.unitIds=shared;run.excludedLeft=a.excludedUnits;run.excludedRight=b.excludedUnits;
+        check(a.converged&&b.converged,'A split-half clustering did not converge');
+        check(shared.length>=Math.max(3,clusters.k+1),'Too few eligible Units shared by both halves');
+        const x=shared.map(id=>a.labels[a.unitIds.indexOf(id)]),y=shared.map(id=>lookup.get(id));
+        check(new Set(x).size>1&&new Set(y).size>1,'Shared Units form a trivial partition');
+        run.ari=adjustedRandIndex(x,y);run.status='available';
+      }catch(error){run.reason=error.message;}
+      runs.push(run);progress({phase:'split-half-stability',completed:repeat+1,total:repeats});
+    }
+    const values=runs.filter(r=>r.status==='available').map(r=>r.ari);
+    return {...base,status:values.length===repeats?'available':values.length?'partial':'unavailable',runs,successful:values.length,meanARI:values.length?values.reduce((a,b)=>a+b,0)/values.length:null,minARI:values.length?Math.min(...values):null,maxARI:values.length?Math.max(...values):null};
+  }
   const workerSource = () => `const EventAnalysis = (${createEventAnalysis.toString()})();`;
-  return {SCHEMA,VERSION,validateEventSet,fromAnnotations,lowerBound,validateCoverage,commonCoverage,computeResponses,clusterResponses,workerSource};
+  return {SCHEMA,VERSION,validateEventSet,fromAnnotations,lowerBound,validateCoverage,commonCoverage,computeResponses,clusterResponses,responseSummary,adjustedRandIndex,splitHalfStability,workerSource};
 });

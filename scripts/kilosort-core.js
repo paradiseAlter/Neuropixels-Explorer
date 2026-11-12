@@ -960,7 +960,8 @@
           self.postMessage({progress:{phase:'computing-responses'}});
           const response = EventAnalysis.computeResponses(trains, data.events, data.options);
           const clusters = data.clusters ? EventAnalysis.clusterResponses(response, data.clusters) : null;
-          self.postMessage({response,clusters}, [response.counts.buffer, response.rateHz.buffer]);
+          const diagnostics = data.stability ? EventAnalysis.splitHalfStability(response,clusters,data.stability,progress=>self.postMessage({progress})) : null;
+          self.postMessage({response,clusters,diagnostics}, [response.counts.buffer, response.rateHz.buffer]);
         } catch (error) { self.postMessage({error:error?.message || String(error)}); }
       };`;
   }

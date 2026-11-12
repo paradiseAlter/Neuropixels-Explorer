@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.13.0-beta.1
+
+- Add response-group heatmaps, equal-Unit mean curves and exact member selection without changing shared time or anatomical order.
+- Add optional bounded split-half sensitivity diagnostics with persisted partitions, seeds and ARI summaries, explicitly separate from scientific validation.
+- Restore subject/track-filtered annotation analyses with video and measured clock after a full page reload; reject malformed diagnostic summaries and keep member selections synchronized.
+
 ## 4.12.0-beta.1
 
 - Save the latest event-response analysis per Recording in browser project packages and restore exact counts/rates only after source-content, event and mapping checks. Existing project packages remain compatible.

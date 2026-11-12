@@ -14,6 +14,12 @@
     es:{save:'Guardar análisis en el proyecto',saved:'Análisis guardado. Exporta el proyecto para conservar una copia portátil.',restored:'Análisis restaurado; contenido de origen verificado.',checking:'Verificando contenido de origen…',sourceCoverage:'Usar intervalos de observación de origen',sourceCoverageNote:'Cobertura común a todos los Units seleccionados según NWB. Conserva la declaración del origen, sin validación independiente de adquisición.',note:'Guarda el análisis para restaurar el último resultado de este Recording. El proyecto exportado incluye recuentos, tasas y procedencia.',saveUnavailable:'Crea o abre un proyecto de navegador antes de guardar.',restoreFailed:'No se restauró el análisis guardado: '}
   };
   for(const [language,extra]of Object.entries(EXTRA))Object.assign(COPY[language],extra);
+  const POPULATION_COPY={
+    en:{population:'Population and response groups',allGroups:'All Units',ungrouped:'Ungrouped Units',members:'Group members',groupMean:'Equal-Unit mean response (Hz)',heatmap:'Within-Unit z-score heatmap',heatmapNote:'Display only: z-score across response bins, not a baseline change. Colors clip at ±3. Pixel blocks average adjacent Units/bins when needed; use the member list to select an exact Unit.',stability:'Check trial split-half sensitivity (4 splits)',stabilityTitle:'Split-half sensitivity at fixed cluster count',stabilityNote:'ARI compares group assignments between event halves, allowing label permutations. Repeats reuse events. This is not an independent replication, confidence interval, significance test or evidence of cell types.',subject:'Annotation subject',track:'Annotation track',all:'All',showUnit:'Show Unit without changing time',stabilityNotRun:'Not requested',splits:'successful splits'},
+    'zh-CN':{population:'群体与响应分组',allGroups:'全部 Unit',ungrouped:'未分组 Unit',members:'组内成员',groupMean:'各 Unit 等权平均响应（Hz）',heatmap:'Unit 内 z-score 热图',heatmapNote:'仅用于显示：沿响应时间 bins 计算 z-score，不是相对基线的变化。颜色截断于 ±3；像素不足时平均相邻 Unit / bins。请通过成员列表精确选择 Unit。',stability:'检查试次对半敏感性（4 次划分）',stabilityTitle:'固定聚类数的对半敏感性',stabilityNote:'ARI 比较两半事件的分组，允许组编号置换。各次划分重复使用事件，不是独立复现、置信区间、显著性检验或细胞类型证据。',subject:'标注主体',track:'标注轨道',all:'全部',showUnit:'查看 Unit，保持时间不变',stabilityNotRun:'未请求',splits:'次有效划分'},
+    es:{population:'Población y grupos de respuesta',allGroups:'Todos los Units',ungrouped:'Units sin grupo',members:'Miembros',groupMean:'Media con igual peso por Unit (Hz)',heatmap:'Mapa z-score dentro de cada Unit',heatmapNote:'Solo visualización: z-score entre intervalos, no cambio respecto a una línea base. Colores limitados a ±3. Los bloques promedian Units/intervalos adyacentes; elige el Unit exacto en la lista.',stability:'Comprobar sensibilidad entre mitades (4 divisiones)',stabilityTitle:'Sensibilidad entre mitades con k fijo',stabilityNote:'ARI compara asignaciones entre mitades permitiendo permutar etiquetas. Las divisiones reutilizan eventos. No es replicación independiente, intervalo de confianza, prueba de significación ni evidencia de tipos celulares.',subject:'Sujeto de anotación',track:'Pista de anotación',all:'Todos',showUnit:'Ver Unit sin cambiar el tiempo',stabilityNotRun:'No solicitado',splits:'divisiones válidas'}
+  };
+  for(const [language,extra]of Object.entries(POPULATION_COPY))Object.assign(COPY[language],extra);
   class EventAnalysisUI {
     constructor(options) {
       Object.assign(this,options);this.epoch=0;this.recordingKey=null;
@@ -23,8 +29,10 @@
       this.dialog.addEventListener('cancel',()=>this.cancel(false));
       this.dialog.addEventListener('click',e=>this.action(e.target.closest('[data-ea-action]')?.dataset.eaAction));
       this.dialog.addEventListener('change',e=>{
-        if(e.target.name==='source'){this.result=null;this.populateTypes();}
-        else if(e.target.name==='resultUnit'||e.target.name==='resultEvent')this.draw();
+        if(['source','subject','track'].includes(e.target.name)){this.result=null;this.resultPanel?.replaceChildren();if(e.target.name==='source')this.populateFilters();this.populateTypes();}
+        else if(e.target.name==='populationGroup')this.drawPopulation();
+        else if(e.target.name==='populationUnit'){this.input('resultUnit').value=e.target.value;this.selectUnit?.(Number(e.target.value));this.draw();}
+        else if(e.target.name==='resultUnit'||e.target.name==='resultEvent'){if(e.target.name==='resultUnit'){this.selectUnit?.(Number(e.target.value));const members=this.input('populationUnit');if([...members.options].some(o=>o.value===e.target.value))members.value=e.target.value;else members.selectedIndex=-1;}this.draw();}
         else {this.result=null;this.resultPanel?.replaceChildren();if(['unitIds','coverage'].includes(e.target.name))this.coverageProof=null;}
       });
       this.update();
@@ -46,11 +54,13 @@
         <details data-ea-settings open><summary>${esc(this.t('source'))} / ${esc(this.t('units'))}</summary><form><div class="event-analysis-fields">
         <label>${esc(this.t('source'))}<select name="source"><option value="experiment">${esc(this.t('experiment'))}</option><option value="annotation">${esc(this.t('annotation'))}</option></select></label>
         <label>${esc(this.t('type'))}<select name="eventType"></select></label>
+        <label>${esc(this.t('subject'))}<select name="subject"><option value="">${esc(this.t('all'))}</option></select></label><label>${esc(this.t('track'))}<select name="track"><option value="">${esc(this.t('all'))}</option></select></label>
         <label class="event-wide">${esc(this.t('units'))}<input name="unitIds" type="text" required value="${esc(this.state.experimentView.selectedUnitId??'')}"><span class="event-inline"><button type="button" data-ea-action="selected">${esc(this.t('useSelected'))}</button><button type="button" data-ea-action="all">${esc(this.t('useAll'))}</button></span></label>
         <label class="event-wide">${esc(this.t('coverage'))}<input name="coverage" type="text" required placeholder="[[0,3600]]"><small>${esc(this.t('coverageHelp'))}</small><span><button type="button" data-ea-action="source-coverage" disabled>${esc(this.t('sourceCoverage'))}</button></span></label>
         ${field('start','start',-1)}${field('end','end',1.5)}${field('binWidth','bin',.01)}${field('k','k',0)}
         <label>${esc(this.t('normalization'))}<select name="normalization"><option value="shape">${esc(this.t('shape'))}</option><option value="rate">${esc(this.t('rate'))}</option></select></label>${field('seed','seed',1)}
         <label class="event-check event-wide"><input name="activeOnly" type="checkbox" checked>${esc(this.t('active'))}</label>
+        <label class="event-check event-wide"><input name="stability" type="checkbox">${esc(this.t('stability'))}</label>
         </div><div class="event-analysis-actions"><button class="primary-button" type="submit" data-ea-run>${esc(this.t('run'))}</button><button type="button" data-ea-action="cancel" hidden>${esc(this.t('cancel'))}</button></div></form></details>
         <p data-ea-status role="status" aria-live="polite"></p><section data-ea-results></section>`;
       this.dialog.setAttribute('aria-label',this.t('title'));this.dialog.querySelector('form').onsubmit=e=>{e.preventDefault();this.run();};
@@ -58,7 +68,7 @@
       const epoch=++this.epoch;
       try {if(r.eventsFile){if(r.eventsFile.size>32*1024*1024)throw Error('Event file exceeds 32 MiB');const events=E.validateEventSet(JSON.parse(await r.eventsFile.text()),r.key);if(epoch!==this.epoch)return;this.events=events;}
         if(r.coverageFile){if(r.coverageFile.size>16*1024*1024)throw Error('Coverage file exceeds 16 MiB');const coverage=JSON.parse(await r.coverageFile.text());if(epoch!==this.epoch)return;this.coverage=coverage;this.dialog.querySelector('[data-ea-action="source-coverage"]').disabled=false;}
-        if(epoch!==this.epoch)return;if(!this.events?.events.length&&this.annotations.doc)this.input('source').value='annotation';this.populateTypes();
+        if(epoch!==this.epoch)return;if(!this.events?.events.length&&this.annotations.doc)this.input('source').value='annotation';this.populateFilters();this.populateTypes();
         await this.restore(r,epoch);
       }catch(error){if(epoch===this.epoch)this.status(this.t('readError')+error.message,true);}
     }
@@ -73,10 +83,11 @@
         this.ioAbort=new AbortController();const signal=this.ioAbort.signal;this.busy(true);this.status(this.t('checking'));
         const saved=await P.unpack(blob);if(epoch!==this.epoch)return;
         const available=new Set((this.getUnits()||[]).map(u=>u.id));if(saved.response.unitIds.some(id=>!available.has(id)))throw Error('Saved Units are not available in this Recording');
-        this.input('source').value=saved.input.sourceKind;this.populateTypes();
+        this.input('source').value=saved.input.sourceKind;this.populateFilters();for(const key of ['subject','track'])this.input(key).value=saved.input.annotationFilters?.[key]||'';this.populateTypes();
         const p=saved.response.parameters;for(const key of ['start','end','binWidth','eventType'])this.input(key).value=String(p[key]);
         this.input('unitIds').value=saved.response.unitIds.join(', ');this.input('coverage').value=JSON.stringify(p.coverage);this.input('activeOnly').checked=p.activeOnly;
         this.input('k').value=String(saved.clusters?.k||0);this.input('seed').value=String(saved.clusters?.seed??1);this.input('normalization').value=saved.clusters?.normalization||'shape';
+        this.input('stability').checked=!!saved.diagnostics;
         if(saved.provenance.coverageOrigin==='source-reported-unit-intersection'){
           const proof=E.commonCoverage(this.coverage,saved.response.unitIds,recording.key);if(JSON.stringify(proof.intervals)!==JSON.stringify(p.coverage))throw Error('Source observation intervals changed');
           this.coverageProof={text:this.input('coverage').value,unitIds:saved.response.unitIds.join(','),source:proof.source};
@@ -101,9 +112,12 @@
       if(this.input('source').value==='annotation'){
         const r=this.state.activeRecording;
         if(this.annotations.doc?.context?.recordingKey!==String(r.databaseId??r.key))throw Error('Annotations are not loaded for the current Recording');
-        return E.fromAnnotations(this.annotations.doc,this.video.mapping,{recordingId:r.key,reviewedOnly:true});
+        return E.fromAnnotations(this.annotations.doc,this.video.mapping,{recordingId:r.key,reviewedOnly:true,subject:this.input('subject')?.value||undefined,track:this.input('track')?.value||undefined});
       }
       return this.events||{schema:E.SCHEMA,recordingId:this.state.activeRecording.key,timebase:'neural_seconds',events:[]};
+    }
+    populateFilters(){
+      for(const key of ['subject','track']){const node=this.input(key),value=node.value,values=[...new Set((this.annotations.doc?.segments||[]).map(s=>s[key]))].sort();node.innerHTML=`<option value="">${esc(this.t('all'))}</option>`+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');node.value=values.includes(value)?value:'';node.disabled=this.input('source').value!=='annotation';}
     }
     populateTypes(){
       try {const source=this.source(),types=[...new Set(source.events.map(e=>e.type))].sort();this.input('eventType').innerHTML=types.map(t=>`<option value="${esc(t)}">${esc(t)} (${source.events.filter(e=>e.type===t).length})</option>`).join('');
@@ -123,18 +137,19 @@
       }
       if(!this.result)return;
       if(this.signature()!==this.result.signature){this.status(this.t('stale'),true);return;}
+      if(action==='unit'){const id=Number(this.input('resultUnit').value);this.dialog.close();this.selectUnit?.(id);return;}
       if(action==='return'){
         const unitId=Number(this.input('resultUnit').value),event=this.result.response.events[Number(this.input('resultEvent').value)];
         this.dialog.close();this.returnToSource(unitId,event);return;
       }
       if(action==='export'){
         const {response,clusters,provenance}=this.result;
-        const data={schema:'neuropixels-event-analysis/1',provenance,input:this.result.input,response:{...response,counts:Array.from(response.counts),rateHz:Array.from(response.rateHz)},clusters};
+        const data={schema:'neuropixels-event-analysis/1',provenance,input:this.result.input,response:{...response,counts:Array.from(response.counts),rateHz:Array.from(response.rateHz)},clusters,diagnostics:this.result.diagnostics||null};
         const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='event-analysis.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
       }
     }
     cancel(show=true){this.epoch++;this.ioAbort?.abort();this.ioAbort=null;this.worker?.terminate();this.worker=null;if(this.workerUrl)URL.revokeObjectURL(this.workerUrl);this.workerUrl=null;this.busy(false);if(show)this.status(this.t('cancelled'));}
-    busy(active){this.dialog.querySelectorAll('form input, form select, [data-ea-run], [data-ea-action="all"], [data-ea-action="selected"], [data-ea-action="source-coverage"]').forEach(n=>n.disabled=active);const cancel=this.dialog.querySelector('[data-ea-action="cancel"]');if(cancel)cancel.hidden=!active;if(!active&&this.input('activeOnly')){this.input('activeOnly').disabled=this.input('source')?.value==='annotation';this.dialog.querySelector('[data-ea-action="source-coverage"]').disabled=!this.coverage;}}
+    busy(active){this.dialog.querySelectorAll('form input, form select, [data-ea-run], [data-ea-action="all"], [data-ea-action="selected"], [data-ea-action="source-coverage"]').forEach(n=>n.disabled=active);const cancel=this.dialog.querySelector('[data-ea-action="cancel"]');if(cancel)cancel.hidden=!active;if(!active&&this.input('activeOnly')){this.input('activeOnly').disabled=this.input('source')?.value==='annotation';for(const key of ['subject','track'])this.input(key).disabled=this.input('source')?.value!=='annotation';this.dialog.querySelector('[data-ea-action="source-coverage"]').disabled=!this.coverage;}}
     async run(){
       this.cancel(false);this.result=null;this.resultPanel.replaceChildren();
       try {
@@ -146,11 +161,12 @@
         E.computeResponses(unitIds.map(unitId=>({unitId,spikes:[]})),events,options);
         const k=Number(this.input('k').value);if(!Number.isSafeInteger(k)||k<0||k>32)throw Error('Cluster count must be an integer from 0 to 32');
         const clusters=k?{k,seed:Number(this.input('seed').value),normalization:this.input('normalization').value}:null;
+        const stability=this.input('stability').checked?{repeats:4,seed:Number(this.input('seed').value)}:null;
         const signature=this.signature(),epoch=++this.epoch;
         const sourceCoverage=this.coverageProof?.text===this.input('coverage').value&&this.coverageProof.unitIds===unitIds.join(',');
         const provenance={createdAt:new Date().toISOString(),recordingId:r.key,source:events.source||null,excludedSourceEvents:events.excluded||[],coverageOrigin:sourceCoverage?'source-reported-unit-intersection':'user-declared-unverified',coverageSource:sourceCoverage?this.coverageProof.source:null,sourceFiles:[r.spikeTimesFile,r.spikeClustersFile].map(f=>({name:f.name,size:f.size,lastModified:f.lastModified})),interpretation:this.t('limit')};
         this.ioAbort=new AbortController();const signal=this.ioAbort.signal;this.busy(true);this.status(this.t('checking'));
-        const input={sourceKind:this.input('source').value,sampleRate:r.sampleRate,eventDigest:await P.digestJSON(events),sourceFingerprints:await P.sourceFingerprints(this.sourceFiles(r),signal)};
+        const input={sourceKind:this.input('source').value,annotationFilters:this.input('source').value==='annotation'?{subject:this.input('subject').value,track:this.input('track').value}:null,sampleRate:r.sampleRate,eventDigest:await P.digestJSON(events),sourceFingerprints:await P.sourceFingerprints(this.sourceFiles(r),signal)};
         if(epoch!==this.epoch)return;if(signature!==this.signature()){this.cancel(false);this.status(this.t('stale'),true);return;}
         this.workerUrl=URL.createObjectURL(new Blob([core.createEventWorkerSource(E.workerSource())],{type:'text/javascript'}));this.worker=new Worker(this.workerUrl);this.busy(true);this.status(this.t('computing'));
         this.worker.onerror=e=>{if(epoch!==this.epoch)return;this.cancel(false);this.status(e.message,true);};
@@ -160,23 +176,39 @@
           this.cancel(false);
           if(data.error){this.status(data.error,true);return;}
           if(signature!==this.signature()){this.status(this.t('stale'),true);return;}
-          this.result={response:data.response,clusters:data.clusters,signature,provenance,input};this.renderResult();
+          this.result={response:data.response,clusters:data.clusters,diagnostics:data.diagnostics,signature,provenance,input};this.renderResult();
         };
-        this.worker.postMessage({files:{spikeTimes:r.spikeTimesFile,spikeClusters:r.spikeClustersFile},sampleRate:r.sampleRate,unitIds,events,options,clusters});
+        this.worker.postMessage({files:{spikeTimes:r.spikeTimesFile,spikeClusters:r.spikeClustersFile},sampleRate:r.sampleRate,unitIds,events,options,clusters,stability});
       }catch(error){if(error.name==='AbortError')return;this.cancel(false);this.status(error.message,true);}
     }
     renderResult(){
       const {response:r,clusters:c}=this.result;
+      this.summary=E.responseSummary(r,c);
       this.dialog.querySelector('[data-ea-settings]').open=false;this.dialog.scrollTop=0;
       this.status(`${this.t('done')}: ${r.shape[0]} Units / ${r.shape[1]} ${this.t('trials')} / ${r.shape[2]} ${this.t('bins')}. ${this.t('excluded')}: ${r.excludedEvents.length}`);
       this.resultPanel.innerHTML=`<p class="event-warning">${esc(this.t(this.result.provenance.coverageOrigin==='source-reported-unit-intersection'?'sourceCoverageNote':'coverageNote'))}</p><div class="event-analysis-fields">
         <label>${esc(this.t('selected'))}<select name="resultUnit">${r.unitIds.map(id=>{const index=c?.unitIds.indexOf(id),label=index>=0?` / ${this.t('group')} ${c.labels[index]+1}`:'';return `<option value="${id}">Unit ${id}${esc(label)}</option>`;}).join('')}</select></label>
         <label>${esc(this.t('event'))}<select name="resultEvent">${r.events.map((e,i)=>`<option value="${i}">${esc(e.sourceId)} / ${e.start.toFixed(3)} s</option>`).join('')}</select></label></div>
+        <details data-ea-population ${c?'open':''}><summary>${esc(this.t('population'))}</summary><div class="event-analysis-fields"><label>${esc(this.t('group'))}<select name="populationGroup"><option value="all">${esc(this.t('allGroups'))} (${r.unitIds.length})</option>${c?this.summary.groups.map(g=>`<option value="${g.cluster??'none'}">${g.cluster==null?esc(this.t('ungrouped')):esc(this.t('group'))+' '+(g.cluster+1)} (${g.unitIds.length})</option>`).join(''):''}</select></label><label>${esc(this.t('members'))}<select name="populationUnit" size="4"></select></label></div><figure><figcaption>${esc(this.t('heatmap'))}</figcaption><canvas data-ea-heatmap width="760" height="180" role="img" aria-label="${esc(this.t('heatmap'))}"></canvas><div class="event-heatmap-key"><span><i style="background:rgb(43,104,155)"></i> −3 z</span><span><i style="background:rgb(241,243,245)"></i> 0</span><span><i style="background:rgb(194,104,40)"></i> +3 z</span></div></figure><p>${esc(this.t('heatmapNote'))}</p><figure><figcaption>${esc(this.t('groupMean'))}</figcaption><svg data-ea-group-curve viewBox="0 0 760 170" role="img" aria-label="${esc(this.t('groupMean'))}"></svg></figure></details>
         <figure><figcaption>${esc(this.t('mean'))}</figcaption><svg data-ea-curve viewBox="0 0 760 170" role="img" aria-label="${esc(this.t('mean'))}"></svg></figure>
         <figure><figcaption>${esc(this.t('raster'))}</figcaption><canvas data-ea-raster width="760" height="240" role="img" aria-label="${esc(this.t('raster'))}"></canvas></figure>
-        <p data-ea-source></p><p>${esc(this.t('limit'))}</p><p>${esc(this.t('note'))}</p>
-        <div class="event-analysis-actions"><button type="button" data-ea-action="return">${esc(this.t('return'))}</button><button type="button" data-ea-action="export">${esc(this.t('export'))}</button><button type="button" data-ea-action="save" ${this.canSave?.()?'':'disabled'}>${esc(this.t('save'))}</button></div>`;
-      this.draw();
+        <p data-ea-source></p><details data-ea-stability><summary>${esc(this.t('stabilityTitle'))}</summary><p data-ea-stability-value></p><p>${esc(this.t('stabilityNote'))}</p></details><p>${esc(this.t('limit'))}</p><p>${esc(this.t('note'))}</p>
+        <div class="event-analysis-actions"><button type="button" data-ea-action="unit">${esc(this.t('showUnit'))}</button><button type="button" data-ea-action="return">${esc(this.t('return'))}</button><button type="button" data-ea-action="export">${esc(this.t('export'))}</button><button type="button" data-ea-action="save" ${this.canSave?.()?'':'disabled'}>${esc(this.t('save'))}</button></div>`;
+      const d=this.result.diagnostics;this.dialog.querySelector('[data-ea-stability-value]').textContent=!d?this.t('stabilityNotRun'):d.successful?`${d.successful}/${d.parameters.repeats} ${this.t('splits')}; mean ARI ${d.meanARI.toFixed(3)}; range [${d.minARI.toFixed(3)}, ${d.maxARI.toFixed(3)}]`:[d.reason,...d.runs.map(r=>r.reason)].filter(Boolean).join('; ');
+      this.drawPopulation();this.draw();
+    }
+    drawPopulation(){
+      if(!this.result)return;const r=this.result.response,bins=r.shape[2],selection=this.input('populationGroup').value,groups=selection==='all'?this.summary.groups:this.summary.groups.filter(g=>String(g.cluster??'none')===selection),ids=groups.flatMap(g=>g.unitIds),lookup=new Map(r.unitIds.map((id,i)=>[id,i])),rows=ids.map(id=>lookup.get(id));
+      const members=this.input('populationUnit'),selected=this.input('resultUnit').value;members.innerHTML=ids.map(id=>`<option value="${id}">Unit ${id}</option>`).join('');if(ids.includes(Number(selected)))members.value=selected;else members.selectedIndex=-1;
+      const means=rows.map(row=>{const values=r.rateHz.subarray(row*bins,(row+1)*bins),mean=values.reduce((a,b)=>a+b,0)/bins,variance=values.reduce((sum,v)=>sum+(v-mean)**2,0)/bins;return {mean,std:variance>1e-12?Math.sqrt(variance):0};});
+      const canvas=this.dialog.querySelector('[data-ea-heatmap]'),ctx=canvas.getContext('2d'),nr=Math.min(128,rows.length),nc=Math.min(360,bins);canvas.height=Math.max(110,Math.min(520,rows.length*10+34));const height=canvas.height-34;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for(let y=0;y<nr;y++)for(let x=0;x<nc;x++){const y0=Math.floor(y*rows.length/nr),y1=Math.floor((y+1)*rows.length/nr),x0=Math.floor(x*bins/nc),x1=Math.floor((x+1)*bins/nc);let sum=0;for(let row=y0;row<y1;row++)for(let bin=x0;bin<x1;bin++)sum+=means[row].std?(r.rateHz[rows[row]*bins+bin]-means[row].mean)/means[row].std:0;const z=Math.max(-3,Math.min(3,sum/((y1-y0)*(x1-x0)))),t=Math.abs(z)/3,color=z>=0?[194,104,40]:[43,104,155];ctx.fillStyle=`rgb(${color.map((v,i)=>Math.round([241,243,245][i]*(1-t)+v*t)).join(',')})`;ctx.fillRect(48+x*688/nc,10+y*height/nr,Math.ceil(688/nc),Math.ceil(height/nr));}
+      const eventX=48+688*(0-r.parameters.start)/(r.parameters.end-r.parameters.start);if(eventX>=48&&eventX<=736){ctx.strokeStyle='rgb(65,70,76)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(eventX,10);ctx.lineTo(eventX,10+height);ctx.stroke();ctx.setLineDash([]);}
+      ctx.fillStyle=getComputedStyle(this.dialog).getPropertyValue('--text');ctx.font='12px system-ui';ctx.fillText('1',12,20);ctx.fillText(String(rows.length),8,10+height);ctx.fillText(`${r.parameters.start} s`,48,canvas.height-5);ctx.fillText(`${r.parameters.end} s`,688,canvas.height-5);
+      const mean=Array(bins).fill(0);for(const g of groups)for(let b=0;b<bins;b++)mean[b]+=g.meanRateHz[b]*g.unitIds.length/ids.length;
+      const max=Math.max(1,...mean),points=mean.map((v,b)=>`${48+688*(b+.5)/bins},${140-115*v/max}`).join(' '),zero=48+688*(0-r.parameters.start)/(r.parameters.end-r.parameters.start);
+      this.dialog.querySelector('[data-ea-group-curve]').innerHTML=`<path d="M48 20V140H736" class="event-axis"/><line x1="${zero}" x2="${zero}" y1="20" y2="140" class="event-zero"/><polyline points="${points}" class="event-trace"/><text x="4" y="28">${max.toFixed(1)}</text><text x="24" y="144">0</text><text x="48" y="163">${r.parameters.start} s</text><text x="688" y="163">${r.parameters.end} s</text>`;
     }
     draw(){
       if(!this.result)return;const {response:r,clusters:c}=this.result,n=r.shape[2],u=r.unitIds.indexOf(Number(this.input('resultUnit').value)),values=r.rateHz.slice(u*n,(u+1)*n),max=Math.max(1,...values),x=b=>48+688*b/n,y=v=>140-115*v/max;

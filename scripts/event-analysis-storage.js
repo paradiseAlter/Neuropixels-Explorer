@@ -46,7 +46,24 @@
     const fingerprints=record.input.sourceFingerprints;
     check(/^[a-f0-9]{64}$/.test(record.input.eventDigest)&&Array.isArray(fingerprints)&&fingerprints.length>=3&&fingerprints.every(f=>['spikeTimes','spikeClusters','sampleRate','events','coverage'].includes(f.role)&&/^[a-f0-9]{64}$/.test(f.digest)&&f.algorithm==='sha256-ordered-chunks/1'&&f.chunkBytes===CHUNK&&Number.isSafeInteger(f.size)&&f.size>=0)&&new Set(fingerprints.map(f=>f.role)).size===fingerprints.length&&['spikeTimes','spikeClusters','sampleRate'].every(role=>fingerprints.some(f=>f.role===role)),'Missing saved source fingerprints');
     check(record.provenance?.recordingId===r.recordingId&&['user-declared-unverified','source-reported-unit-intersection'].includes(record.provenance.coverageOrigin),'Missing saved coverage provenance');
+    if(record.diagnostics)validateDiagnostics(record.diagnostics,r,record.clusters);
     return record;
+  }
+  function validateDiagnostics(d,response,clusters){
+    const p=d.parameters,t=response.shape[1],uint=n=>Number.isSafeInteger(n)&&n>=0&&n<=4294967295;
+    check(d.schema==='neuropixels-response-stability/1'&&['available','partial','unavailable'].includes(d.status)&&d.trialOrder==='response.eventIds'&&Array.isArray(d.runs)&&p?.split==='seeded-balanced-random-event-halves/1'&&p.comparison==='adjusted-rand-index/1','Unsupported saved stability diagnostics');
+    check(Number.isSafeInteger(p.repeats)&&p.repeats>=1&&p.repeats<=20&&uint(p.seed)&&p.k===(clusters?.k??0)&&p.normalization===(clusters?.normalization??'shape'),'Invalid saved stability parameters');
+    if(!d.runs.length){check(d.status==='unavailable'&&typeof d.reason==='string'&&d.reason.length>0,'Missing stability unavailability reason');check((d.successful==null||d.successful===0)&&['meanARI','minARI','maxARI'].every(key=>d[key]==null),'Empty stability runs cannot have a summary');return;}
+    check(d.runs.length===p.repeats,'Incomplete saved stability runs');const values=[];
+    for(const [i,run]of d.runs.entries()){
+      check(run.repeat===i&&uint(run.fitSeed)&&Array.isArray(run.leftEventIndices)&&run.leftEventIndices.length===Math.floor(t/2)&&run.leftEvents===run.leftEventIndices.length&&run.rightEvents===t-run.leftEvents&&new Set(run.leftEventIndices).size===run.leftEventIndices.length&&run.leftEventIndices.every(n=>Number.isInteger(n)&&n>=0&&n<t),'Invalid saved stability split');
+      if(run.status==='available'){
+        check(Number.isFinite(run.ari)&&run.ari>=-1&&run.ari<=1&&Array.isArray(run.unitIds)&&run.unitIds.length>=Math.max(3,p.k+1)&&new Set(run.unitIds).size===run.unitIds.length&&run.unitIds.every(id=>response.unitIds.includes(id)),'Invalid saved stability comparison');values.push(run.ari);
+      }else check(run.status==='unavailable'&&typeof run.reason==='string'&&run.reason.length>0,'Missing split failure reason');
+    }
+    check(d.successful===values.length&&d.status===(values.length===p.repeats?'available':values.length?'partial':'unavailable'),'Invalid saved stability status');
+    const expected=values.length?[values.reduce((a,b)=>a+b,0)/values.length,Math.min(...values),Math.max(...values)]:[null,null,null];
+    for(const [i,key]of ['meanARI','minARI','maxARI'].entries())check(expected[i]===null?d[key]===null:Number.isFinite(d[key])&&Math.abs(d[key]-expected[i])<1e-12,'Saved stability summary disagrees with its runs');
   }
   function tensorBytes(array,kind){
     if(LITTLE_ENDIAN)return new Uint8Array(array.buffer,array.byteOffset,array.byteLength);
@@ -57,7 +74,7 @@
     validate(record);const {counts,rateHz,...response}=record.response;
     check(12+counts.byteLength+rateHz.byteLength<=MAX_BYTES,'Analysis asset exceeds storage limits');
     const tensors=[tensorBytes(counts,'counts'),tensorBytes(rateHz,'rate')];
-    const payload={record:{response,clusters:record.clusters||null,provenance:record.provenance,input:record.input},countsLength:counts.length,rateLength:rateHz.length,countsSHA256:await digest(tensors[0]),rateSHA256:await digest(tensors[1])};
+    const payload={record:{response,clusters:record.clusters||null,diagnostics:record.diagnostics||null,provenance:record.provenance,input:record.input},countsLength:counts.length,rateLength:rateHz.length,countsSHA256:await digest(tensors[0]),rateSHA256:await digest(tensors[1])};
     const manifest={schema:SCHEMA,...payload,metadataSHA256:await digestJSON(payload)};
     const json=new TextEncoder().encode(JSON.stringify(manifest));check(json.length<=MAX_META&&12+json.length+tensors[0].length+tensors[1].length<=MAX_BYTES,'Analysis asset exceeds storage limits');
     const prefix=new Uint8Array(12);prefix.set(new TextEncoder().encode(MAGIC));new DataView(prefix.buffer).setUint32(8,json.length,true);

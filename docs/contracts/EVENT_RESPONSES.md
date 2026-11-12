@@ -1,6 +1,6 @@
 # Event response preview
 
-This is the reviewable 4.12.0-beta.1 event-analysis checkpoint, not completion of
+This is the reviewable 4.13.0-beta.1 event-analysis checkpoint, not completion of
 the long-running behavior/dynamics project. The saved standalone HTML calculates
 responses locally. Python is used only for an independent developer reference.
 
@@ -17,12 +17,18 @@ observation intervals** intersects the valid intervals of every selected Unit,
 preserving gaps. Missing or malformed Unit coverage cannot be promoted to valid
 coverage. This is a source-reported observation claim, not independent validation
 of continuous acquisition. The checked Allen VBN sample has no such field.
+Annotation inputs can additionally select an exact subject and track; empty
+selectors mean all subjects/tracks. Their saved values are restored before event
+identity checks. Unreviewed or differently filtered intervals retain exclusion
+reasons and are not treated as negative examples.
 
 Set clusters to zero for responses only, or select a cluster count, feature
 normalization and seed. The separate Worker can be cancelled without cancelling
 the shared activity Worker. Results show a selected Unit's mean rate and binned
 trial raster. **Show Unit at event** returns to the existing shared neural-time
 cursor and Unit, including the original annotation segment when applicable.
+Selecting a group member or **Show Unit without changing time** changes the Unit
+only. The shared time/interval and anatomical order of the main view are retained.
 **Export analysis JSON** exports results and provenance separately. In a browser
 project, **Save analysis in project** saves the latest result for this Recording.
 Export the project package for a portable backup. Opening Event responses again
@@ -81,8 +87,44 @@ mean response across bins and excludes constant curves. `rate` uses unscaled Hz.
 The output retains normalization, seed, assignments, centroids, excluded Units,
 iterations, convergence and inertia. Too few distinct profiles or empty clusters
 fail explicitly. These groups are not cell types, causal effects or evidence
-of significant/stable clusters. Cross-validation, stability analyses and a
-scientific choice of cluster count remain outstanding.
+of significant/stable clusters. Independent cross-validation, biological
+robustness and a scientific choice of cluster count remain outstanding.
+
+## Population views and sensitivity diagnostics
+
+The response-group view sorts Units only within the analysis view, never the
+anatomical observation bench. It retains a separate ungrouped entry for excluded
+Units. Group means are equal-Unit averages of the trial-averaged rates in Hz,
+not pooled spike rates, cell counts or confidence intervals. The member selector
+uses exact Unit identities and stays synchronized with the individual-Unit view.
+
+The heatmap is display-only within-Unit z-score across response bins, regardless
+of the clustering feature mode. It is not baseline subtraction. Constant curves
+display as zero; colors clip at ±3 with a signed key. At most 128 row blocks and
+360 column blocks are painted, averaging adjacent source rows/bins rather than
+dropping data. The exact members remain selectable and their unaggregated rates
+remain available. A pixel block is not necessarily one Unit or one response bin.
+
+Optional **Check trial split-half sensitivity** runs four balanced random event
+splits at the selected fixed cluster count and normalization. Each half recomputes
+its own mean rates from trial counts and fits separately with a recorded seed.
+Adjusted Rand Index compares assignments on shared eligible Units, independent
+of cluster label numbering. Each split requires at least four total events,
+at least max(3, k+1) shared Units, nontrivial assignments and converged fits.
+Failures retain reasons rather than being scored as zero. The result preserves
+each left-half event index (in response event order), half sizes, fit seed,
+eligible Units, exclusions and ARI, plus successful-count/mean/min/max summaries.
+The API permits 1–20 repeats; a conservative 100-million-operation work estimate
+limits extra computation. Closing/cancelling terminates the same disposable Worker.
+
+These are descriptive sensitivity checks, not independent replications,
+confidence intervals, statistical significance or biological validation.
+Repeated splits reuse the same events; temporal correlation and overlapping
+windows can invalidate an independence assumption. This is not a replacement
+for chronological held-out evaluation, control conditions or choosing k on an
+independent dataset. The checked three-Unit real-data fixture produced ARIs
+[-0.5, -0.5, 1, 1] (mean 0.25), so even this small illustrative grouping is not
+presented as robust biological structure.
 
 `neuropixels-event-analysis/1` export contains the response, optional clusters,
 input content fingerprints and provenance: creation time, source file
@@ -102,6 +144,10 @@ analysis; other assets and the current stored project metadata are preserved.
 Annotation writes are flushed first, not overwritten by the analysis transaction.
 Failed saves preserve the preceding stored result. Imported packages retain the
 existing behavior of receiving a new project ID without changing the original.
+The optional `diagnostics` field uses `neuropixels-response-stability/1` and is
+covered by the same metadata checksum. Split indices, parameter identities and
+summary consistency are validated before rendering. Older saved analyses without
+diagnostics or annotation filters restore as no diagnostic and all subjects/tracks.
 
 Analysis assets start with `NEUROEA1`, a uint32 little-endian JSON byte length,
 then UTF-8 metadata, uint32 little-endian counts and float64 little-endian rates.
@@ -137,6 +183,11 @@ this does not independently authenticate the video or the annotator's judgments.
 - `node tests/validate-event-persistence.cjs`: 20 focused checks for source
   coverage, gap-preserving intersections, exact binary arrays, corruption and
   incompatible source rejection, cancellation and old package compatibility.
+- `node tests/validate-event-population.cjs`: 14 checks for equal-Unit means,
+  identity/order, ARI, deterministic split provenance, constant exclusions,
+  resource bounds, subject/track filters and diagnostic persistence/corruption.
+  An independent developer comparison against scikit-learn's adjusted Rand score
+  matched 32 partition pairs to floating-point tolerance (max error 5.6e-17).
 - `node scripts/build-standalone.cjs` and
   `node tests/validate-browser-project.cjs`: standalone bundle syntax and existing
   binary project compatibility.
@@ -154,6 +205,12 @@ this does not independently authenticate the video or the annotator's judgments.
   running the browser check. It tests the adapter's HDF5 layout and selected-Unit
   identity through the actual bundled Worker. It is a synthetic schema-contract
   fixture, not a certified NWB dataset or observed acquisition coverage.
+- Set `EVENT_ANALYSIS_VIDEO` and `EVENT_ANALYSIS_VIDEO_CLOCK` to an existing short
+  video and its matching Allen clock JSON to include the full page-reload test.
+  Test media stays on a loopback-only server. The browser adds video through the
+  normal project flow, verifies the clock hash, creates explicitly named QA
+  intervals, computes filtered annotation responses, saves/exports, fully reloads
+  the page and imports the package with a fresh project identity.
 
 On 2026-11-12, Allen session 1064644573/probeC yielded the expected 98 VISp Units
 under the established reference filter. Three sampled Units and 205 active image
@@ -168,17 +225,23 @@ preserves the original project, rejects same-size changed source content and a
 corrupt tensor, and opens an old package with no analysis. Atomic-save rollback
 and preservation of newer stored project metadata are checked. Reviewed
 annotation restoration, rejection after TimeMapping changes and source-coverage
-restoration are checked in the same project. Video-package reload with saved
-analysis remains a separate end-to-end acceptance case.
+restoration are checked in the same project. The 4.13 test adds group-member
+selection without time/order changes, exact equal-Unit means and diagnostic
+restoration. An existing 120-second Allen video plus measured frame clock was
+included in a 37.8 MB package and restored after a full page reload. Five QA
+annotations and subject/track filters produced three accepted events. Video,
+mapping, annotation document and exact count/rate arrays survived; a separate
+direct spike comparison had zero mismatches. These QA labels are not evidence
+of repeated observed behavior, annotation accuracy or neural-behavior effects.
 The coverage supplied for the real-data comparison is a numerical test
 domain, not independently verified acquisition coverage. This does not validate
 the whole 349-Unit probe, biological clusters, end alignment or a dynamics model.
 
 ## Remaining stages
 
-Richer population/cluster summaries, independent acquisition coverage validation,
-broader browser/real-data scaling, video-package/annotation-analysis reload and
-scientific robustness remain to be implemented or validated. Optional video
+Independent acquisition coverage validation, broader browser/real-data scaling,
+a repeated genuinely observed behavior case, held-out scientific robustness and
+scientific choice of k remain to be implemented or validated. Optional video
 features and continuous dynamics remain separate work. Dynamics must use true
 continuous activity, not concatenated event means. No line-attractor conclusion
 or universal NWB-Zarr support is claimed by this checkpoint.

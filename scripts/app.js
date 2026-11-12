@@ -510,6 +510,7 @@
     canSave:()=>!!projectUI?.browserLocal&&!!projectUI.active,
     getSavedAnalysis:r=>projectUI?.getEventAnalysis?.(r)||null,
     saveAnalysis:(r,blob)=>projectUI.saveEventAnalysis(r,blob),
+    selectUnit:unitId=>selectActivityUnit(unitId),
     returnToSource:(unitId,event)=>{
       selectActivityUnit(unitId);
       setExperimentView({cursorTime:event.start,visibleRange:{start:Math.max(0,event.start-1),end:event.start+1.5},selectedInterval:event.end>event.start?{start:event.start,end:event.end}:null});
