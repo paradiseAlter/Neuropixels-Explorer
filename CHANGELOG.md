@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.14.1-beta.1
+
+- Correct optional feature grouping at numerical boundaries: exactly constant long sequences are rejected, and small valid raw-unit differences no longer collapse during initialization. New runs record method version 2; saved version 1 runs remain readable and unchanged.
+- Dismissing the review dialog or toggling the annotation editor closed now cancels a pending feature import before it can add clips.
+
 ## 4.14.0-beta.1
 
 - Add optional data-only model input export and timestamped feature/keypoint import with local content-checked video identity, explicit missingness and named-anchor pose transforms.

@@ -6,7 +6,7 @@
   root.NeuropixelsVideoFeatures = api;
 })(typeof globalThis !== "undefined" ? globalThis : window, function createVideoFeatures() {
   "use strict";
-  const SCHEMA = "neuropixels-video-features/1", REQUEST = "neuropixels-model-input/1", VERSION = "video-feature-kmeans/1";
+  const SCHEMA = "neuropixels-video-features/1", REQUEST = "neuropixels-model-input/1", VERSION = "video-feature-kmeans/2";
   const LIMITS = { samples: 20000, dimensions: 128, cells: 1000000, bytes: 25000000, operations: 60000000 };
   const clone = x => JSON.parse(JSON.stringify(x));
   const check = (ok, message) => { if (!ok) throw new Error(message); };
@@ -88,9 +88,13 @@
     }
     check(features.length >= 8, "At least eight complete eligible feature samples are required");
     const n = features.length, d = features[0].length, mean = Array(d).fill(0), std = Array(d).fill(0);
-    for (const row of features) row.forEach((v, j) => { mean[j] += v / n; });
-    for (const row of features) row.forEach((v, j) => { std[j] += (v - mean[j]) ** 2 / n; });
-    std.forEach((v, j) => { std[j] = Math.sqrt(v); });
+    // Welford population moments keep exactly constant columns constant instead
+    // of accumulating repeated v/n rounding into artificial variance.
+    features.forEach((row, i) => row.forEach((v, j) => {
+      const delta = v - mean[j]; mean[j] += delta / (i + 1);
+      std[j] += delta * (v - mean[j]);
+    }));
+    std.forEach((v, j) => { std[j] = Math.sqrt(Math.max(0, v / n)); });
     const active = std.map((v, i) => v > 1e-12 ? i : -1).filter(i => i >= 0);
     check(active.length > 0, "All eligible feature dimensions are constant");
     const matrix = features.map(row => active.map(j => normalization === "zscore" ? (row[j] - mean[j]) / std[j] : row[j]));
@@ -107,7 +111,7 @@
     const centers = [[...x[Math.floor(random() * n)]]];
     while (centers.length < count) {
       const weights = x.map(row => Math.min(...centers.map(c => distance(row, c)))), total = weights.reduce((a, b) => a + b, 0);
-      if (total < 1e-12) break;
+      if (total === 0) break; // Raw feature units may have arbitrarily small valid distances.
       let value = random() * total, i = 0; while (i < n - 1 && (value -= weights[i]) > 0) i++;
       centers.push([...x[i]]);
     }

@@ -34,6 +34,32 @@ test("deterministic seeded grouping", () => { const r = F.group(base, context, {
 test("no invented extra clusters", () => assert.equal(F.group(base, context, { count: 8 }).groups, 2));
 test("constant columns excluded", () => { const x = copy(base); x.samples.forEach(s => s.values[1] = 1); assert.deepEqual(F.prepare(x, context).preprocessing.activeDimensions, [0]); });
 test("all constant unavailable", () => { const x = copy(base); x.samples.forEach(s => s.values = [1, 1]); assert.throws(() => F.group(x, context), /constant/); });
+test("long exactly constant sequences stay unavailable", () => {
+  for (const value of [1000, .1, 1e9]) {
+    const x = copy(base); x.video.duration = 20001; x.names = ["constant"]; x.units = ["unitless"];
+    x.samples = Array.from({ length: 20000 }, (_, i) => ({ id: String(i), start: i, time: i, end: i + 1, values: [value] }));
+    assert.throws(() => F.prepare(x, { ...context, duration: 20001 }), /constant/);
+  }
+});
+test("raw-unit small distances retain distinct groups", () => {
+  const x = copy(base); x.names = ["small"]; x.units = ["unitless"];
+  for (const scale of [1e-8, 1e-6, 1, 1e6]) {
+    x.samples.forEach((s, i) => s.values = [i < 8 ? 0 : scale]);
+    const r = F.group(x, context, { count: 2, normalization: "none" });
+    assert.equal(r.groups, 2); assert.equal(r.segments.length, 2); assert(r.converged);
+  }
+});
+test("large offset retains actual small variation", () => {
+  const x = copy(base); x.names = ["offset"]; x.units = ["unitless"];
+  x.samples.forEach((s, i) => s.values = [i < 8 ? 1e6 : 1e6 + 1e-4]);
+  assert.equal(F.group(x, context, { count: 2 }).groups, 2);
+});
+test("prior method provenance stays readable", () => {
+  const r = F.group(base, context, { count: 2 }), c = F.candidates(base, r, "old-method", "c".repeat(64));
+  c.run.method = "video-feature-kmeans/1";
+  const doc = A.importCandidates(A.create(context), c); assert.equal(doc.runs[0].method, "video-feature-kmeans/1");
+  assert.deepEqual(A.validate(copy(doc), context), doc); assert(doc.segments.every(s => !A.reviewed(doc, s)));
+});
 test("small sample unavailable", () => { const x = copy(base); x.samples = x.samples.slice(0, 7); assert.throws(() => F.prepare(x, context), /eight/); });
 test("bad parameters", () => { for (const options of [{ count: 1 }, { count: 33 }, { seed: -1 }, { seed: .5 }]) assert.throws(() => F.group(base, context, options)); for (const options of [{ minConfidence: 2 }, { normalization: "magic" }]) assert.throws(() => F.prepare(base, context, options)); });
 const request = F.modelInput(context, A.create(context), { offset_s: 4, verification_status: "unverified" });

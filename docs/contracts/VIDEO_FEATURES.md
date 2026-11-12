@@ -1,6 +1,6 @@
 # Optional video feature exchange
 
-This 4.14.0-beta.1 checkpoint adds a data-only boundary for external model
+This 4.14.1-beta.1 checkpoint adds a data-only boundary for external model
 outputs. It does not ship, load or run a pretrained behavior model, arbitrary
 JavaScript, Python, or a remote inference service. The existing manual annotation
 and event-response paths do not depend on it.
@@ -20,7 +20,8 @@ explicit controls. The disposable Worker computes feature groups locally.
 Suggested clips enter the existing naming, review, edit and undo workflow.
 No candidate is automatically confirmed. Import rejects a different recording,
 video name/size/duration or video-content fingerprint before changing annotations.
-Cancel, closing the editor and changing video/recording discard obsolete work.
+Cancel, native review-dialog dismissal, the annotation toggle, closing the editor
+and changing video/recording discard obsolete work.
 
 Browser project videos retain their existing local Blob for bounded fingerprint
 reads, without fetching or copying a remote video. The first checkpoint supports
@@ -89,7 +90,10 @@ the source coordinates and exact options remain saved.
 
 After pose processing, dimensions constant to a standard deviation of `1e-12`
 are excluded. All-constant inputs are unavailable rather than assigned invented
-groups. Optional per-feature z-scores use the population mean/standard deviation
+groups. Version `video-feature-kmeans/2` uses stable population moments and a
+zero-only initialization distance stop, preserving small valid raw-unit differences.
+Saved `/1` runs retain their original method and results; they are not silently
+recomputed. Optional per-feature z-scores use the population mean/standard deviation
 of eligible samples only. Alternatively retain feature units. Samples have equal
 weight, not duration weight. Source measurements are not overwritten.
 
