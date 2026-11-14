@@ -35,6 +35,15 @@
     }
     return input;
   }
+  function fromExperimentalEvents(input, recordingId) {
+    validateEventSet(input, recordingId);
+    const annotations = input.events.filter(e => e.sourceKind === 'annotation');
+    // Preserve the exact legacy digest for event assets containing experiments only.
+    if (!annotations.length) return input;
+    return { ...input, events: input.events.filter(e => e.sourceKind === 'experiment'),
+      excluded: [...(input.excluded || []), ...annotations.map(e => ({ id: e.id,
+        reason: 'annotation_requires_current_document' }))] };
+  }
   function fromAnnotations(doc, mapping, options) {
     check(doc?.schema === 'neuropixels-annotations/1', 'Unsupported annotation document');
     check(typeof mapping?.videoToNeural === 'function', 'An explicit video-to-neural mapping is required');
@@ -223,5 +232,5 @@
     return {...base,status:values.length===repeats?'available':values.length?'partial':'unavailable',runs,successful:values.length,meanARI:values.length?values.reduce((a,b)=>a+b,0)/values.length:null,minARI:values.length?Math.min(...values):null,maxARI:values.length?Math.max(...values):null};
   }
   const workerSource = () => `const EventAnalysis = (${createEventAnalysis.toString()})();`;
-  return {SCHEMA,VERSION,validateEventSet,fromAnnotations,lowerBound,validateCoverage,commonCoverage,computeResponses,clusterResponses,responseSummary,adjustedRandIndex,splitHalfStability,workerSource};
+  return {SCHEMA,VERSION,validateEventSet,fromExperimentalEvents,fromAnnotations,lowerBound,validateCoverage,commonCoverage,computeResponses,clusterResponses,responseSummary,adjustedRandIndex,splitHalfStability,workerSource};
 });

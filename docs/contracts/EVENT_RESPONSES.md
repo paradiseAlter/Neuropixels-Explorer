@@ -1,13 +1,13 @@
 # Event response preview
 
-This is the reviewable 4.15.1-beta.1 event-analysis checkpoint, not completion of
+This is the reviewable 4.15.2-beta.1 event-analysis checkpoint, not completion of
 the long-running behavior/dynamics project. The saved standalone HTML calculates
 responses locally. Python is used only for an independent developer reference.
 
 ## Use
 
 Open a local Recording, then **Event responses** in the observation toolbar.
-Choose experimental events or reviewed behavior annotations, an event type,
+Choose experimental events or video annotations, an event type,
 Unit IDs, a response window and a bin width. Provide valid acquisition intervals
 as a JSON array of `[start, end]` pairs in neural seconds. The application does
 not replace unknown coverage with the last spike, the video duration or a trial
@@ -23,6 +23,27 @@ source lookup or analysis restore also clears coverage instead of leaving an old
 value to be treated as user input. Before computing, an unchanged source proof is
 checked again against the current Unit selection and observation metadata.
 An explicitly edited manual interval remains user-declared and unverified.
+A named manual interval becomes usable immediately when **Save label** is pressed,
+including after an edit; no separate review step is required. Any user-defined
+label, such as walking, uses this same path. Model-generated candidates keep their
+unconfirmed provenance until the user accepts them. No particular observed
+behavior example or publication-level validation is a prerequisite for using or
+developing this general analysis feature; there are no normal/advanced modes.
+
+The experimental selector uses only `sourceKind: experiment` rows. Historical
+annotation rows in an event asset are retained as exclusions with reason
+`annotation_requires_current_document`, not relabelled as experimental events.
+Load the corresponding annotation document and video, then use **Video annotations**
+to apply current labels, subject/track selection and the current shared TimeMapping.
+If an asset has only annotation rows and a current annotation document is loaded,
+the dialog selects that document. A separate event-metadata read error does not
+prevent use of current manual annotations; the error remains visible outside the collapsible settings and is saved as
+`provenance.sourceMetadataErrors` (role, message, unresolved status). Successfully read invalidity metadata also
+retains its persistent warning even if another metadata asset cannot be read.
+Metadata failures do not skip saved-analysis restoration. Invalid source coverage
+can be replaced only by an explicit manual interval declaration, not an inferred
+acquisition extent.
+
 Annotation inputs can additionally select an exact subject and track; empty
 selectors mean all subjects/tracks. Their saved values are restored before event
 identity checks. Unreviewed or differently filtered intervals retain exclusion
@@ -105,7 +126,12 @@ VBN BehaviorEcephysSession or every historical source asset.
 ## Numerical meaning and limits
 
 Responses align to the event start. Endpoints remain available for future
-offset/duration-aware analysis. Bins are half-open `[left, right)`. Only windows
+offset/duration-aware analysis. Changing a valid interval's end without changing
+its start does not change response counts or rates. Perfect behavioral offset
+judgments are not required for start alignment. The present interval contract
+still requires both endpoints to be representable in the current time mapping;
+this is a representation limit, not an onset-analysis requirement. No extrapolated
+or fabricated neural endpoint is supplied. Bins are half-open `[left, right)`. Only windows
 fully contained in ordered, non-overlapping recording coverage are accepted;
 adjacent coverage intervals are merged. Incomplete windows are excluded, not
 zero-filled. Zero-spike Units remain present.
@@ -212,12 +238,20 @@ provenance. A same-size source change, review/label change or changed TimeMappin
 therefore requires recomputation. Hashing is cancellable and bounded in memory,
 but scans the relevant source files before computation/restoration. No source
 files are uploaded and no external preprocessing is required.
+Pure experimental assets and the live annotation adapter keep their prior event
+digest unchanged. An old analysis that used a mixed event asset as experimental
+input must be recomputed after source separation. Its saved bytes and source
+project are preserved; old annotation timestamps are not silently reinterpreted.
+
 Video bytes themselves are not part of this neural-response fingerprint. The
 saved annotation identity, intervals, labels, review state and mapping are checked;
 this does not independently authenticate the video or the annotator's judgments.
 
 ## Validation
 
+- `node tests/validate-event-inputs.cjs`: source-kind routing, current mapping,
+  manual Save without repeated confirmation, onset-only counts, unchanged pure
+  experimental digests and retained provenance.
 - `node tests/validate-event-analysis.cjs`: event/annotation contracts, exact
   half-open counts, coverage gaps and precision guards, deterministic grouping,
   bounded NPY reading, Worker protocol, Allen event adaptation and event asset

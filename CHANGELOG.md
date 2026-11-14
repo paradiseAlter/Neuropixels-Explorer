@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.15.2-beta.1 — Consistent event inputs
+
+- Experimental event selection excludes stored annotation rows rather than
+  using stale video-derived neural timestamps. Video annotations use the current
+  document and shared TimeMapping through the same start-aligned response core.
+- Named manual labels are usable immediately after Save label, including edits.
+  The interface explains this without a second confirmation workflow or separate
+  analysis modes. Unconfirmed model candidates retain their provenance.
+- Independent event/coverage read failures no longer skip annotation-result
+  restoration. Known invalidity metadata and unresolved read errors stay visible
+  outside collapsed settings and are retained in analysis provenance.
+- Focused regression checks cover source routing, legacy experimental digests,
+  manual Save, onset invariance, metadata warnings and result persistence. Local
+  Chrome/Edge currently exit during startup before the app loads; this checkpoint
+  does not claim a new browser interaction or scientific validation pass.
+
+
 ## 4.15.1-beta.1
 
 - Prevent stale source observation intervals from being reused as if manually declared after changing Units or failing a coverage lookup. Recheck source coverage before computation and clear restored coverage when analysis restoration fails. Explicit manual input remains unverified.
