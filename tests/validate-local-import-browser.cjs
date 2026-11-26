@@ -11,20 +11,22 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
   const seek=async time=>page.locator("#video-seek").evaluate((e,time)=>{e.value=time;e.dispatchEvent(new Event("input",{bubbles:true}));},String(time));
   try {
     await page.goto("http://127.0.0.1:8793");await setExplorerPreference(page,"#language-select","zh-CN");
-    await page.waitForFunction(()=>document.querySelector(".start-note").textContent.includes("原位置"));
-    await page.locator('.start-actions [data-project-action="nwb"]').click();
+    await page.locator('#workspace-empty-intro:not([hidden]) h2').waitFor();
+    await page.locator('.project-main-actions [data-project-action="new"]').click();
+    await page.locator('#project-dialog [name="projectName"]').fill('NWB fixture');
+    await page.locator('#project-dialog .project-create button[value="nwb"]').click();
     await page.locator("[data-candidate]").filter({hasText:"probeC"}).waitFor({timeout:30000});
     await page.screenshot({path:path.join(out,"01-nwb-probes.png")});
     await page.locator("[data-candidate]").filter({hasText:"probeC"}).click();await ready();
     const name=await page.locator("#experiment-recording-name").textContent();
     if(await page.locator("[data-video-token]").count()) {
       await page.screenshot({path:path.join(out,"02a-nearby-video-suggestion.png")});
-      await page.locator("#project-dialog [data-close-project]").last().click();
     }
+    if(await page.locator('#project-dialog').evaluate(dialog=>dialog.open))await page.locator("#project-dialog [data-close-project]").last().click();
     await page.screenshot({path:path.join(out,"02-neural-only.png")});
-    await page.locator(await page.locator("#replace-video").isVisible()?"#replace-video":"#choose-local-video").click();
-    await page.locator("#project-dialog").waitFor({state:"hidden",timeout:30000});
+    await page.locator('.project-main-actions [data-project-action="video"]').click();
     await page.waitForFunction(()=>document.querySelector("#behavior-video").readyState>=2,{},{timeout:30000});
+    if(await page.locator('#project-dialog').evaluate(dialog=>dialog.open))await page.locator("#project-dialog [data-close-project]").last().click();
     assert.match(await page.locator("#video-clock-row[data-import-drop=clock]").innerText(),/缺少.*帧时钟 JSON/s);
     await seek(10);await page.locator("#video-alignment").click();
     await page.locator("[data-video-at]").fill("10");await page.locator("[data-neural-at]").fill("12");
@@ -53,8 +55,10 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
     }
     await page.screenshot({path:path.join(out,"03-separate-video-annotation.png")});
     await page.reload();await page.waitForFunction(()=>document.querySelector('[data-project-action="recent"]'));
-    await page.locator('.recent-projects [data-project-action="recent"]').filter({hasText:name.split(" / ")[0]}).first().click();
+    await page.locator('#open-folder-button').click();
+    await page.locator('#open-menu [data-project-action="recent"]').filter({hasText:'NWB fixture'}).first().click();
     await ready();await page.waitForFunction(()=>document.querySelector("#behavior-video").readyState>=2);
+    if(await page.locator('#project-dialog').evaluate(dialog=>dialog.open))await page.locator("#project-dialog [data-close-project]").last().click();
     await seek(10);
     await page.waitForFunction(()=>Math.abs(parseFloat(document.querySelector("#video-neural-time").textContent)-12)<.01);
     await page.locator('[data-label-source=annotation]').click();
@@ -65,10 +69,13 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
       await page.waitForFunction(()=>document.querySelector("#video-link-note").textContent.includes("帧时间已验证"));
     }
     await page.locator("#open-folder-button").click();
-    await page.locator('#open-menu [data-project-action="folder"]').click();
+    await page.locator('#open-menu [data-project-action="new"]').click();
+    await page.locator('#project-dialog [name="projectName"]').fill('Kilosort fixture');
+    await page.locator('#project-dialog .project-create button[value="folder"]').click();
     await page.locator("[data-candidate]").click();
     await page.waitForFunction(()=>document.querySelector("#experiment-recording-name").textContent.includes("Kilosort"),{},{timeout:30000});
     await ready();
+    if(await page.locator('#project-dialog').evaluate(dialog=>dialog.open))await page.locator("#project-dialog [data-close-project]").last().click();
     assert((await page.locator("#experiment-recording-name").textContent()).includes("Kilosort"));
     await page.locator("#mini-probe [data-probe-unit='0']").first().click();
     await page.waitForFunction(()=>document.querySelector(".mini-probe-selection").textContent.includes("0 µm"));
