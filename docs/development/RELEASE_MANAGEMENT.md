@@ -9,16 +9,26 @@
 正式发布必须能沿下列链条逐项核对：
 
 ```text
-annotated Git tag -> commit -> VERSION -> build command/flavor
+annotated Git tag -> commit -> VERSION -> build command
   -> artifact SHA-256 -> validation receipts -> release decision
 ```
 
 - Git 提交和不可移动的 annotated tag 是源码历史权威；文件名和修改时间不是版本证据。
 - `scripts/explorer-shell.html` 与被其引用的 JS、CSS、vendor 文件是独立版源码。
-- `index.html` 是仓库中唯一受 Git 管理的普通版单文件产物，也是正常产品入口。
+- `index.html` 是仓库中唯一受 Git 管理的单文件产物，也是产品入口。
 - `dist/Neuropixels-Explorer.html` 是可删除、可重建的本地暂存/兼容镜像，不是另一份发布历史。
-- 工作区根目录的 HTML 只允许作为发布后的兼容副本；评审快照放在 `review_versions/`，不得命名成正式 release。
-- `--email-safe` 生成带显式 mail-gateway 元数据的完整功能版本。它与普通版使用相同源码和功能，只因元数据不同而单独登记 hash；保留该参数是为了兼容既有交付命令。
+- 工作区根目录只保留一个 `Neuropixels-Explorer.html` 发布副本；评审快照放在 `review_versions/`，不得命名成正式 release。
+- 邮件投递与本地使用采用同一成品。构建脚本不再生成只差元数据的第二版本。
+
+## 2026-11-26 `v4.16.3-beta.1` 单一最终版本
+
+`v4.16.2-beta.1` 的两个成品功能和源码已经一致，只相差一行构建元数据。本版本删除该冗余构建分支，只保留完整功能的 `Neuropixels-Explorer.html`。`region-core.js` 和 `unit-marks.js` 继续采用已通过 UCI 附件网关实测的可读表示。
+
+同时复核三语界面和内置 Help：删去重复的工程性辩解，保留会影响同步、覆盖范围、图谱配准、幅值单位和候选分组解释的必要边界，并修正“项目包尚不恢复事件分析”的过期提示。
+
+| 唯一最终成品 | 字节与 SHA-256 | UCI -> personal Gmail 验收 |
+| --- | --- | --- |
+| `Neuropixels-Explorer.html` | 2,927,029 bytes；`662AA2D5E6634C458DCD5087BED6E2C160F7DA6D6453B31B53C1E63BAC95F99C` | Inbox message `1a217e45b4a065f9`；下载附件逐字节相同 |
 
 ## 2026-11-26 `v4.16.2-beta.1` 完整功能邮件兼容修复
 
@@ -65,11 +75,10 @@ Google 的退信只给出“附件包含病毒”，没有公开匹配规则。�
 | 路径 | 身份 | 可否直接修改 |
 | --- | --- | --- |
 | `scripts/explorer-shell.html`、`scripts/`、`styles/`、`vendor/` | 独立版源码输入 | 按功能修改并测试 |
-| `index.html` | tracked normal artifact；只在提升步骤生成 | 不手工编辑 |
+| `index.html` | tracked canonical artifact；只在提升步骤生成 | 不手工编辑 |
 | `dist/Neuropixels-Explorer.html` | ignored staging mirror | 可重建，不作为历史依据 |
-| `../Neuropixels-Explorer.html` | 工作区兼容副本 | 仅在正式提升后复制 |
+| `../Neuropixels-Explorer.html` | 唯一最终交付副本 | 仅在正式提升后复制 |
 | `../neuropixel_workflow.html` | legacy compatibility name | 不再作为新交付入口 |
-| `../Neuropixels-Explorer-email-safe.html` | 完整功能、带 mail-gateway 元数据的交付副本 | 仅用显式 `--email-safe` 构建 |
 | `../review_versions/<date>/` | 人工审阅与投递证据 | 原件冻结，只补 manifest |
 | `runtime/`、`../reports/`、`../paper_materials/` | 运行态或研究证据 | 不属于产品发布 |
 
@@ -92,11 +101,7 @@ Google 的退信只给出“附件包含病毒”，没有公开匹配规则。�
    node scripts\build-standalone.cjs $candidate
    ```
 
-   无参数构建只刷新 ignored 的 `dist/Neuropixels-Explorer.html`。email-safe 必须给出独立输出路径：
-
-   ```powershell
-   node scripts\build-standalone.cjs --email-safe 'D:\Projects\Codex\neuropixels-release-candidate\Neuropixels-Explorer-email-safe.html'
-   ```
+   无参数构建只刷新 ignored 的 `dist/Neuropixels-Explorer.html`。所有用途使用同一成品。
 
 3. 对候选运行与变更相称的检查。最低生产边界为：
 
@@ -109,7 +114,7 @@ Google 的退信只给出“附件包含病毒”，没有公开匹配规则。�
 
    正式提升前，所有 standalone 内容输入必须受 Git 管理，工作树必须能解释且最好为 clean。浏览器、真实数据和专项功能检查按 [Validation](../validation/VALIDATION.md) 增加；测试通过不自动等于用户验收或科学验证。
 
-4. 只在候选被接受后显式提升 normal build：
+4. 只在候选被接受后显式提升最终 build：
 
    ```powershell
    node scripts\build-standalone.cjs --promote
@@ -169,6 +174,7 @@ Google 的退信只给出“附件包含病毒”，没有公开匹配规则。�
 | 2026-11-26 | `v4.16.0-beta.1` | `74443c6` + `27b3c98` + `abfaaaa` + `a7db50d` + tag target | 收敛累计工作线：集成分析/标注、通用 NWB、可复现构建、权威文档、现行服务验收与 tracked standalone |
 | 2026-11-26 | `v4.16.1-beta.1` | tag target | 修复 standalone 的邮件网关字节兼容性；普通版保留 Unit marks，邮件版明确禁用 |
 | 2026-11-26 | `v4.16.2-beta.1` | tag target | 精确改写误报语言选择表达式，邮件版恢复全部 Unit marks 功能 |
+| 2026-11-26 | `v4.16.3-beta.1` | tag target | 将功能相同的双构建收敛为唯一最终 HTML，并同步清理三语说明与过期提示 |
 
 版本顺序按祖先关系和目标提交日期排列，不按 tagger 时间排列。annotated tags 保持单一祖先链；不重写既有历史。4.15.2 之后没有根据文件时间伪造内部 tags，而是用上述功能、构建、文档、验收提交和一个新 release tag 收敛累计研发。
 

@@ -1528,7 +1528,7 @@
       [t("summary.units"), number(units.length)],
       ["DURATION", `${(recording.duration ?? overview?.duration)?.toFixed(1) ?? "—"} s`],
       ["ANATOMY", mapped ? `${mapped} mapped · ${shanks.size || "—"} shanks` : t("units.unmapped")],
-      ["VIDEO", video ? t(videoController.mapping.verificationStatus === "verified" ? "video.verified" : "video.unverified") : "NOT ATTACHED"]
+      ["VIDEO", video ? t(`video.method.${videoController.mapping.method === "unmapped" ? "unknown" : videoController.mapping.method}`) : "NOT ATTACHED"]
     ];
     elements.experimentFacts.innerHTML = facts.map(([label, value]) => `<span>${escapeHtml(label)}<strong>${escapeHtml(value)}</strong></span>`).join("");
     elements.experimentTime.textContent = `${Number(state.experimentView.cursorTime || 0).toFixed(3)} s`;

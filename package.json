@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build-standalone.cjs",
-    "test:release": "node tests/validate-release-build.cjs && node tests/validate-email-safe-build.cjs"
+    "test:release": "node tests/validate-release-build.cjs && node tests/validate-standalone-content.cjs"
   },
   "devDependencies": {
     "playwright": "1.65.1",

@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+## [4.16.3-beta.1] - 2026-11-26
+
+- Replace the two metadata-only standalone flavors with one canonical
+  `Neuropixels-Explorer.html` build. The readable `region-core.js` and
+  `unit-marks.js` representations that passed the UCI attachment gateway remain
+  part of the full application.
+- Make Help and event-analysis guidance direct and current. Remove repeated
+  engineering defenses, retain interpretation-changing data boundaries, and
+  correct the obsolete claim that saved event analyses could not be restored.
+
 ## [4.16.2-beta.1] - 2026-11-26
 
 - Restore Unit marks in the mail-gateway build. Byte-level delivery bisection

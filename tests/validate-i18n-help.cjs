@@ -9,8 +9,12 @@ const i18n = require(path.join(ROOT, "scripts", "i18n.js"));
 const help = require(path.join(ROOT, "scripts", "help-content.js"));
 const pageSource = fs.readFileSync(path.join(ROOT, "scripts", "explorer-shell.html"), "utf8");
 const appSource = fs.readFileSync(path.join(ROOT, "scripts", "app.js"), "utf8");
+const annotationSource = fs.readFileSync(path.join(ROOT, "scripts", "annotation-ui.js"), "utf8");
+const eventAnalysisSource = fs.readFileSync(path.join(ROOT, "scripts", "event-analysis-ui.js"), "utf8");
+const populationSource = fs.readFileSync(path.join(ROOT, "scripts", "population-dynamics-ui.js"), "utf8");
 const probeSource = fs.readFileSync(path.join(ROOT, "scripts", "probe-view.js"), "utf8");
 const styleSource = fs.readFileSync(path.join(ROOT, "styles", "app.css"), "utf8");
+const videoSyncSource = fs.readFileSync(path.join(ROOT, "scripts", "video-sync.js"), "utf8");
 
 assert.deepEqual(i18n.LANGUAGES.map((item) => item.code), ["en", "zh-CN", "es"], "Supported languages changed");
 assert.equal(i18n.GLOSSARY.unit.en, "Unit");
@@ -36,6 +40,12 @@ for (const language of ["en", "zh-CN", "es"]) {
   assert(help[language].html.includes("spike_times.npy"), `${language} Help must preserve KiloSort filenames`);
   assert(help[language].html.includes("MPN"), `${language} Help must preserve brain-region abbreviations`);
 }
+assert.doesNotMatch(Object.values(help).map(({html}) => html).join("\n"), /protected laboratory video|受保护的实验室视频|vídeo protegido del laboratorio|not validated behavior recognition|尚未验证为可靠的行为识别|no es reconocimiento conductual validado|Unverified · Manual offset|未验证 · 手动偏移|No verificado · Desfase manual/i);
+assert.doesNotMatch(eventAnalysisSource, /not yet restored from a project package|项目包尚不恢复分析结果|paquete de proyecto aún no restaura/i);
+assert.match(eventAnalysisSource, /Save the analysis in the project to reopen it later/);
+assert.doesNotMatch([eventAnalysisSource, populationSource, annotationSource].join("\n"), /Source data are unchanged|源数据未改变|datos originales sin cambios|not available yet|暂不支持|aún no admite|not validated behavior recognition/i);
+assert.doesNotMatch([appSource, videoSyncSource].join("\n"), /video\.(?:verified|unverified)/);
+assert.match(videoSyncSource, /video\.method\./);
 
 for (const [key, patterns] of Object.entries({
   "tips.manualReview": [/What:/, /是什么：/, /Qué es:/],

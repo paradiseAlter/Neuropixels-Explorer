@@ -123,20 +123,17 @@ Drag horizontally to move the time window. With the pointer inside a signal, whe
 
 The compact video track sits directly above the neural signals. If the selected
 Recording contains a supported video file, the Explorer opens it locally. Use
-**Attach local video** to choose another file, or **Generate validation video**
-when protected laboratory video is unavailable. The generated mouse-arena
-stream is deterministic: it exposes exact 30 Hz frame numbers and a visible
-sync pulse every five seconds.
+**Attach local video** to choose another file. If the experiment video is not
+available, **Generate validation video** creates a deterministic mouse-arena
+stream with exact 30 Hz frame numbers and a visible sync pulse every five seconds.
 
 Play, pause, seek, change speed, or step one frame at a time. **Follow signal**
 keeps the current neural time inside the visible Unit window. The green Video
 playhead is drawn at the same neural time on every open Unit. Clicking a neural
 plot in Cursor mode performs the reverse operation and seeks the video.
 
-The mapping badge distinguishes a verified frame clock from an unverified
-manual offset. Changing **Offset (s)** intentionally changes the badge to
-**Unverified · Manual offset**. A real experiment should use frame timestamps,
-TTL events, or a documented clock fit before the mapping is called verified.
+Use **Offset (s)** for a quick manual alignment. For frame-accurate experiment
+alignment, load frame timestamps, TTL events, or a documented clock fit.
 
 ## 5. Interpret Unit details
 
@@ -165,7 +162,7 @@ The focused Unit has a white outer ring, a horizontal depth line, and a fixed la
 
 Probe interactions use the same selection rules as the left list: click opens only, Ctrl-click adds, and right-click opens the shared Unit menu. Nearby Units are listed relative to the locked Probe position. Distances are shown in micrometres.
 
-For the current acquisition, `channel_shanks.npy` identifies four shanks on one physical Probe. The Inspector therefore shows one expandable **Probe 1** group containing **Shank 1–4**; it never labels those shanks as four separate physical Probes. A future multi-Probe dataset will require an explicit physical-Probe identity in addition to its shank identity.
+For the current acquisition, `channel_shanks.npy` identifies four shanks on one physical Probe. The Inspector therefore shows one expandable **Probe 1** group containing **Shank 1–4**. Multi-Probe data must also provide a physical-Probe identity.
 
 ## 7. Brain-region mapping
 
@@ -177,7 +174,7 @@ KiloSort output does not contain a reliable brain-region identity. Optional anat
 
 Recommended fields include `electrode`, `atlas_id`, `color`, and `recording_id` for session-specific tracks. Brain-region abbreviations such as `MPN` and KiloSort field names are shown exactly as provided and are not translated.
 
-The current mapping is electrode/depth-level metadata. It is not a registered three-dimensional Allen CCF trajectory unless full atlas coordinates and registration provenance are supplied.
+Treat the current mapping as electrode/depth metadata. A registered three-dimensional Allen CCF trajectory also requires full atlas coordinates and registration provenance.
 
 ## 8. Layout, themes, language, and keyboard use
 
@@ -191,17 +188,17 @@ Use **Tab** and **Shift + Tab** to move through controls. Press **Enter** or **S
 
 ## 9. Privacy and performance
 
-In folder mode, selected files stay on the local computer. The browser indexes the folder and sends only the selected Unit result to the interface after background processing. A database mode can query a separately operated local service, but that service is optional and is not needed for direct `file://` use.
+In folder mode, selected files stay on the local computer. The browser indexes the folder and sends only the selected Unit result to the interface after background processing. Database mode can query a separately operated local service; direct `file://` use works on its own.
 
-The Help documentation is stored as Markdown in this repository and precompiled into a local JavaScript asset for release. The Help drawer does not use a CDN, remote Markdown renderer, or network request, so it also works when `index.html` is opened directly.
+Help is bundled with the standalone HTML and remains available when `index.html` is opened directly.
 
 ## 10. Troubleshooting
 
 - **No recordings found**: confirm each candidate contains `spike_times.npy`, `spike_clusters.npy`, and `params.py`.
 - **A plot is unavailable**: open Data status and check whether its source file is missing.
 - **Brain region is unmapped**: confirm a compatible Legacy Table or depth mapping was included and uses the correct Recording/Unit identifiers.
-- **Raw voltage is unavailable**: KiloSort output folders often reference an external `continuous.dat`; the Explorer exposes a versioned provider/reader extension port but registers no Raw Voltage implementation and never labels spike timing as voltage.
-- **No laboratory video is available**: use **Generate validation video** to test playback and exact alignment without creating or copying protected data.
+- **Open raw voltage**: connect a compatible raw-voltage reader to the recording’s continuous data.
+- **No experiment video is available**: use **Generate validation video** to check playback and alignment.
 - **Navigation changes the wrong trace**: check whether time is Linked or Independent and which signal is focused.
 
 
@@ -230,9 +227,8 @@ the results. Hover a mark for details. Units without depth remain in the list.
 An open panel follows new selections; closing it keeps the selection. Statistics
 require a local project and use actual covered neural seconds and `[start, end)`.
 
-**Experimental grouping** proposes motion/appearance groups locally. It is
-sensitive to position and lighting and is not validated behavior recognition.
-Choose a group, compare its sample videos, name it and explicitly confirm clips.
+**Experimental grouping** proposes local motion/appearance groups. Choose a
+group, compare its sample videos, name it and confirm the clips.
 Move selected clips into a new group to refine the grouping. Import external
 algorithm candidates through JSON. Original algorithm groups remain preserved.
 
@@ -240,21 +236,20 @@ Each **Label scheme** has independent labels, group mappings and review states.
 Changing shared video boundaries makes affected clips need review in all schemes.
 Right-click and choose **Save annotations** to save all schemes and original runs for the current video. The first save starts beside a dragged video when its native handle is available. **Save as** chooses another file. **Export CSV** exports
 the current scheme, mapped times and synchronization status. Service drafts are
-saved locally; **Save project** updates the project file. In the standalone HTML, export the project to keep the edits in this tab. Unsynchronized
-videos remain visibly unverified. The original data is never edited.
+saved locally; **Save project** adds the edits to the current project. In the standalone HTML, export the project package to keep them.
 
 ## Inspect both Probe distributions
 
 Select a behavior clip or drag a neural interval, then open **Interval distribution** for exact counts and Hz. Select a Unit in the neural view, Probe or rate list and open **Unit template distribution**. Both sections can stay open; scroll within the Probe sidebar.
 Template markers show channel positions, sized by stored peak-to-peak amplitude. Click a channel or use the channel selector to inspect its waveform on a common amplitude scale. The full channel list retains row indices, available acquisition channel IDs, coordinates and amplitudes.
-This is the whole-recording dominant template with its spike count/fraction, independent of the selected interval. It is not a waveform measured within that interval. Amplitudes are stored values, without unwhitening or calibration in µV.
+The plot shows the whole-recording dominant template and its spike count/fraction, independent of the selected interval. Amplitudes use the stored units unless unwhitening or calibration in µV is supplied.
 Changing Units preserves interval statistics. Missing templates or unsupported channel layouts show a reason. Allen recordings without multichannel templates still support interval activity.
 
 
 ## Optional model features and local frame example
 
-In **Edit clips → Clips & grouping → Model features / keypoints**, export model-input JSON and import timestamped feature/keypoint JSON to group and review. **Run pixel adapter example (first 30 s)** demonstrates the optional source-integrated model interface using actual video RGB means, not a trained behavior recognizer. It needs a local File or browser-project video Blob and uses the current grouping settings. Results stay unreviewed; Save project retains source features, model/input provenance and human edits. Cancel, closing the editor or changing source discards pending output. The standard workflow does not need a model or Python. Arbitrary scripts and remote models cannot be loaded through this panel.
+In **Edit clips → Clips & grouping → Model features / keypoints**, export model-input JSON and import timestamped feature/keypoint JSON to group and review. **Run pixel adapter example (first 30 s)** uses video RGB means to demonstrate the source-integrated model interface. It uses the current grouping settings and requires a local File or browser-project video Blob. Review the proposed groups before confirming them. Save project retains source features, model/input provenance and human edits; cancelling, closing the editor or changing source discards pending output.
 
 ## Population dynamics
 
-Open New analysis → Population dynamics. Choose original Unit IDs, a continuous neural start/end and bin width. Compute runs in a cancellable Worker; it fits PCA and prediction models on training bins and compares validation/test error. Select a trajectory point or bin, then Show this bin in signals / video to return to the shared time view. Save analysis in project before exporting a portable project package. Unknown acquisition coverage stays visible; the constrained line model imposes a unit eigenvalue. This path does not require behavior labels or Python.
+Open New analysis → Population dynamics. Choose original Unit IDs, a continuous neural start/end and bin width. Compute runs in a cancellable Worker; it fits PCA and prediction models on training bins and compares validation/test error. Select a trajectory point or bin, then Show this bin in signals / video to return to the shared time view. Save analysis in project before exporting a portable project package.

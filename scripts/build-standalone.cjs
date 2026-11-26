@@ -36,7 +36,7 @@ function applyStandalonePolicy(html) {
     '<meta charset="utf-8">\n  <meta http-equiv="Content-Security-Policy" content="' + policy + '">');
 }
 
-function buildStandalone({emailSafe = false} = {}) {
+function buildStandalone() {
   const worker = minify(read('vendor/h5wasm/h5wasm-0.10.3-hdf5-2.2.0.js'), {compress: false, mangle: false}) + '\n' + minify(read('scripts/browser-nwb-worker.js'));
   const packed = gzipSync(worker, {level: 9});
   const workerHash = createHash('sha256').update(packed).digest('hex');
@@ -50,19 +50,19 @@ function buildStandalone({emailSafe = false} = {}) {
         ? `<template id="nwb-worker-gzip">${packed.toString('base64')}</template>\n` +
           [...adapters, file].map(script).join('\n').replace('__NWB_WORKER_SHA256__', workerHash)
         : script(file))
-    .replace('</body>', () => `<template id="explorer-licenses"><pre>${licenses}</pre></template>\n</body>`)
-    .replace('<meta name="viewport"', emailSafe ? '<meta name="neuropixels-build" content="mail-gateway-compatible; full-feature">\n  <meta name="viewport"' : '<meta name="viewport"');
+    .replace('</body>', () => `<template id="explorer-licenses"><pre>${licenses}</pre></template>\n</body>`);
   return applyStandalonePolicy(html);
 }
 
 if (require.main === module) {
-  const args = process.argv.slice(2), emailSafe = args.includes('--email-safe'), promote = args.includes('--promote');
-  const outputArgs = args.filter(arg => arg !== '--email-safe' && arg !== '--promote');
+  const args = process.argv.slice(2), promote = args.includes('--promote');
+  const unknown = args.filter(arg => arg.startsWith('--') && arg !== '--promote');
+  if (unknown.length) throw new Error(`Unknown option: ${unknown[0]}`);
+  const outputArgs = args.filter(arg => arg !== '--promote');
   if (outputArgs.length > 1) throw new Error('Expected at most one output path');
   const output = outputArgs[0];
-  if (emailSafe && !output) throw new Error('--email-safe requires an explicit output path');
-  if (promote && (emailSafe || output)) throw new Error('--promote cannot be combined with --email-safe or an output path');
-  const html = buildStandalone({emailSafe});
+  if (promote && output) throw new Error('--promote cannot be combined with an output path');
+  const html = buildStandalone();
   const outputs = promote
     ? [path.join(root, 'index.html'), path.join(root, 'dist', 'Neuropixels-Explorer.html')]
     : [output ? path.resolve(output) : path.join(root, 'dist', 'Neuropixels-Explorer.html')];

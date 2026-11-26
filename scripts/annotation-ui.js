@@ -96,7 +96,7 @@
     selectOne: ["Select exactly one clip", "请只选择一个片段", "Selecciona exactamente un clip"],
     chooseClips: ["Select clips first", "请先选择片段", "Selecciona clips primero"],
     chooseGroup: ["Choose one review group", "请选择一个分组", "Elige un grupo"],
-    unverified: ["Video ↔ neural synchronization is unverified. Video boundaries remain the source of truth.", "视频与神经时间的同步尚未验证。标注以原视频边界为准。", "Sincronización vídeo ↔ neural sin verificar. Se conservan los límites del vídeo."],
+    unverified: ["Annotations use video time. Add alignment to show them on the shared neural timeline.", "标注使用视频时间；添加时间对齐后可显示在共享神经时间轴上。", "Las anotaciones usan tiempo de vídeo. Añade una alineación para mostrarlas en el eje neural compartido."],
     verified: ["Video boundaries are mapped to the shared neural timeline.", "视频区间已映射到共享神经时间轴。", "Los intervalos se muestran en el eje neural compartido."],
     table: ["Annotation clips", "标注片段", "Clips anotados"],
     detail: ["Review and edit", "检查与编辑", "Revisar y editar"],
@@ -124,16 +124,16 @@
     frameHelp: ["0-based frame numbers use nominal FPS; for variable-frame-rate video use seconds.", "帧号从 0 开始，按标称帧率换算；变帧率视频请使用秒数。", "Fotogramas desde 0, según FPS nominales; usa segundos para frecuencia variable."],
     seconds: ["video seconds", "视频秒", "segundos de vídeo"],
     featureTitle: ["Model features / keypoints", "模型特征 / 关键点", "Características / puntos del modelo"],
-    featureHelp: ["Export a data-only model request, then import timed feature or 2-D keypoint JSON. Imported files contain data only; no imported code is executed. Missing samples remain gaps and all groups need review. Local files or selected local-service videos up to 512 MiB; feature files up to 25 MB. The service returns a content fingerprint, not video bytes.", "导出模型输入数据，再导入带时间的特征或二维关键点 JSON。导入文件仅包含数据，不执行导入的代码。缺失样本保留为空隙，所有分组均待确认。支持不超过 512 MiB 的本地文件或本地服务项目视频，以及 25 MB 的特征文件。服务只返回内容指纹，不搬运视频。", "Exporta datos para tu modelo e importa JSON con tiempos. Los archivos importados son solo datos; no se ejecuta código importado. Se conservan los huecos y todos los grupos requieren revisión. Archivo local o vídeo del proyecto local hasta 512 MiB; JSON hasta 25 MB. El servicio devuelve una huella, no el vídeo."],
+    featureHelp: ["Export a model request, then import timed feature or 2-D keypoint JSON to create review groups. Missing samples remain gaps. Local files or selected local-service videos can be up to 512 MiB; feature files can be up to 25 MB.", "导出模型输入，再导入带时间的特征或二维关键点 JSON，生成待审阅分组。缺失样本保留为空隙。本地文件或本地服务项目视频最大 512 MiB，特征文件最大 25 MB。", "Exporta una solicitud de modelo e importa características o puntos 2-D con tiempos para crear grupos de revisión. Las muestras ausentes se conservan como huecos. Vídeos de hasta 512 MiB y archivos de características de hasta 25 MB."],
     featureExport: ["Export model input", "导出模型输入", "Exportar entrada del modelo"],
     featureModelExample: ["Run pixel adapter example (first 30 s)", "运行像素适配器示例（前 30 秒）", "Ejecutar ejemplo de píxeles (primeros 30 s)"],
-    featureModelHelp: ["This local frame adapter reads the actual video and shares a read-only annotation snapshot with source-integrated model code. The bundled RGB-mean example has no pretrained weights and does not recognize behavior. Only local video Blobs are supported; no scripts or remote models are loaded.", "本地帧适配器读取真实视频，并向源码集成的模型提供只读标注快照。自带 RGB 均值示例没有预训练权重，不识别行为。仅支持本地视频 Blob，不加载脚本或远程模型。", "El adaptador local entrega fotogramas reales y una copia de anotaciones al código integrado. El ejemplo RGB no tiene pesos ni reconoce conductas. Solo admite vídeos locales, sin cargar scripts ni modelos remotos."],
+    featureModelHelp: ["The local frame adapter reads the selected video and passes frames plus an annotation snapshot to source-integrated model code. The bundled RGB-mean example demonstrates the interface with a local video Blob.", "本地帧适配器读取所选视频，把画面帧和标注快照交给源码集成的模型。自带 RGB 均值示例使用本地视频 Blob 演示这个接口。", "El adaptador local lee el vídeo seleccionado y entrega fotogramas y una copia de las anotaciones al código del modelo integrado. El ejemplo RGB demuestra la interfaz con un Blob de vídeo local."],
     featureImport: ["Import features and group", "导入特征并分组", "Importar y agrupar"],
     featureConfidence: ["Minimum keypoint confidence", "关键点置信度下限", "Confianza mínima del punto"],
     featureScale: ["Feature scaling", "特征标准化", "Escala de características"],
     featureZ: ["Per-feature z-score", "逐特征 z-score", "Z-score por característica"],
     featureNone: ["Keep feature units", "保留特征单位", "Conservar unidades"],
-    featurePose: ["Pose centering, rotation and scale follow the file's declared named anchors. No temporal smoothing or short-bout merging is applied.", "姿态平移、旋转与尺度处理按文件声明的具名锚点执行。不平滑时间，也不合并短片段。", "La postura usa los anclajes declarados en el archivo. No se suaviza el tiempo ni se unen episodios breves."],
+    featurePose: ["Pose centering, rotation and scale follow the file's named anchors; intervals follow the imported sample grid.", "姿态平移、旋转与尺度处理按文件中的具名锚点执行，区间沿用导入的采样网格。", "El centrado, la rotación y la escala siguen los anclajes del archivo; los intervalos siguen la cuadrícula importada."],
     featureWorking: ["Checking video identity and grouping features…", "正在核对视频身份并处理特征…", "Verificando vídeo y agrupando…"]
   };
   const tr = (key) => COPY[key]?.[document.documentElement.lang === "zh-CN" ? 1 : document.documentElement.lang === "es" ? 2 : 0] || key;
@@ -483,7 +483,7 @@
       this.autoCount = this.panel.querySelector("[data-clusters]")?.value || this.autoCount || "8";
       this.autoMinimum = this.panel.querySelector("[data-minimum]")?.value || this.autoMinimum || "0.4";
       const B = (a, k, x) => this.buttonHTML(a, k, x);
-      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.16.2-beta.1</span></div>${B("close", "close")}</header>`;
+      const header = `<header class="annotation-heading"><div><strong>${esc(tr("title"))}</strong><span>4.16.3-beta.1</span></div>${B("close", "close")}</header>`;
       if (!this.doc) { this.panel.innerHTML = header + `<p>${esc(tr("empty"))}</p>`; return; }
       const doc = this.doc, groups = A.groups(doc), s = A.scheme(doc);
       if (this.group && !groups.some((g) => g.key === this.group)) this.group = "";
@@ -1266,8 +1266,8 @@
         ensure();
         const runId = crypto.randomUUID?.() || `motion-${Date.now()}`;
         const candidates = { schema: A.CANDIDATE_SCHEMA, timebase: "video_seconds", video: { name: context.videoName, size: context.videoSize, duration: context.duration },
-          run: { id: runId, method: D.VERSION, version: "4.16.2-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
-            license: "MIT", createdAt: new Date().toISOString(), limitations: "Position-sensitive image-motion baseline; not validated behavior recognition; sample-grid boundaries." }, segments: result.segments };
+          run: { id: runId, method: D.VERSION, version: "4.16.3-beta.1", parameters: { count, minimumDuration, sampleStepSeconds: step, seed: 42 },
+            license: "MIT", createdAt: new Date().toISOString(), limitations: "Image-motion grouping with position, lighting and sample-grid sensitivity." }, segments: result.segments };
         this.commit(A.importCandidates(this.doc, candidates));
         status(`${result.groups} groups · ${result.segments.length} clips · ${result.sampleCount} samples · ${tr("suggested")}`);
         this.toast(tr("imported"));

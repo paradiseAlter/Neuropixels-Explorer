@@ -688,11 +688,10 @@
 
     _renderStatus() {
       if (!this.elements.status) return;
-      const verification = this.mapping.verificationStatus === "verified" ? this.t("video.verified") : this.t("video.unverified");
       const method = this.source?.kind === "synthetic" && this.mapping.method === "frame_timestamps"
         ? this.t("video.syntheticClock")
         : this.t(`video.method.${this.mapping.method === "unmapped" ? "unknown" : this.mapping.method}`);
-      this.elements.status.textContent = this.source ? `${verification} · ${method}` : this.t("video.noSource");
+      this.elements.status.textContent = this.source ? method : this.t("video.noSource");
       this.elements.status.dataset.status = this.source ? this.mapping.verificationStatus : "empty";
       if (this.elements.offset) this.elements.offset.value = String(this.mapping.offsetSeconds);
     }

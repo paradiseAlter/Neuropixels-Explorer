@@ -128,10 +128,9 @@ Arrastre horizontalmente para mover la ventana. Con el puntero dentro de una se�
 
 La pista compacta de vídeo está justo encima de las señales neurales. Si el
 Registro contiene un vídeo compatible, el Explorer lo abre localmente. Use
-**Conectar vídeo local** para elegir otro archivo o **Generar vídeo de
-validación** cuando no esté disponible el vídeo protegido del laboratorio. El
-vídeo generado es determinista: muestra fotogramas exactos a 30 Hz y un pulso
-visible de sincronización cada cinco segundos.
+**Conectar vídeo local** para elegir otro archivo. Si no dispone del vídeo del
+experimento, **Generar vídeo de validación** crea un vídeo determinista con
+fotogramas exactos a 30 Hz y un pulso visible cada cinco segundos.
 
 Puede reproducir, pausar, buscar, cambiar la velocidad o avanzar un fotograma.
 **Seguir señal** mantiene el tiempo neural actual dentro de la ventana visible.
@@ -139,10 +138,8 @@ El cursor verde de Vídeo marca el mismo tiempo neural en todas las Unidades
 abiertas. Un clic en un gráfico neural en modo Cursor realiza la operación
 inversa y desplaza el vídeo a ese tiempo.
 
-La insignia distingue un reloj de fotogramas verificado de un desfase manual no
-verificado. Cambiar **Desfase (s)** muestra **No verificado · Desfase manual**.
-Un experimento real necesita marcas de fotograma, eventos TTL o un ajuste de
-reloj documentado antes de declararse verificado.
+Use **Desfase (s)** para una alineación manual rápida. Para alinear el experimento
+fotograma a fotograma, cargue marcas de tiempo, eventos TTL o un ajuste de reloj documentado.
 
 ## 5. Interpretar los detalles de la Unidad
 
@@ -171,7 +168,7 @@ La Unidad enfocada tiene anillo blanco, línea horizontal de profundidad y etiqu
 
 Las reglas son iguales a las de la lista: clic abre solo, Ctrl+clic añade y clic derecho abre el menú común. Las Unidades cercanas se calculan respecto a la posición bloqueada.
 
-En la adquisición actual, `channel_shanks.npy` identifica cuatro shanks de una sola Sonda física. El Inspector muestra por ello un grupo expandible **Sonda 1** que contiene **Shank 1–4** y nunca los etiqueta como cuatro Sondas físicas. Un futuro conjunto con varias Sondas necesitará una identidad física explícita además de la identidad del shank.
+En la adquisición actual, `channel_shanks.npy` identifica cuatro shanks de una sola Sonda física. El Inspector muestra por ello un grupo expandible **Sonda 1** que contiene **Shank 1–4**. Los datos con varias Sondas también deben indicar la identidad de cada Sonda física.
 
 ## 7. Mapeo de regiones cerebrales
 
@@ -183,7 +180,7 @@ Las salidas KiloSort no contienen una identidad cerebral fiable. Las anotaciones
 
 Se recomiendan `electrode`, `atlas_id`, `color` y `recording_id` para trayectos específicos de sesión. Abreviaturas como `MPN` y campos de KiloSort se muestran sin traducir.
 
-El mapeo actual es metadato a nivel de electrodo/profundidad. No constituye un trayecto tridimensional registrado en Allen CCF sin coordenadas completas y procedencia de registro.
+Interprete el mapeo actual como metadatos de electrodo/profundidad. Un trayecto tridimensional registrado en Allen CCF también necesita coordenadas completas y procedencia del registro.
 
 ## 8. Disposición, temas, idioma y teclado
 
@@ -197,17 +194,17 @@ Use **Tab** y **Shift + Tab** para moverse, **Enter** o**Espacio** para activar 
 
 ## 9. Privacidad y rendimiento
 
-En modo carpeta, los archivos permanecen en el equipo local. El navegador indexa la carpeta y, tras el procesamiento en segundo plano, la interfaz recibe solo el resultado de la Unidad elegida. El modo base de datos puede consultar un servicio local independiente, pero es opcional y no hace falta al abrir `index.html` mediante `file://`.
+En modo carpeta, los archivos permanecen en el equipo local. El navegador indexa la carpeta y, tras el procesamiento en segundo plano, la interfaz recibe solo el resultado de la Unidad elegida. El modo base de datos puede consultar un servicio local independiente; `index.html` también funciona directamente mediante `file://`.
 
-La Ayuda se conserva como Markdown y se precompila como contenido JavaScript local para la versión. No usa CDN, renderizador Markdown remoto ni solicitud de red.
+La Ayuda está incluida en el HTML y funciona al abrir `index.html` directamente.
 
 ## 10. Solución de problemas
 
 - **No se encontraron registros**: confirme `spike_times.npy`, `spike_clusters.npy` y `params.py` en cada candidato.
 - **Un gráfico no está disponible**: abra Estado de datos y compruebe el archivo fuente.
 - **Región sin mapear**: confirme una Legacy Table o mapa de profundidad compatible y los identificadores correctos.
-- **Voltaje sin procesar no disponible**: KiloSort suele referirse a un `continuous.dat` externo; el Explorer expone un puerto versionado de proveedor/lector, pero no registra una implementación de Raw Voltage ni presenta tiempos de potenciales como voltaje.
-- **No hay vídeo del laboratorio**: use **Generar vídeo de validación** para comprobar reproducción y alineación exacta sin crear ni copiar datos protegidos.
+- **Abrir voltaje sin procesar**: conecte un lector compatible a los datos continuos del registro.
+- **No hay vídeo del experimento**: use **Generar vídeo de validación** para comprobar reproducción y alineación.
 - **La navegación cambia la señal equivocada**: compruebe Tiempo vinculado/independiente y qué señal está enfocada.
 
 
@@ -237,9 +234,8 @@ Las Unidades sin profundidad siguen en la lista. El panel abierto sigue nuevas
 selecciones; cerrarlo conserva la selección. Requiere un proyecto local y utiliza
 los segundos neurales cubiertos y el intervalo semiabierto `[start, end)`.
 
-**Agrupación experimental** propone grupos de movimiento y apariencia en el
-equipo local. Es sensible a posición e iluminación y no es reconocimiento
-conductual validado. Compara vídeos del grupo, nómbralo y confirma los clips.
+**Agrupación experimental** propone grupos locales de movimiento y apariencia.
+Compare vídeos del grupo, asígnele un nombre y confirme los clips.
 Mueve selecciones a un nuevo grupo para refinar la agrupación. También puedes
 importar candidatos JSON externos. Los grupos originales se conservan.
 
@@ -247,22 +243,21 @@ Cada **Esquema de etiquetas** mantiene etiquetas, agrupaciones y revisiones
 independientes. Cambiar los límites compartidos exige volver a revisar en todos
 los esquemas. Haz clic derecho y elige **Guardar anotaciones** para guardar todos los esquemas y resultados originales del vídeo. El primer guardado comienza junto al vídeo arrastrado si Chrome proporciona acceso. **Guardar como** permite elegir otro archivo.
 **Exportar CSV** incluye el esquema activo, tiempos y estado de sincronización.
-El servicio guarda borradores locales; **Guardar proyecto** actualiza su archivo.
-En el HTML independiente, exporta el proyecto para guardar las ediciones de esta pestaña. Los vídeos sin calibrar siguen indicándose como no verificados.
-Los datos de origen no se modifican.
+El servicio guarda borradores locales; **Guardar proyecto** añade las ediciones al proyecto actual.
+En el HTML independiente, exporta el paquete de proyecto para conservarlas.
 
 ## Inspeccionar ambas distribuciones de Sonda
 
 Selecciona un segmento conductual o un intervalo neural y abre **Interval distribution** para ver conteos y Hz. Selecciona una Unidad en la vista neural, Sonda o lista y abre **Distribución de plantilla / Unit template distribution**. Ambas secciones pueden permanecer abiertas; desplázate en la barra lateral.
 Los círculos muestran posiciones de canales y su tamaño indica amplitud pico a pico almacenada. Elige un canal para ver su forma de onda con una escala de amplitud común. La lista completa conserva índices, identificadores de adquisición disponibles, coordenadas y amplitudes.
-Es la plantilla dominante del registro completo, con la fracción de spikes asignados. No cambia con el intervalo ni representa una forma de onda medida en ese segmento. Los valores no están desblanqueados ni calibrados en µV.
+El gráfico muestra la plantilla dominante del registro completo y la fracción de spikes asignados, independientemente del intervalo elegido. Las amplitudes usan las unidades almacenadas salvo que se proporcione desblanqueo o calibración en µV.
 Cambiar de Unidad conserva las estadísticas del intervalo. Si faltan plantillas o el mapa no es compatible, se indica el motivo. Los registros Allen sin plantillas multicanal conservan las estadísticas de actividad.
 
 
 ## Características opcionales y ejemplo de fotogramas
 
-En **Editar segmentos → Clips y grupos → Características / puntos del modelo**, exporta la entrada JSON e importa características o puntos con tiempos para agrupar y revisar. **Ejecutar ejemplo de píxeles (primeros 30 s)** demuestra la interfaz opcional mediante medias RGB de vídeo real; no es un reconocedor conductual entrenado. Requiere un archivo local o un Blob de proyecto del navegador y usa los ajustes de agrupación actuales. Los resultados necesitan revisión; Guardar proyecto conserva características, procedencia del modelo y entrada, y cambios humanos. Cancelar, cerrar o cambiar la fuente descarta resultados pendientes. El flujo básico no requiere modelos ni Python. El panel no carga scripts arbitrarios ni modelos remotos.
+En **Editar segmentos → Clips y grupos → Características / puntos del modelo**, exporta la entrada JSON e importa características o puntos con tiempos para agrupar y revisar. **Ejecutar ejemplo de píxeles (primeros 30 s)** usa medias RGB del vídeo para demostrar la interfaz del modelo. Requiere un archivo local o un Blob de proyecto y usa los ajustes actuales. Revise los grupos propuestos antes de confirmarlos. Guardar proyecto conserva características, procedencia y cambios humanos; cancelar, cerrar o cambiar la fuente descarta resultados pendientes.
 
 ## Dinámica poblacional
 
-Abre Nuevo análisis → Dinámica poblacional. Elige IDs originales de Unit, un intervalo neural continuo y ancho de bin. El Worker cancelable ajusta PCA y modelos en entrenamiento y compara errores de validación/prueba. Selecciona un punto o intervalo y pulsa Ver intervalo en señales / vídeo para volver al tiempo compartido. Guarda el análisis antes de exportar el proyecto portátil. La cobertura desconocida permanece explícita; el modelo restringido impone un autovalor de uno. No requiere etiquetas conductuales ni Python.
+Abre Nuevo análisis → Dinámica poblacional. Elige IDs originales de Unit, un intervalo neural continuo y ancho de bin. El Worker cancelable ajusta PCA y modelos en entrenamiento y compara errores de validación/prueba. Selecciona un punto o intervalo y pulsa Ver intervalo en señales / vídeo para volver al tiempo compartido. Guarda el análisis antes de exportar el proyecto portátil.

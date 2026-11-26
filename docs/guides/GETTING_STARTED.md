@@ -92,8 +92,8 @@ The player’s progress bar covers the full video. Its upper edge shows events o
 Choose the event type beside **Mark**. **Time point** records the current video time in one click, during playback or while paused. **Interval** starts with **Mark** and finishes with **Stop**, which pauses playback and saves both times. The next mark uses the most recently selected video label. Esc cancels the mark in progress. Use **Label settings** to see the events for each label, rename it, or delete an event or the entire label. Expand **Event markers** to move a video annotation, resize its selected edges, or brush the event lane and press Delete. Drag the ruler to pan. **Undo deletion** or Ctrl+Z restores removed events. In **Edit clips**, hold Alt and drag across an empty part of the event lane to draw a new interval.
 
 **Clips & grouping** opens batch review, independent laboratory label schemes,
-undo/redo, import/export, and experimental motion grouping. Candidate groups
-require human review; the motion baseline is not a validated behavior classifier.
+undo/redo, import/export, and experimental motion grouping. Review candidate
+groups because position and lighting can change the motion baseline.
 JSON exports preserve every scheme, source run and interval; CSV exports the
 current scheme and exact neural/video time mapping. Service-project drafts are saved locally as you edit. Use **Save project** to
 update the project file; right-click and choose **Save annotations** for a separate
