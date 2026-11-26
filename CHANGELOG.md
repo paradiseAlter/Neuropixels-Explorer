@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+## [4.16.1-beta.1] - 2026-11-26
+
+- Keep `region-core.js` readable in both standalone build flavors. Controlled
+  UCI-to-personal Gmail tests isolated its compressed representation as one
+  mail-gateway trigger without changing its runtime behavior.
+- Confirm the separately labelled mail-gateway flavor by real delivery. It
+  disables only optional Unit marks, whose script independently triggers the
+  gateway, while the normal product retains that feature. Google did not expose
+  a malware signature, so this is a compatibility fix rather than a malware claim.
+
 ## [4.16.0-beta.1] - 2026-11-26
 
 - Integrate reusable recording, video and analysis tabs, same-session multi-probe

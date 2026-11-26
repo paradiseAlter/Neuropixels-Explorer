@@ -12,6 +12,7 @@ const serializedWorkerModules = new Set([
   'scripts/joint-recording.js', 'scripts/kilosort-core.js', 'scripts/population-dynamics-core.js',
   'scripts/video-features.js'
 ]);
+const readableStandaloneModules = new Set(['scripts/region-core.js']);
 const minify = (source, {compress = true, mangle = true} = {}) => minifyJavaScript(source, {
   compress: compress ? {passes: 2} : false,
   mangle,
@@ -19,11 +20,14 @@ const minify = (source, {compress = true, mangle = true} = {}) => minifyJavaScri
   format: {comments: false}
 }).code;
 const inlineScript = (source, mangle = true) => '<script>' + minify(source, {mangle}).replace(/<\/script/gi, '<\\/script') + '</script>';
+const readableScript = source => '<script>\n' + source.replace(/<\/script/gi, '<\\/script') + '\n</script>';
 // These modules serialize worker factories with Function#toString. Keep their
 // identifiers stable because some worker templates also name dependencies.
-const script = file => inlineScript(read(file), !serializedWorkerModules.has(file));
+const script = file => readableStandaloneModules.has(file)
+  ? readableScript(read(file))
+  : inlineScript(read(file), !serializedWorkerModules.has(file));
 const emailSafeUnitMarks = `
-// Delivery-isolation flavor: disable this optional UI while retaining the rest of the application.
+// Mail-gateway flavor: disable this optional UI while retaining the rest of the application.
 window.NeuropixelsUnitMarks=Object.freeze({
   configure(){document.getElementById('unit-mark-settings')?.remove();},sync(){},ref(){return '';},attrs(){return '';},bind(){},
   appendActions(){},targetRef(){return '';},popup(){return false;},detach(){},restore(){},colors(){return [];}
@@ -57,7 +61,7 @@ function buildStandalone({emailSafe = false} = {}) {
           [...adapters, file].map(script).join('\n').replace('__NWB_WORKER_SHA256__', workerHash)
         : script(file))
     .replace('</body>', () => `<template id="explorer-licenses"><pre>${licenses}</pre></template>\n</body>`)
-    .replace('<meta name="viewport"', emailSafe ? '<meta name="neuropixels-build" content="mail-gateway-diagnostic; unit-marks-disabled">\n  <meta name="viewport"' : '<meta name="viewport"');
+    .replace('<meta name="viewport"', emailSafe ? '<meta name="neuropixels-build" content="mail-gateway-compatible; unit-marks-disabled">\n  <meta name="viewport"' : '<meta name="viewport"');
   return applyStandalonePolicy(html);
 }
 
