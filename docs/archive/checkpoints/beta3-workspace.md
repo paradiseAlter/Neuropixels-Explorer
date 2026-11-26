@@ -1,5 +1,7 @@
 # 4.0.0-beta.3 implementation map
 
+> Historical checkpoint record. Statements and test results below apply to the named round/version, not a fresh validation of the current checkout. See the [current documentation index](../../../README.md) and [parity matrix](../../PARITY_MATRIX.md).
+
 The neural recording remains the main workspace. Video and its annotation tools
 share one adjacent region; opening the annotation editor must not reduce the
 height of the neural canvas or the video. Start with a 65/35 horizontal split,

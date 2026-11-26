@@ -14,17 +14,17 @@ def main() -> None:
     root.attributes("-topmost", True)
     try:
         if kind == "folder":
-            path = filedialog.askdirectory(parent=root, title="Neuropixels Explorer — Open recording folder")
+            path = filedialog.askdirectory(parent=root, title="Neuropixels Explorer — Select Kilosort results folder")
         elif kind == "save-project":
             path = filedialog.asksaveasfilename(parent=root, title="Neuropixels Explorer — Save project", defaultextension=".neuroproject.json", initialfile="Experiment.neuroproject.json", filetypes=[("Explorer project", "*.neuroproject.json")])
         else:
-            types = {
-                "open-project": [("Explorer project", "*.neuroproject.json")],
-                "nwb": [("Allen NWB", "*.nwb")],
-                "video": [("Behavior video", "*.mp4 *.webm *.mov *.avi *.mkv")],
-                "clock": [("Video time mapping", "*.json")],
+            title, types = {
+                "open-project": ("Open project", [("Explorer project", "*.neuroproject.json")]),
+                "nwb": ("Select Allen ecephys NWB", [("Allen ecephys NWB", "*.nwb")]),
+                "video": ("Select behavior video", [("Behavior video", "*.mp4 *.webm *.mov *.avi *.mkv")]),
+                "clock": ("Select video frame clock", [("Allen video frame clock", "*.json")]),
             }[kind]
-            path = filedialog.askopenfilename(parent=root, title="Neuropixels Explorer — " + kind, filetypes=types)
+            path = filedialog.askopenfilename(parent=root, title="Neuropixels Explorer — " + title, filetypes=types)
         print(json.dumps({"path": path}, ensure_ascii=True))
     finally:
         root.destroy()

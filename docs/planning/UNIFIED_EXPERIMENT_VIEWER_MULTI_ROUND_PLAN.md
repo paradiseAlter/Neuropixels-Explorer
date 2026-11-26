@@ -1,11 +1,16 @@
 # Unified Experiment Viewer multi-round dialogue plan
 
+> Staged implementation plan with historical progress. Its round gates remain scoped to the corresponding work; later separately authorized work is recorded in the [checkpoint archive](../archive/README.md). For current product organization, see [PRD](../PRD.md), [IA](../IA.md), and [parity](../PARITY_MATRIX.md). This reorganization authorizes no new implementation round.
+
 ## Authority and current boundary
 
 This plan is derived from the complete Unified Experiment Viewer prompt. The
-root `AGENTS.md` contains the durable repository, product, scientific, visual,
-and interaction rules; those rules apply to every dialogue. This file controls
-round scope, evidence, and stopping points.
+root [AGENTS.md](../../AGENTS.md) contains collaboration and documentation rules.
+Product, visual, interaction and scientific specifications live in [PRD](../PRD.md),
+[IA](../IA.md), [Data Contract](../DATA_CONTRACT.md) and [Architecture](../ARCHITECTURE.md).
+Their newer confirmed standards take precedence over superseded specifications
+in this plan. The protocol and gates below apply only when the corresponding
+round is explicitly in scope; they are not a blanket requirement for every task.
 
 The first implementation dialogue is deliberately limited to:
 
@@ -34,7 +39,7 @@ classification, ranking, saliency, or persistent disk caching.
 
 ## Dialogue protocol
 
-At the beginning of every implementation dialogue:
+At the beginning of an implementation dialogue executing this plan:
 
 1. Read the root `AGENTS.md`, all applicable nested agent instructions, this
    plan, and the current implementation map.
@@ -43,12 +48,14 @@ At the beginning of every implementation dialogue:
    workflow from the repository rather than from stale notes.
 4. State the exact round being executed and do not broaden it silently.
 
-At the end of every implementation dialogue:
+At a meaningful implementation checkpoint within this plan:
 
 1. Run the real application and the relevant automated and smoke tests.
 2. Use representative real data when it is available and safe.
 3. Capture the required screenshots from the running UI, not a mockup.
-4. Update the single implementation map and the progress table below.
+4. Update the affected current specification and parity documents. Update this
+   plan's progress and the applicable evidence record only when the round status
+   or important evidence changes; do not create a record for every conversation.
 5. Report confirmed behavior, test evidence, performance observations, known
    limitations, and any specification deviations with their concrete repository
    constraint.
@@ -77,7 +84,7 @@ technical blocker prevents safe progress.
 
 Perform the mandatory preflight in `AGENTS.md`. Create or update one concise
 implementation note using repository documentation conventions. Prefer
-`docs/UNIFIED_EXPERIMENT_VIEWER_IMPLEMENTATION_MAP.md` unless an existing note
+`docs/archive/checkpoints/UNIFIED_EXPERIMENT_VIEWER_IMPLEMENTATION_MAP.md` unless an existing note
 already serves that role.
 
 Record:
@@ -239,7 +246,7 @@ preserved but are not permanently visible.
 ### Ready-to-send prompt for Dialogue 1
 
 > Read the root `AGENTS.md` and
-> `docs/UNIFIED_EXPERIMENT_VIEWER_MULTI_ROUND_PLAN.md`. Execute Dialogue 1 only:
+> `docs/planning/UNIFIED_EXPERIMENT_VIEWER_MULTI_ROUND_PLAN.md`. Execute Dialogue 1 only:
 > complete Round 0, Round 1, and Round 2 in the real Neuropixels Explorer, then
 > produce every Checkpoint A screenshot, test result, activity-summary
 > definition, performance observation, limitation, and deviation report. Stop

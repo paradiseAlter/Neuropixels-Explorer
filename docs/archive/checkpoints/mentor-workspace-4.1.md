@@ -1,5 +1,7 @@
 # Mentor workspace review — 4.1.0-beta.1
 
+> Historical checkpoint record. Statements and test results below apply to the named round/version, not a fresh validation of the current checkout. See the [current documentation index](../../../README.md) and [parity matrix](../../PARITY_MATRIX.md).
+
 ## Context continuity correction — 4.1.2-beta.1
 
 The 2026-09-26 review rejected the loss of visible context in full-workspace video

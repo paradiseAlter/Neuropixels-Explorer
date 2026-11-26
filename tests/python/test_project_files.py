@@ -43,9 +43,12 @@ class ProjectFileTests(unittest.TestCase):
         local.update_mapping({"projectId": project["id"], "recordingId": rid, "offset": 2.5})
         key = json.dumps([rid, "url", video.name, video.stat().st_size])
         doc = {"schema": "neuropixels-annotations/1", "context": {"key": key, "recordingKey": rid, "videoName": video.name, "videoSize": video.stat().st_size, "duration": 15},
-               "segments": [{"id": "clip", "start": 1, "end": 2, "subject": "mouse", "track": "behavior"}],
-               "schemes": [{"id": "a", "name": "Lab", "labels": {"clip": "grooming"}, "mappings": {}, "groups": {}, "reviewed": {"clip": True}}],
-               "runs": [], "activeSchemeId": "a", "labelColors": {"grooming": "#abcdef"}}
+               "segments": [{"id": "clip", "start": 1, "end": 2, "subject": "mouse", "track": "behavior"},
+                            {"id": "cue", "kind": "point", "start": 0, "end": 0, "subject": "mouse", "track": "behavior"}],
+               "schemes": [{"id": "a", "name": "Lab", "labels": {"clip": "grooming", "cue": "flash"}, "mappings": {},
+                            "groups": {}, "reviewed": {"clip": True, "cue": True}}],
+               "runs": [], "activeSchemeId": "a", "labelColors": {"grooming": "#abcdef", "flash": "#edbd62"},
+               "labelKinds": {"flash": "point"}}
         local.annotation({"projectId": project["id"], "key": key, "document": doc})
         file = self.root / "saved.neuroproject.json"
         project_files.write(local, project, file)

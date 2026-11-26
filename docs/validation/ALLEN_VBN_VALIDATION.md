@@ -10,6 +10,28 @@ rewards, image changes and omissions are available. It is not a freely moving
 grooming/sniffing ground-truth dataset. Anonymous video groups require review
 under each laboratory's own definitions.
 
+## Hit/miss response review, 2026-11-23
+
+Session 1064644573, probeC: all 205 active image changes matched original
+trial frames (79 hits, 123 misses, 3 automatic rewards). With 98 VISp Units
+in ascending ID order, −0.5 to +1 s, 50 ms bins, shape normalization,
+k=3 and seed 1, fitting on hits produced groups of 57, 11 and 24 Units and
+6 unassigned constant profiles. All 593,880 Unit/trial/bin counts matched an
+independent NWB calculation. Mean adjusted Rand index across eight event
+splits was 0.374. Acquisition coverage was unavailable in the source.
+
+In Chrome, Unit 1066256388 had 4 spikes in the first hit window and 3 in the
+first miss window. Clicking those rows decoded frames at 134.545 and 232.147
+video seconds on the original full-length side camera. Both conditions kept
+the same 98 row identities on return. A fresh browser profile restored the
+saved selection and these spike counts from the exported project.
+
+A separate empty Chrome profile imported the original session NWB, selected
+probeC (349 Units), attached the full 2,387,348,809-byte side camera video and
+imported its matching frame-clock JSON. The browser verified the full video
+SHA-256 in bounded chunks. Selecting a recorded image change at neural time
+31.020 s sought to video time 28.686920 s.
+
 ## Corpus selection
 
 `examples/allen-vbn/download-plan.json` selects four mice, two familiar/novel

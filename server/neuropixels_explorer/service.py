@@ -1224,6 +1224,8 @@ class NeuropixelRequestHandler(BaseHTTPRequestHandler):
 
     def _static(self, requested_path: str) -> None:
         relative = "index.html" if requested_path in {"", "/"} else unquote(requested_path.lstrip("/"))
+        if relative == "index.html" and (self.server.static_root / "scripts/explorer-shell.html").is_file():
+            relative = "scripts/explorer-shell.html"
         if any(part.startswith(".") for part in Path(relative).parts) or Path(relative).parts[0] in {"runtime", "data", "datasets", "private", "recordings"}:
             self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
             return

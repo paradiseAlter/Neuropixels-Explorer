@@ -1,5 +1,7 @@
 # Unified Experiment Viewer implementation map
 
+> Historical checkpoint record. Statements and test results below apply to the named round/version, not a fresh validation of the current checkout. See the [current documentation index](../../../README.md) and [parity matrix](../../PARITY_MATRIX.md).
+
 ## Scope and status
 
 Dialogue 1 implemented Round 0 through Round 2 and stopped at Checkpoint A.
@@ -404,7 +406,7 @@ The video source remains external. Drafts live in browser IndexedDB and portable
 project files rather than the source neural database.
 
 Implementation/validation contract and algorithm findings are documented in
-`docs/BEHAVIOR_ANNOTATION.md`. Acceptance uses the real app with the existing
+`docs/contracts/BEHAVIOR_ANNOTATION.md`. Acceptance uses the real app with the existing
 neural catalog copied into ignored runtime storage and a separately sourced
 public mouse video, explicitly unverified as a biological pair. Desktop and
 ultrawide screenshots are runtime artifacts, not product data. Candidate

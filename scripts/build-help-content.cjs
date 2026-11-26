@@ -5,9 +5,9 @@ const path = require("node:path");
 
 const ROOT = path.resolve(__dirname, "..");
 const SOURCES = {
-  en: path.join(ROOT, "docs", "USER_GUIDE.en.md"),
-  "zh-CN": path.join(ROOT, "docs", "USER_GUIDE.zh-CN.md"),
-  es: path.join(ROOT, "docs", "USER_GUIDE.es.md")
+  en: path.join(ROOT, "docs", "guides", "USER_GUIDE.en.md"),
+  "zh-CN": path.join(ROOT, "docs", "guides", "USER_GUIDE.zh-CN.md"),
+  es: path.join(ROOT, "docs", "guides", "USER_GUIDE.es.md")
 };
 const OUTPUT = path.join(__dirname, "help-content.js");
 
@@ -66,7 +66,7 @@ function renderMarkdown(markdown) {
 function build() {
   const rendered = Object.fromEntries(Object.entries(SOURCES).map(([language, source]) => {
     const markdown = fs.readFileSync(source, "utf8").replace(/\r\n?/g, "\n");
-    return [language, { markdown, html: renderMarkdown(markdown) }];
+    return [language, { html: renderMarkdown(markdown) }];
   }));
   return `(function (root, factory) {\n  const api = factory();\n  if (typeof module === "object" && module.exports) module.exports = api;\n  else root.NeuropixelsHelpContent = api;\n})(typeof globalThis !== "undefined" ? globalThis : this, function () {\n  "use strict";\n  return Object.freeze(${JSON.stringify(rendered, null, 2)});\n});\n`;
 }

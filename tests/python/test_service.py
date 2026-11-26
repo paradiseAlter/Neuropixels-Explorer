@@ -392,9 +392,11 @@ class ServiceTests(unittest.TestCase):
                 self.assertEqual(response.status, 206)
                 self.assertEqual(response.headers["Content-Range"], "bytes 10-19/2048")
                 self.assertEqual(response.read(), bytes(range(10, 20)))
-            with urllib.request.urlopen(f"{base}/", timeout=10) as response:
-                html = response.read().decode("utf-8")
-            self.assertIn("Neuropixels Explorer", html)
+            for entry in ("/", "/index.html"):
+                with urllib.request.urlopen(base + entry, timeout=10) as response:
+                    html = response.read().decode("utf-8")
+                self.assertIn('src="./scripts/app.js', html)
+                self.assertNotIn('id="nwb-worker-gzip"', html)
         finally:
             server.shutdown()
             server.server_close()
