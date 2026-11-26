@@ -2,13 +2,22 @@
 
 ## Bundled browser NWB reader
 
-The standalone HTML embeds h5wasm 0.10.3 from the official npm package,
-including its embedded HDF5 WebAssembly runtime. Source:
-https://github.com/usnistgov/h5wasm . The complete distributed notice is
-preserved in `vendor/h5wasm/LICENSE.txt` and embedded in the generated HTML.
-The npm tarball SHA-1 is `fd58a1cdcbc27d21bf639d65d00fce9948238141`.
+The standalone HTML uses the h5wasm 0.10.3 JavaScript API and source files from
+the official npm package. Its native WebAssembly runtime was rebuilt separately
+against HDF5 2.2.0 from the pinned upstream sources and recipe recorded in
+`docs/development/DEVELOPMENT.md`; it is not the npm tarball's original native
+runtime. The npm tarball SHA-1 `fd58a1cdcbc27d21bf639d65d00fce9948238141`
+identifies only the upstream 0.10.3 package inputs. Source:
+https://github.com/usnistgov/h5wasm . The distributed notices are preserved in
+`vendor/h5wasm/LICENSE.txt` and `vendor/h5wasm/NATIVE-NOTICES.txt` and embedded
+in the generated HTML.
 No research recordings or videos are included in the application HTML.
 
+## Video clock verification
+
+The standalone HTML includes the SHA-256 build from [hash-wasm 4.12.0](https://www.npmjs.com/package/hash-wasm/v/4.12.0) to verify full video files in bounded chunks. The wrapper's MIT license and the SHA-256 implementation's notice are in `vendor/hash-wasm/LICENSE.txt` and accompany the standalone build.
+
+## Prior annotation evaluation
 
 Checked for the annotation beta on 2026-09-08. The repository itself is MIT
 licensed. A repository's public availability does not replace its license.
@@ -55,6 +64,6 @@ implementations of the documented calculations. Optional h5py, pandas,
 matplotlib, requests and PyAV installations retain their own package and
 transitive binary notices; they are not relicensed or bundled here.
 
-See [the data/method citations and scope](docs/ALLEN_VBN_VALIDATION.md),
+See [the data/method citations and scope](docs/validation/ALLEN_VBN_VALIDATION.md),
 [Allen terms](https://alleninstitute.org/terms-of-use/), and
 [Allen citation policy](https://alleninstitute.org/citation-policy/).

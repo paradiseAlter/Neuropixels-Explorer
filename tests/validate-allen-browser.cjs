@@ -13,12 +13,19 @@ const { TimeMapping } = require("../scripts/video-sync.js");
   const mapping = new TimeMapping(clock.timeMapping);
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, acceptDownloads: true });
+  const fileAction = async action => {
+    const button=page.locator(`[data-action="${action}"]`);
+    if(!await button.isVisible())await button.locator("xpath=ancestor::details[1]/summary").click();
+    await button.click();
+  };
+  // Exercise the download fallback. Native writable files are checked in validate-annotation-editing-browser.
+  await page.addInitScript(()=>{window.showSaveFilePicker=undefined;});
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   try {
     await page.goto(process.env.ALLEN_TEST_URL || "http://127.0.0.1:8791/?database=1");
     await page.locator("#explorer-view").waitFor({ state: "visible", timeout: 60000 });
-    await page.waitForFunction(() => /Units.*bins/.test(document.querySelector("#activity-status")?.textContent), null, { timeout: 120000 });
+    await page.locator('#signal-workspace .sw-space [data-unit] canvas[aria-label$=" Hz"]').first().waitFor({state:"visible",timeout:120000});
     await page.waitForFunction(() => document.querySelector("#behavior-video")?.readyState >= 2);
     assert.match(await page.locator("#video-sync-status").getAttribute("data-status"), /verified/);
     await page.locator("#video-seek").evaluate((element) => { element.value = "30"; element.dispatchEvent(new Event("input", { bubbles: true })); });
@@ -35,7 +42,7 @@ const { TimeMapping } = require("../scripts/video-sync.js");
     await page.locator('[data-action="confirm"]').click();
     await page.screenshot({ path: path.join(output, "01-real-annotation.png") });
     const csvPromise = page.waitForEvent("download");
-    await page.locator('[data-action="csv"]').click();
+    await fileAction("csv");
     await (await csvPromise).saveAs(path.join(output, "annotations.csv"));
     const cells = fs.readFileSync(path.join(output, "annotations.csv"), "utf8").split(/\r?\n/)[1].slice(1, -1).split('","');
     assert(Math.abs(Number(cells[6]) - mapping.videoToNeural(30)) < 1e-10);
@@ -46,7 +53,7 @@ const { TimeMapping } = require("../scripts/video-sync.js");
     await page.locator('[data-action="run"]').click();
     await page.waitForFunction(() => document.querySelector("[data-progress]")?.textContent.includes("samples"), null, { timeout: 240000 });
     const projectPromise = page.waitForEvent("download");
-    await page.locator('[data-action="save"]').click();
+    await fileAction("save");
     await (await projectPromise).saveAs(path.join(output, "annotation-project.json"));
     const project = JSON.parse(fs.readFileSync(path.join(output, "annotation-project.json"), "utf8"));
     assert.equal(project.runs.length, 1);

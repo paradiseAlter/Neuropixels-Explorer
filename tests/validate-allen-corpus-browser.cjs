@@ -26,8 +26,8 @@ const { TimeMapping } = require("../scripts/video-sync.js");
       await page.locator("#recording-strip button").filter({ hasText: `${entry.session_id} / ${entry.probe}` }).click();
       await page.waitForFunction(({ sid, count }) =>
         document.querySelector("#experiment-recording-name")?.textContent.includes(sid)
-        && document.querySelector("#activity-status")?.textContent.startsWith(`${count} Units`)
-        && /bins/.test(document.querySelector("#activity-status").textContent)
+        && document.querySelector("#activity-status")?.textContent === `${count} Units`
+        && document.querySelector('#signal-workspace:not([hidden]) .sw-space [data-unit] canvas[aria-label$=" Hz"]')
         && document.querySelector("#behavior-video")?.readyState >= 2,
       { sid: entry.session_id, count: entry.units }, { timeout: 180000 });
       assert.equal(await page.locator("#video-sync-status").getAttribute("data-status"), "verified");

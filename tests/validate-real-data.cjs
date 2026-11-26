@@ -126,11 +126,12 @@ function buffer(directory, name) {
   const plotSource = fs.readFileSync(path.resolve(__dirname, "..", "scripts", "plots.js"), "utf8");
   assert(/if \(!\["zoom", "pan"\]\.includes\(this\.mode\)\) return;[\s\S]{0,220}event\.preventDefault\(\)/.test(plotSource), "Plot wheel handling should preserve normal scrolling outside Zoom and Pan");
   assert(!/inTimeAxis|TIME_AXIS_HIT_ZONE/.test(plotSource), "Plot navigation should not be restricted to a hidden time-axis hit zone");
-  const pageSource = fs.readFileSync(path.resolve(__dirname, "..", "index.html"), "utf8");
+  const pageSource = fs.readFileSync(path.resolve(__dirname, "../scripts/explorer-shell.html"), "utf8");
   const releaseVersion = fs.readFileSync(path.join(repositoryRoot, "VERSION"), "utf8").trim();
   assert(pageSource.includes(`<title>Neuropixels Explorer ${releaseVersion}</title>`), "The release page title is inconsistent with VERSION");
   const pageIds = new Set([...pageSource.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
-  const missingAppIds = [...appSource.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]).filter((id) => !pageIds.has(id));
+  const dynamicIds = new Set([...appSource.matchAll(/\.id\s*=\s*["']([^"']+)["']/g)].map((match) => match[1]));
+  const missingAppIds = [...appSource.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]).filter((id) => !pageIds.has(id) && !dynamicIds.has(id));
   assert(!missingAppIds.length, `app.js references missing page IDs: ${missingAppIds.join(", ")}`);
   assert(!/inspect-review-mode|compare-review-mode/.test(pageSource), "Explicit Inspect/Compare mode controls should be removed");
   assert(!/operate only on the bottom time axis/i.test(pageSource), "Plot instructions still describe the removed time-axis restriction");

@@ -1,0 +1,12 @@
+{
+  "name": "neuropixels-explorer-build",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-standalone.cjs",
+    "test:release": "node tests/validate-release-build.cjs && node tests/validate-email-safe-build.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1",
+    "terser": "5.51.4"
+  }
+}

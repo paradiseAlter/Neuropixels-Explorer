@@ -19,8 +19,20 @@ const {pack,unpack}=require('../scripts/browser-storage.js');
   assert.deepEqual(Buffer.from(await restored.assets[0].blob.arrayBuffer()),Buffer.from(buffers.spikeTimes));
   await assert.rejects(unpack(blob.slice(0,blob.size-1)),/Truncated/);
   await assert.rejects(unpack(new Blob(['not project'])),/neuroproject/);
-  const html=fs.readFileSync(require('path').join(__dirname,'../dist/Neuropixels-Explorer.html'),'utf8');
+  const html=fs.readFileSync(process.argv[2] || require('path').join(__dirname,'../index.html'),'utf8');
+  const packedReader=html.match(/<template id="nwb-worker-gzip">([^<]+)<\/template>/)[1];
+  const reader=require('node:zlib').gunzipSync(Buffer.from(packedReader,'base64'));
+  assert(reader.includes('HDF5 Version: 2.2.0'), 'The standalone NWB reader must include the reviewed HDF5 release.');
   assert(!/<script[^>]+src=|<link[^>]+stylesheet[^>]+href=/.test(html));
-  for(const [,script] of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(script);
+  assert.doesNotMatch(html,/Start-Explorer\.(cmd|ps1)/i,'The standalone application must open directly in a browser.');
+  const policy=html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)[1];
+  const allowed=policy.split('; ').find(d=>d.startsWith('script-src ')).split(' ').slice(1);
+  const hashes=[];
+  for(const [,script] of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)){
+    new vm.Script(script);
+    hashes.push("'sha256-"+require('node:crypto').createHash('sha256').update(script.replace(/\r\n?/g,'\n')).digest('base64')+"'");
+  }
+  assert.deepEqual(allowed,[...hashes,"'wasm-unsafe-eval'"]);
+  assert(policy.includes("script-src-attr 'none'") && policy.includes("connect-src 'self' blob: data:"));
   console.log('PASS: exact half-open interval + Worker, project binary/data/video/mapping/annotation roundtrip, truncation rejection, self-contained HTML syntax');
 })();

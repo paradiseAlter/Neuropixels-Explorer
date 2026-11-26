@@ -1,0 +1,3 @@
+* text=auto eol=lf
+*.webm binary
+vendor/h5wasm/*.js binary

@@ -54,6 +54,8 @@ def build(video_path, timestamps_path, session_id, output, prefix=False):
         raise ValueError("Video and timestamp frame counts differ")
     if np.any(np.diff(times) <= 0) or not np.all(np.isfinite(times)):
         raise ValueError("Decoded presentation timestamps must be finite and increasing")
+    if not np.allclose(times, np.arange(len(times)) / video["fps"], rtol=0, atol=1e-6):
+        video["frame_times_s"] = times.tolist()
     neural = timestamps[:len(times)]
     valid = np.isfinite(neural)
     indices = np.flatnonzero(valid)
