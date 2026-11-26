@@ -7,7 +7,7 @@ const version = fs.readFileSync(path.join(root, "VERSION"), "utf8").trim();
 if (!/^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/.test(version)) throw new Error("Invalid release version");
 const pythonVersion = version.replace(/-alpha\./, "a").replace(/-beta\./, "b").replace(/-rc\./, "rc");
 function update(file, fn) { const p = path.join(root, file); fs.writeFileSync(p, fn(fs.readFileSync(p, "utf8"))); }
-update("index.html", (s) => s.replace(/<title>Neuropixels Explorer [^<]+<\/title>/, `<title>Neuropixels Explorer ${version}</title>`)
+update("scripts/explorer-shell.html", (s) => s.replace(/<title>Neuropixels Explorer [^<]+<\/title>/, `<title>Neuropixels Explorer ${version}</title>`)
   .replace(/id="version-label">[^<]+/, `id="version-label">${version}`)
   .replace(/\?v=[^" ]+/g, `?v=${version}`));
 update("scripts/annotation-ui.js", (s) => s.replace(/<span>\d+\.\d+\.\d+(?:-[^<]+)?<\/span>/, `<span>${version}</span>`)

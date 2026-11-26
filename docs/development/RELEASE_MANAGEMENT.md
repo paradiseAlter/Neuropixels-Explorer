@@ -20,20 +20,22 @@ annotated Git tag -> commit -> VERSION -> build command/flavor
 - 工作区根目录的 HTML 只允许作为发布后的兼容副本；评审快照放在 `review_versions/`，不得命名成正式 release。
 - `--email-safe` 是功能受限的独立 flavor：当前禁用 Unit marks。它必须单独登记 hash 和限制，不能冒充普通版。
 
-## 2026-11-26 状态冻结
+## 2026-11-26 `v4.16.0-beta.1` 发布记录
 
 | 项目 | 已核实状态 | 结论 |
 | --- | --- | --- |
-| 最后正式本地标签 | `v4.15.2-beta.1` -> `00afc08bd856ccca8b2d69e6c8dec9769db9df7c` | 最后可由 Git 精确命名的产品 checkpoint |
-| 当前声明版本 | `4.15.3-beta.1` / Python `4.15.3b1` | 仅为未提交工作线，不是 release |
-| 当前 Git 身份 | `v4.15.2-beta.1-dirty` | 审计开始时有 87 个 tracked 路径变化和 96 个 untracked 文件 |
-| 远端状态 | 本地 `main` 比 `origin/main` 超前 24、落后 0；远端 `main` 和 tags 只到 `v4.0.0-beta.3` | 本地后续标签不能表述成已发布到远端 |
-| 普通版工作构建 | 3,381,405 bytes；SHA-256 `10681632EEAFFF7563432B1928050F9A0017740FABDC5C16B91F076B8BDDE5F5` | 可由当前工作树重建，但不能由最后 tag 重建 |
-| email-safe 工作构建 | 3,371,962 bytes；SHA-256 `6E27C454A4EB354B1B25A015B14839C3765A2C69541A26245C3BC5470832D0F7` | 诊断候选；Unit marks disabled；不是普通生产版 |
+| 上一正式标签 | `v4.15.2-beta.1` -> `00afc08bd856ccca8b2d69e6c8dec9769db9df7c` | 本轮发布的祖先 checkpoint |
+| 功能提交 | `74443c68eff5352f30ff4a0352578ccc92563bf7` | 分析、标注、工作区和对应回归测试 |
+| NWB / 构建提交 | `27b3c98191353cca4468b0e5089b346ba389c5c8` | 通用 NWB、HDF5 2.2.0、构建安全和体积优化 |
+| 文档提交 | `abfaaaa82db15f95ab3f0baa7078ec0a0f0b8fa4` | 权威文档、历史归档和旧 launcher 退役 |
+| 验收测试提交 | `a7db50d3bdf70ccb858fc08b6863484561a94123` | 本地服务验收跟随统一项目菜单并覆盖当前导入/恢复流程 |
+| 发布身份 | `4.16.0-beta.1` / Python `4.16.0b1` / annotated tag `v4.16.0-beta.1` | tag target 唯一命名最终版本同步和普通版产物提交 |
+| 普通版产物 | 2,923,642 bytes；SHA-256 `C8963ABB896C5C92F00B6F5498F4576D982BC55FFF20EBA689949A96B90D686C` | normal flavor；与 tracked `index.html` 和 staging mirror 字节一致 |
+| 邮件网关诊断产物 | 2,917,125 bytes；SHA-256 `494142A19712BF5836ECD0AAC3F52B32051B5B6E6C85ACA45FFE4A22C740E12E` | Unit marks disabled；不得冒充普通版或视为误报根因证明 |
 
-产品仓库之外的本机 `product_artifacts/CURRENT.json` 指向最后正式本地 source release `v4.15.2-beta.1`。其 HTML 是 2026-11-26 从 clean local tag 隔离重建的 12,293,654-byte 产物（SHA-256 `82C54BAD4C38B912FBD60C4343FCAC43CCED957A993609EA3FE173C12D5A3854`），不是 2026-11-14 邮件留存件的原始字节；两份指纹均在本机 release manifest 中保留。该本机产物注册表不属于公开源码仓库。
+治理审计开始时，产品仓库之外的本机 `product_artifacts/CURRENT.json` 指向 `v4.15.2-beta.1`。其 HTML 是 2026-11-26 从 clean local tag 隔离重建的 12,293,654-byte 产物（SHA-256 `82C54BAD4C38B912FBD60C4343FCAC43CCED957A993609EA3FE173C12D5A3854`），不是 2026-11-14 邮件留存件的原始字节；两份指纹均在本机 release manifest 中保留。正式提升后可用本节的 tag 和 hash 更新本机 CURRENT；该注册表始终不属于公开源码仓库。
 
-`v4.15.2-beta.1` 标签中的 `index.html` 仍是 38,264-byte 的未打包入口，当时构建脚本只生成 `dist/Neuropixels-Explorer.html`。把共享 shell 移到 `scripts/explorer-shell.html`、并把打包后的 `index.html` 作为产品入口，是当前未提交的 4.15.3 工作线变化；不能倒写成 4.15.2 已有行为。
+`v4.15.2-beta.1` 标签中的 `index.html` 仍是 38,264-byte 的未打包入口，当时构建脚本只生成 `dist/Neuropixels-Explorer.html`。共享 shell 和 tracked standalone 分别在本轮功能/构建提交中建立，并随 `v4.16.0-beta.1` 首次成为正式产品边界；不能倒写成 4.15.2 已有行为。
 
 ## 文件身份
 
@@ -141,9 +143,9 @@ annotated Git tag -> commit -> VERSION -> build command/flavor
 | 2026-11-12 | `v4.15.0-beta.1` | `3b42261` | selected service video feature exchange |
 | 2026-11-12 | `v4.15.1-beta.1` | `ff8a98c` | coverage origin 跨 UI transition 保留 |
 | 2026-11-14 | `v4.15.2-beta.1` | `00afc08` | 统一 event sources 并保留可恢复 metadata errors |
-| 2026-11-15 至 2026-11-26 | `4.15.3-beta.1` working line | 未提交 | 多轮功能累计在 dirty tree；必须拆分审查后才能形成 tag |
+| 2026-11-26 | `v4.16.0-beta.1` | `74443c6` + `27b3c98` + `abfaaaa` + `a7db50d` + tag target | 收敛累计工作线：集成分析/标注、通用 NWB、可复现构建、权威文档、现行服务验收与 tracked standalone |
 
-版本顺序按祖先关系和目标提交日期排列，不按 tagger 时间排列。34 个本地 annotated tags 是单一祖先链；不重写既有历史。4.15.2 之后缺失的内部阶段诚实记录为累计未提交研发，不根据文件时间伪造 tags。
+版本顺序按祖先关系和目标提交日期排列，不按 tagger 时间排列。annotated tags 保持单一祖先链；不重写既有历史。4.15.2 之后没有根据文件时间伪造内部 tags，而是用上述功能、构建、文档、验收提交和一个新 release tag 收敛累计研发。
 
 ## 邮件交付证据旁支
 
@@ -156,7 +158,8 @@ annotated Git tag -> commit -> VERSION -> build command/flavor
 
 ## 当前不能伪装成已完成的事项
 
-- 4.15.3 尚无可审查 commit/tag；当前 normal/email-safe HTML 都只能称 working build。
-- 本地 v4.0.0-beta.3 之后的 24 个提交和标签未出现在远端；除非显式发布，不称为 GitHub release。
+- `v4.16.0-beta.1` 普通版通过自动化构建、数值和浏览器回归，不等于完成新的 UCI 邮箱投递验收或科学有效性验证。
+- 邮件网关诊断 flavor 只用于隔离 Unit marks；现有历史邮件不足以把退信归因于该模块，也不足以把体积变化称为修复。
+- 远端可见性、refs 和下载状态是实时外部事实，必须在 push 和 visibility 变更后无认证查询；不能仅凭本文宣称 GitHub 发布完成。
 - `review_versions` 中旧文件缺 source commit 时必须写 `unknown`，不能根据内嵌版本号反推提交。
 - runtime 浏览器 profile、IndexedDB、截图和 `.neuroproject` 只有登记成 validation receipt 后才是证据；目录存在本身不代表通过验证。

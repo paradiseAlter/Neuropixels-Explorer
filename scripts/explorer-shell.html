@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="A local-first interactive explorer for Neuropixels units, signals, physical probes, and brain regions.">
-  <title>Neuropixels Explorer 4.15.3-beta.1</title>
-  <script src="./scripts/i18n.js?v=4.15.3-beta.1"></script>
-  <script src="./scripts/theme.js?v=4.15.3-beta.1"></script>
+  <title>Neuropixels Explorer 4.16.0-beta.1</title>
+  <script src="./scripts/i18n.js?v=4.16.0-beta.1"></script>
+  <script src="./scripts/theme.js?v=4.16.0-beta.1"></script>
   <script>
     window.neuropixelsLanguageController = new window.NeuropixelsI18n.LanguageController({
       root: document.documentElement,
@@ -20,12 +20,12 @@
       matchMedia: window.matchMedia.bind(window)
     });
   </script>
-  <link rel="stylesheet" href="./styles/app.css?v=4.15.3-beta.1">
-  <link rel="stylesheet" href="./styles/annotations.css?v=4.15.3-beta.1">
-  <link rel="stylesheet" href="./styles/workspace-beta.css?v=4.15.3-beta.1">
-  <link rel="stylesheet" href="./styles/mentor-workspace.css?v=4.15.3-beta.1">
-  <link rel="stylesheet" href="./styles/workspace-presentation.css?v=4.15.3-beta.1">
-  <link rel="stylesheet" href="./styles/event-analysis.css?v=4.15.3-beta.1">
+  <link rel="stylesheet" href="./styles/app.css?v=4.16.0-beta.1">
+  <link rel="stylesheet" href="./styles/annotations.css?v=4.16.0-beta.1">
+  <link rel="stylesheet" href="./styles/workspace-beta.css?v=4.16.0-beta.1">
+  <link rel="stylesheet" href="./styles/mentor-workspace.css?v=4.16.0-beta.1">
+  <link rel="stylesheet" href="./styles/workspace-presentation.css?v=4.16.0-beta.1">
+  <link rel="stylesheet" href="./styles/event-analysis.css?v=4.16.0-beta.1">
   <link rel="stylesheet" href="./styles/event-figures.css">
   <link rel="stylesheet" href="./styles/event-analysis-process.css">
   <link rel="stylesheet" href="./styles/signal-workspace.css">
@@ -38,7 +38,7 @@
     <header class="app-bar">
       <div class="app-title">
         <h1>Neuropixels Explorer</h1>
-        <span id="version-label">4.15.3-beta.1</span>
+        <span id="version-label">4.16.0-beta.1</span>
       </div>
       <div class="open-control"><button class="primary-button" id="open-folder-button" data-help-key="hint.project" type="button" aria-expanded="false">OPEN / ADD</button><div id="open-menu" hidden></div></div>
       <button id="home-button" data-help-key="hint.home" class="quiet-button" type="button" aria-label="Home">⌂</button>
@@ -397,48 +397,48 @@
     <div id="file-drop-hint" role="status" hidden></div>
   </div>
 
-  <script src="./scripts/kilosort-core.js?v=4.15.3-beta.1" defer></script>
+  <script src="./scripts/kilosort-core.js?v=4.16.0-beta.1" defer></script>
   <script src="./scripts/region-core.js" defer></script>
-  <script src="./scripts/help-content.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/data-status.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/stream-contracts.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/video-sync.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/activity-overview.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/plots.js?v=4.15.3-beta.1" defer></script>
+  <script src="./scripts/help-content.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/data-status.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/stream-contracts.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/video-sync.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/activity-overview.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/plots.js?v=4.16.0-beta.1" defer></script>
   <script src="./scripts/signal-workspace.js" defer></script>
-  <script src="./scripts/probe-view.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/database-client.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/workspace-layout.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/annotation-core.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/event-analysis-core.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/event-analysis-storage.js?v=4.15.3-beta.1" defer></script>
+  <script src="./scripts/probe-view.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/database-client.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/workspace-layout.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/annotation-core.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/event-analysis-core.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/event-analysis-storage.js?v=4.16.0-beta.1" defer></script>
   <script src="./scripts/event-analysis-review.js" defer></script>
   <script src="./scripts/event-figures-population.js" defer></script>
   <script src="./scripts/event-figures-units.js" defer></script>
   <script src="./scripts/event-figures.js" defer></script>
   <script src="./scripts/event-analysis-process.js" defer></script>
-  <script src="./scripts/event-analysis-ui.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/population-dynamics-core.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/population-dynamics-storage.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/population-dynamics-ui.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/behavior-discovery.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/video-features.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/video-model-adapter.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/annotation-ui.js?v=4.15.3-beta.1" defer></script>
+  <script src="./scripts/event-analysis-ui.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/population-dynamics-core.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/population-dynamics-storage.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/population-dynamics-ui.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/behavior-discovery.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/video-features.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/video-model-adapter.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/annotation-ui.js?v=4.16.0-beta.1" defer></script>
   <script src="./scripts/behavior-patterns-core.js" defer></script>
   <script src="./scripts/behavior-patterns-ui.js" defer></script>
   <script src="./scripts/analysis-tabs.js" defer></script>
   <script src="./scripts/behavior-labels.js" defer></script>
   <script src="./scripts/video-event-timeline.js" defer></script>
-  <script src="./scripts/template-footprint.js?v=4.15.3-beta.1" defer></script>
+  <script src="./scripts/template-footprint.js?v=4.16.0-beta.1" defer></script>
   <script src="./scripts/probe-map.js" defer></script>
   <script src="./scripts/analysis-unit-picker.js" defer></script>
-  <script src="./scripts/mini-probe.js?v=4.15.3-beta.1" defer></script>
+  <script src="./scripts/mini-probe.js?v=4.16.0-beta.1" defer></script>
   <script src="./scripts/joint-recording.js" defer></script>
   <script src="./scripts/numeric-inputs.js" defer></script>
   <script src="./scripts/unit-marks.js" defer></script>
   <script src="./scripts/workspace-settings.js" defer></script>
-  <script src="./scripts/project-ui.js?v=4.15.3-beta.1" defer></script>
-  <script src="./scripts/app.js?v=4.15.3-beta.1" defer></script>
+  <script src="./scripts/project-ui.js?v=4.16.0-beta.1" defer></script>
+  <script src="./scripts/app.js?v=4.16.0-beta.1" defer></script>
 </body>
 </html>

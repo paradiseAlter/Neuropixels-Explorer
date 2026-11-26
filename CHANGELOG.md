@@ -1,6 +1,37 @@
 # Changelog
 
-## 4.15.2-beta.1 — Consistent event inputs
+[Release management and full tag lineage](docs/development/RELEASE_MANAGEMENT.md)
+
+## Unreleased
+
+## [4.16.0-beta.1] - 2026-11-26
+
+- Integrate reusable recording, video and analysis tabs, same-session multi-probe
+  recordings, shared Unit selection and project-safe workspace preferences. Signal,
+  Probe and video panes retain their linked context across layout changes.
+- Add named point/interval behavior labels, an editable event timeline, undo/redo,
+  scoped keyboard controls and persistent Unit interest marks. Video identity,
+  frame clocks, annotations and marks survive project export and reopen.
+- Expand event responses with editable Unit/time inputs, condition and Hit/Miss
+  comparisons, repeated-onset exclusion, exact trial rasters, paired Unit rates,
+  matched heatmaps and separately exportable figures. Calculations retain explicit
+  coverage and provenance and do not claim biological validation.
+- Add bounded behavior-pattern discovery and continuous population-dynamics
+  analyses with cancellable Workers, source-bound persistence, deterministic
+  synthetic checks and explicit numerical/coverage limitations.
+- Open generic NWB 2.x Units, electrodes and experimental-event tables without
+  Allen-only fields. The offline reader retains the h5wasm 0.10.3 API while using
+  a separately rebuilt HDF5 2.2.0 runtime with complete native notices.
+- Make the standalone build reproducible and promotion-based: normal builds stage
+  outside the tracked product until `--promote`, the NWB Worker is integrity
+  checked, inline scripts receive CSP hashes, and a separately labelled mail-gateway
+  diagnostic flavor can disable only Unit marks. Safe selective minification reduces
+  the normal HTML from 3,381,405 to about 2.92 MB without self-extracting app code.
+- Consolidate canonical product, architecture, contract, validation and historical
+  records; retain the CLI service and retire obsolete Windows launcher wrappers.
+  Git tags and commits now own release history instead of duplicate version folders.
+
+## [4.15.2-beta.1] - 2026-11-14
 
 - Experimental event selection excludes stored annotation rows rather than
   using stale video-derived neural timestamps. Video annotations use the current
@@ -16,45 +47,44 @@
   Chrome/Edge currently exit during startup before the app loads; this checkpoint
   does not claim a new browser interaction or scientific validation pass.
 
-
-## 4.15.1-beta.1
+## [4.15.1-beta.1] - 2026-11-12
 
 - Prevent stale source observation intervals from being reused as if manually declared after changing Units or failing a coverage lookup. Recheck source coverage before computation and clear restored coverage when analysis restoration fails. Explicit manual input remains unverified.
 - Add UI and browser regressions for coverage origin, missing Unit metadata and restoration failure without changing event, analysis or project formats.
 
-## 4.15.0-beta.1
+## [4.15.0-beta.1] - 2026-11-12
 
 - Enable model-input export and feature grouping for videos already selected in a local-service project, without copying the video into the browser. The service performs bounded content hashing and returns only identity metadata.
 - Enforce exact project/video binding, same-origin requests, size/concurrency limits, file-change checks and stale/cancel guards. Existing file-based standalone behavior and data contracts remain compatible; no external model execution or scientific validation is implied.
 
-## 4.14.1-beta.1
+## [4.14.1-beta.1] - 2026-11-12
 
 - Correct optional feature grouping at numerical boundaries: exactly constant long sequences are rejected, and small valid raw-unit differences no longer collapse during initialization. New runs record method version 2; saved version 1 runs remain readable and unchanged.
 - Dismissing the review dialog or toggling the annotation editor closed now cancels a pending feature import before it can add clips.
 
-## 4.14.0-beta.1
+## [4.14.0-beta.1] - 2026-11-12
 
 - Add optional data-only model input export and timestamped feature/keypoint import with local content-checked video identity, explicit missingness and named-anchor pose transforms.
 - Group eligible samples in a bounded browser Worker without bridging missing intervals; preserve source features, parameters and unreviewed candidates through complete project reload. No pretrained model, external-code execution or scientific behavior claim is included.
 
-## 4.13.1-beta.1
+## [4.13.1-beta.1] - 2026-11-12
 
 - Keep NWB invalid_times out of experimental event choices, preserve bounded raw validity metadata and warn that scope-specific masks have not been applied. Older cached assets containing these mistaken events require explicit reimport.
 - Retain the same validity warning and provenance for annotation-derived responses and saved analyses; do not infer full acquisition coverage or globally mask different probe/stimulus scopes.
 
-## 4.13.0-beta.1
+## [4.13.0-beta.1] - 2026-11-12
 
 - Add response-group heatmaps, equal-Unit mean curves and exact member selection without changing shared time or anatomical order.
 - Add optional bounded split-half sensitivity diagnostics with persisted partitions, seeds and ARI summaries, explicitly separate from scientific validation.
 - Restore subject/track-filtered annotation analyses with video and measured clock after a full page reload; reject malformed diagnostic summaries and keep member selections synchronized.
 
-## 4.12.0-beta.1
+## [4.12.0-beta.1] - 2026-11-12
 
 - Save the latest event-response analysis per Recording in browser project packages and restore exact counts/rates only after source-content, event and mapping checks. Existing project packages remain compatible.
 - Preserve source-reported NWB Unit observation intervals and intersect selected Units without filling gaps or inventing missing acquisition coverage.
 - Reject corrupted or stale saved analyses without deleting the project; keep save transactions separate from annotation writes.
 
-## 4.11.0-beta.1
+## [4.11.0-beta.1] - 2026-11-12
 
 - Add browser-native Event responses for experimental events and reviewed behavior annotations, with explicit acquisition coverage, exact half-open spike counts, optional reproducible response grouping, cancellation and source return.
 - Preserve Allen NWB experimental event provenance in project assets; trial starts are not mistaken for image-change times.
@@ -202,7 +232,7 @@ Git tags rather than duplicated version directories on `main`.
   per-Unit time index and divide by covered recording seconds, including partial
   coverage. This spatial activity view does not imply multichannel waveforms.
 - Validate the running application with real Allen video/spikes, portable tests,
-  and 1280×800 / 1440×900 annotation layouts. See the [review note](docs/mentor-workspace-4.1.md).
+  and 1280×800 / 1440×900 annotation layouts. See the [review note](docs/archive/checkpoints/mentor-workspace-4.1.md).
 
 ## [4.0.0-beta.3] - 2026-09-11
 
