@@ -18,14 +18,25 @@ annotated Git tag -> commit -> VERSION -> build command/flavor
 - `index.html` 是仓库中唯一受 Git 管理的普通版单文件产物，也是正常产品入口。
 - `dist/Neuropixels-Explorer.html` 是可删除、可重建的本地暂存/兼容镜像，不是另一份发布历史。
 - 工作区根目录的 HTML 只允许作为发布后的兼容副本；评审快照放在 `review_versions/`，不得命名成正式 release。
-- `--email-safe` 是功能受限的独立 mail-gateway flavor：当前禁用 Unit marks，并和普通版一样保留可读的 `region-core.js`。它必须单独登记 hash 和限制，不能冒充普通版。
+- `--email-safe` 生成带显式 mail-gateway 元数据的完整功能版本。它与普通版使用相同源码和功能，只因元数据不同而单独登记 hash；保留该参数是为了兼容既有交付命令。
+
+## 2026-11-26 `v4.16.2-beta.1` 完整功能邮件兼容修复
+
+`v4.16.1-beta.1` 已把粗粒度触发范围缩到 Unit marks，但当时通过关闭整项功能绕开。后续逐行附件测试把剩余误报精确缩到语言选择表达式 `document.documentElement.lang.split('-')[0]`；这一行单独置入已知可投递基线也会退信。改为对本应用支持的两字符语言码使用 `slice(0,2)` 后，English、简体中文和 Español 的选择结果不变，Unit marks 全功能浏览器回归通过，完整应用成功投递。
+
+两种构建都以可读形式嵌入 `region-core.js` 和 `unit-marks.js`。`--email-safe` 不再替换或删除任何功能，只增加 `mail-gateway-compatible; full-feature` 元数据。
+
+| 最终成品 | 字节与 SHA-256 | UCI -> personal Gmail 验收 |
+| --- | --- | --- |
+| 普通版 | 2,933,911 bytes；`C6276227AC5B94F2EDF3B1A999C93379952DA93ED2C11C603A94D42912EEED01` | Inbox message `1a217c093d76c6b9`；下载附件逐字节相同 |
+| mail-gateway 元数据版 | 2,933,993 bytes；`D795F4B5B4779DA9CEECDE52D812B01D36D53999C24B521173D8421C2C14BDA3` | Inbox message `1a217c0aa1fb4277`；下载附件逐字节相同 |
 
 ## 2026-11-26 `v4.16.1-beta.1` 邮件网关兼容修复
 
 | 项目 | 已核实状态 | 结论 |
 | --- | --- | --- |
 | 压缩 `region-core.js` | 单独置入已知可投递基线即被退信；同源可读脚本成功到达 | 两种正式构建均保留该模块可读表示，不改变运行逻辑 |
-| Unit marks | 可读 `region-core.js` 下启用即被退信，禁用后成功到达 | 普通版保留完整功能；mail-gateway flavor 明确禁用这一可选功能 |
+| Unit marks | 可读 `region-core.js` 下启用旧脚本即被退信，禁用后成功到达 | `v4.16.1-beta.1` 的临时兼容边界，已由 `v4.16.2-beta.1` 的逐行修复取代 |
 | 普通版产物 | 2,930,943 bytes；SHA-256 `0ECCE576E321491DAE7811A126795EC0AFCDF10DEC3062C1440750F66B877418` | 完整功能；不得作为已通过 UCI 邮件网关的附件 |
 | 邮件版产物 | 2,924,426 bytes；SHA-256 `C9C46691707A6B52D0732586FD0DA0FA5F3DC482CB8202DC12ED64A6D5885304` | 只禁用 Unit marks；其余专项浏览器回归通过 |
 | 最终方向 | `ziwenm3@uci.edu` -> `paradise.alter@gmail.com` | Gmail message `1a217761ae58a4f4` 到达 Inbox，下载附件与发送文件逐字节相同 |
@@ -58,7 +69,7 @@ Google 的退信只给出“附件包含病毒”，没有公开匹配规则。�
 | `dist/Neuropixels-Explorer.html` | ignored staging mirror | 可重建，不作为历史依据 |
 | `../Neuropixels-Explorer.html` | 工作区兼容副本 | 仅在正式提升后复制 |
 | `../neuropixel_workflow.html` | legacy compatibility name | 不再作为新交付入口 |
-| `../Neuropixels-Explorer-email-safe.html` | 功能受限候选 flavor | 仅用显式 `--email-safe` 构建 |
+| `../Neuropixels-Explorer-email-safe.html` | 完整功能、带 mail-gateway 元数据的交付副本 | 仅用显式 `--email-safe` 构建 |
 | `../review_versions/<date>/` | 人工审阅与投递证据 | 原件冻结，只补 manifest |
 | `runtime/`、`../reports/`、`../paper_materials/` | 运行态或研究证据 | 不属于产品发布 |
 
@@ -157,6 +168,7 @@ Google 的退信只给出“附件包含病毒”，没有公开匹配规则。�
 | 2026-11-14 | `v4.15.2-beta.1` | `00afc08` | 统一 event sources 并保留可恢复 metadata errors |
 | 2026-11-26 | `v4.16.0-beta.1` | `74443c6` + `27b3c98` + `abfaaaa` + `a7db50d` + tag target | 收敛累计工作线：集成分析/标注、通用 NWB、可复现构建、权威文档、现行服务验收与 tracked standalone |
 | 2026-11-26 | `v4.16.1-beta.1` | tag target | 修复 standalone 的邮件网关字节兼容性；普通版保留 Unit marks，邮件版明确禁用 |
+| 2026-11-26 | `v4.16.2-beta.1` | tag target | 精确改写误报语言选择表达式，邮件版恢复全部 Unit marks 功能 |
 
 版本顺序按祖先关系和目标提交日期排列，不按 tagger 时间排列。annotated tags 保持单一祖先链；不重写既有历史。4.15.2 之后没有根据文件时间伪造内部 tags，而是用上述功能、构建、文档、验收提交和一个新 release tag 收敛累计研发。
 
@@ -168,11 +180,12 @@ Google 的退信只给出“附件包含病毒”，没有公开匹配规则。�
 - 2026-11-25 00:50 的工作快照到达 Spam；14:28 的工作快照到达 Inbox，但 UCI 网关改写许可证链接和换行。
 - 22:30 Allen 四图快照和 2026-11-26 00:23 Kilosort 示例快照被退信；中间九份快照未逐一发送，所以只能证明测试分界，不能宣称首个被拦的提交或因果代码。
 - 2026-11-26 的受控拆分测试进一步证明两个独立触发条件：压缩后的 `region-core.js`，以及 Unit marks 脚本。可读 `region-core.js` 加禁用 Unit marks 的可复现构建从 UCI 成功到达个人 Gmail；普通版仍会因 Unit marks 被拦。
+- 随后的逐行测试把 Unit marks 的触发范围进一步收敛到语言选择表达式；等价改写后，启用完整 Unit marks 的候选到达个人 Gmail。该结果取代“必须关闭 Unit marks 才能发送”的临时结论。
 - 完整邮件、hash 和下载核验保存在 `D:\Projects\Codex\neuropixels-attachment-review-20261126\history\historical-delivery.md`。
 
 ## 当前不能伪装成已完成的事项
 
-- `v4.16.1-beta.1` 的邮件版通过 UCI 到个人 Gmail 的投递验收，不等于普通版可投递，也不等于科学有效性验证。
+- 每个正式成品仍须按最终字节重新完成 UCI 到个人 Gmail 的投递验收；代码等价或候选通过不能代替最终成品验收，也不等于科学有效性验证。
 - 网关未公开恶意软件签名；只能报告对照试验中可重复的触发字节，不能声称发现了真实病毒或通用反病毒规则。
 - 远端可见性、refs 和下载状态是实时外部事实，必须在 push 和 visibility 变更后无认证查询；不能仅凭本文宣称 GitHub 发布完成。
 - `review_versions` 中旧文件缺 source commit 时必须写 `unknown`，不能根据内嵌版本号反推提交。

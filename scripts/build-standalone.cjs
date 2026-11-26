@@ -12,7 +12,7 @@ const serializedWorkerModules = new Set([
   'scripts/joint-recording.js', 'scripts/kilosort-core.js', 'scripts/population-dynamics-core.js',
   'scripts/video-features.js'
 ]);
-const readableStandaloneModules = new Set(['scripts/region-core.js']);
+const readableStandaloneModules = new Set(['scripts/region-core.js', 'scripts/unit-marks.js']);
 const minify = (source, {compress = true, mangle = true} = {}) => minifyJavaScript(source, {
   compress: compress ? {passes: 2} : false,
   mangle,
@@ -26,14 +26,6 @@ const readableScript = source => '<script>\n' + source.replace(/<\/script/gi, '<
 const script = file => readableStandaloneModules.has(file)
   ? readableScript(read(file))
   : inlineScript(read(file), !serializedWorkerModules.has(file));
-const emailSafeUnitMarks = `
-// Mail-gateway flavor: disable this optional UI while retaining the rest of the application.
-window.NeuropixelsUnitMarks=Object.freeze({
-  configure(){document.getElementById('unit-mark-settings')?.remove();},sync(){},ref(){return '';},attrs(){return '';},bind(){},
-  appendActions(){},targetRef(){return '';},popup(){return false;},detach(){},restore(){},colors(){return [];}
-});
-`;
-
 function applyStandalonePolicy(html) {
   const hashes = Array.from(html.matchAll(/<script>([\s\S]*?)<\/script>/gi), ([, source]) =>
     "'sha256-" + createHash('sha256').update(source.replace(/\r\n?/g, '\n')).digest('base64') + "'");
@@ -54,14 +46,12 @@ function buildStandalone({emailSafe = false} = {}) {
   const html = read('scripts/explorer-shell.html')
     .replace(/<link rel="stylesheet" href="\.\/([^"?]+)[^"]*">/g, (_, file) => '<style>\n' + read(file) + '\n</style>')
     .replace(/<script src="\.\/([^"?]+)[^"]*"(?: defer)?><\/script>/g, (_, file) =>
-      emailSafe && file === 'scripts/unit-marks.js'
-        ? inlineScript(emailSafeUnitMarks)
-        : file === 'scripts/app.js'
+      file === 'scripts/app.js'
         ? `<template id="nwb-worker-gzip">${packed.toString('base64')}</template>\n` +
           [...adapters, file].map(script).join('\n').replace('__NWB_WORKER_SHA256__', workerHash)
         : script(file))
     .replace('</body>', () => `<template id="explorer-licenses"><pre>${licenses}</pre></template>\n</body>`)
-    .replace('<meta name="viewport"', emailSafe ? '<meta name="neuropixels-build" content="mail-gateway-compatible; unit-marks-disabled">\n  <meta name="viewport"' : '<meta name="viewport"');
+    .replace('<meta name="viewport"', emailSafe ? '<meta name="neuropixels-build" content="mail-gateway-compatible; full-feature">\n  <meta name="viewport"' : '<meta name="viewport"');
   return applyStandalonePolicy(html);
 }
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuropixels-explorer"
-version = "4.16.1b1"
+version = "4.16.2b1"
 description = "Local-first Neuropixels review UI and optional indexed data service"
 readme = "README.md"
 license = {file = "LICENSE"}

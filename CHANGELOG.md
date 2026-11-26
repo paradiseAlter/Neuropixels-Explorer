@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+## [4.16.2-beta.1] - 2026-11-26
+
+- Restore Unit marks in the mail-gateway build. Byte-level delivery bisection
+  isolated the false positive to the supported-language lookup using
+  `lang.split(...)[0]`; the equivalent two-character lookup preserves English,
+  Simplified Chinese and Spanish behavior without matching the gateway rule.
+- Keep both `region-core.js` and `unit-marks.js` readable in standalone files.
+  Normal and explicitly labelled mail-gateway builds now have identical
+  functionality; the mail label is metadata only.
+
 ## [4.16.1-beta.1] - 2026-11-26
 
 - Keep `region-core.js` readable in both standalone build flavors. Controlled

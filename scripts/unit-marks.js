@@ -6,7 +6,10 @@
     zh:{settings:'Unit 标记',interest:'感兴趣',add:'添加标记',name:'标记名称',color:'标记颜色',remove:'删除标记',confirm:'删除这个标记，并从所有 Unit 上移除？',clear:'取消标记',apply:'标记 Unit'},
     es:{settings:'Marcas de unidades',interest:'De interés',add:'Añadir marca',name:'Nombre',color:'Color',remove:'Eliminar marca',confirm:'¿Eliminar esta marca de todas las unidades?',clear:'Quitar marca',apply:'Marcar unidad'}
   };
-  const words=()=>labels[document.documentElement.lang.split('-')[0]]||labels.en;
+  function words(){
+    const language=document.documentElement.lang.slice(0,2);
+    return labels[language]||labels.en;
+  }
   const prefKey='neuropixels.unit-mark-types.v1';
   const defaultTypes=[{id:'interest',name:'',color:'#e9ae41'}];
   const nameOf=type=>type.name||words().interest;
