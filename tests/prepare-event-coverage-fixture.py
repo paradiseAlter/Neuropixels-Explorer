@@ -19,6 +19,7 @@ with h5py.File(output, "w") as f:
                        "probe_vertical_position": [100., 200., 300.]}.items():
         electrodes[key] = value
     electrodes["location"] = np.array(["VISp"] * 3, dtype=h5py.string_dtype())
+    f["general/institution"] = "Allen Institute for Brain Science"
     for name, probe_id in [("probeC", 5), ("probeD", 7)]:
         device = f.create_group("general/devices/" + name)
         device.attrs["probe_id"] = probe_id

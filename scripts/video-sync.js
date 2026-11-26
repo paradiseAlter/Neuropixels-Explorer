@@ -11,6 +11,39 @@
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
+  function frameTiming(descriptor, mapping) {
+    const rate = Number(descriptor.frame_rate_hz ?? descriptor.frameRate ?? descriptor.fps);
+    const fps = Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_FPS;
+    const frameCount = Number.isSafeInteger(descriptor.frame_count) && descriptor.frame_count > 0 ? descriptor.frame_count : null;
+    const explicit = descriptor.frame_times_s;
+    if (explicit != null && (!Array.isArray(explicit) || !explicit.length || (frameCount && explicit.length !== frameCount) ||
+        explicit.some((value, i) => !Number.isFinite(value) || value < 0 || (i > 0 && value <= explicit[i - 1])))) {
+      throw new RangeError("Video frame timestamps must be complete and strictly increasing");
+    }
+    // Most Allen files store a handful of clock interpolation anchors for a much longer video.
+    const anchors = mapping?.frameClock?.video_s;
+    const frameTimes = explicit ?? (frameCount && anchors?.length === frameCount ? anchors : null);
+    return {fps, frameTimes, frameCount: frameCount ?? frameTimes?.length ?? null};
+  }
+
+  function frameAt(source, seconds) {
+    const frames = source?.frameTimes;
+    // HTML media seeks may round the requested presentation time to microseconds.
+    const t = seconds + 0.000001;
+    if (frames) {
+      let lo = 0, hi = frames.length;
+      while (lo + 1 < hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (frames[mid] <= t) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    }
+    const fps = source?.fps || DEFAULT_FPS;
+    const count = source?.frameCount || Math.max(1, Math.ceil((source?.duration || 0) * fps - 1e-6));
+    return clamp(Math.floor(t * fps), 0, count - 1);
+  }
+
   function interpolateClock(value, source, target) {
     const time = Number(value);
     if (!Number.isFinite(time) || time < source[0] || time > source[source.length - 1]) return NaN;
@@ -63,12 +96,14 @@
     }
 
     videoToNeural(videoSeconds) {
+      if (this.method === "unmapped") return NaN;
       return this.frameClock
         ? interpolateClock(videoSeconds, this.frameClock.video_s, this.frameClock.neural_s)
         : this.offsetSeconds + Number(videoSeconds || 0) * this.scale;
     }
 
     neuralToVideo(neuralSeconds) {
+      if (this.method === "unmapped") return NaN;
       return this.frameClock
         ? interpolateClock(neuralSeconds, this.frameClock.neural_s, this.frameClock.video_s)
         : (Number(neuralSeconds || 0) - this.offsetSeconds) / this.scale;
@@ -125,9 +160,10 @@
   }
 
   class VideoSyncController {
-    constructor(elements, { onNeuralTime = null, onStateChange = null, translator = (key) => key } = {}) {
+    constructor(elements, { onNeuralTime = null, onUnmappedVideoTime = null, onStateChange = null, translator = (key) => key } = {}) {
       this.elements = elements;
       this.onNeuralTime = onNeuralTime;
+      this.onUnmappedVideoTime = onUnmappedVideoTime;
       this.onStateChange = onStateChange;
       this.t = translator;
       this.recording = null;
@@ -135,6 +171,7 @@
       this.mapping = new TimeMapping();
       this.currentVideoTime = 0;
       this.playing = false;
+      this.playRevision = 0;
       this.follow = true;
       this.playbackRate = .25;
       this.animationFrame = null;
@@ -165,32 +202,55 @@
       };
       e.customSpeed?.addEventListener("change", applyRate);
       e.customSpeed?.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); applyRate(); } });
-      let rateDrag = null;
-      e.customSpeed?.addEventListener("pointerdown", event => {
-        if (event.button !== 0) return;
-        rateDrag = { x: event.clientX, rate: this.playbackRate, moved: false };
-        e.customSpeed.setPointerCapture(event.pointerId);
-      });
-      e.customSpeed?.addEventListener("pointermove", event => {
-        if (!rateDrag || Math.abs(event.clientX - rateDrag.x) < 3) return;
-        rateDrag.moved = true;
-        event.preventDefault();
-        const step = event.shiftKey ? .001 : .01;
-        this.setPlaybackRate(Number(clamp(rateDrag.rate + (event.clientX - rateDrag.x) * step, .01, 4).toFixed(3)));
-      });
-      e.customSpeed?.addEventListener("pointerup", event => {
-        if (e.customSpeed.hasPointerCapture(event.pointerId)) e.customSpeed.releasePointerCapture(event.pointerId);
-        if (rateDrag?.moved) e.customSpeed.blur(); else e.customSpeed.select();
-        rateDrag = null;
-      });
-      e.customSpeed?.addEventListener("pointercancel", () => { rateDrag = null; });
       e.customSpeed?.addEventListener("keydown", event => {
         if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
         event.preventDefault();
         this.setPlaybackRate(Number(clamp(this.playbackRate + (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? .001 : .01), .01, 4).toFixed(3)));
       });
       e.follow?.addEventListener("change", () => { this.follow = Boolean(e.follow.checked); this._emitState(); });
-      e.seek?.addEventListener("input", () => this.seekVideo(Number(e.seek.value)));
+      let scrub=null;
+      const pointerSeek=event=>{
+        if(!scrub || scrub.id!==event.pointerId || scrub.source!==this.source)return;
+        const box=e.seek.getBoundingClientRect(),inset=Math.min(8,box.width/2);
+        const ratio=clamp((event.clientX-box.left-inset)/Math.max(1,box.width-inset*2),0,1);
+        e.seek.value=String(ratio*this.source.duration);
+        e.seek.dispatchEvent(new Event('input',{bubbles:true}));
+      };
+      e.seek?.addEventListener("pointerdown", event => {
+        if(event.button!==0 || !this.source || scrub)return;
+        event.preventDefault();
+        this.eventTimeline?.history?.beginGesture();
+        scrub={id:event.pointerId,source:this.source,time:this.currentVideoTime,playing:this.playing,outside:this.outsideClock};
+        if(this.playing)this.pause();
+        e.seek.focus({preventScroll:true});e.seek.setPointerCapture(event.pointerId);pointerSeek(event);
+      });
+      e.seek?.addEventListener('pointermove',pointerSeek);
+      e.seek?.addEventListener("pointerup",event=>{
+        if(!scrub||event.pointerId!==scrub.id)return;
+        pointerSeek(event);scrub=null;
+        if(e.seek.hasPointerCapture(event.pointerId))e.seek.releasePointerCapture(event.pointerId);
+        this.eventTimeline?.history?.endGesture();
+      });
+      const cancelScrub=()=>{
+        if(!scrub)return;
+        const previous=scrub;scrub=null;
+        if(e.seek.hasPointerCapture(previous.id))e.seek.releasePointerCapture(previous.id);
+        if(previous.source!==this.source)return;
+        this.eventTimeline?.history?.endGesture({cancel:true});
+        if(previous.outside){this.outsideClock=true;this._renderTime();}
+        else this.seekVideo(previous.time,{preserveView:true});
+        if(previous.playing)this.play();
+      };
+      e.seek?.addEventListener("pointercancel",cancelScrub);
+      e.seek?.addEventListener("lostpointercapture",cancelScrub);
+      e.seek?.addEventListener("keydown",event=>{
+        if(event.key==="Escape" && scrub){event.preventDefault();event.stopPropagation();cancelScrub();}
+      });
+      e.seek?.addEventListener("input", () => {
+        if(!scrub)this.eventTimeline?.history?.checkpoint();
+        if(this.playing)this.pause();
+        this.seekVideo(Number(e.seek.value));
+      });
       const jumpToSeconds = () => {
         const value = Number(e.seekSeconds.value);
         if (Number.isFinite(value)) { this.pause(); this.seekVideo(value); }
@@ -213,10 +273,12 @@
       e.collapse?.addEventListener("click", () => this.setCollapsed(!this.collapsed));
       e.video?.addEventListener("loadedmetadata", () => this._finishRealVideoLoad());
       e.video?.addEventListener("timeupdate", () => this._syncFromRealVideo());
-      e.video?.addEventListener("play", () => { this.playing = true; this._updatePlayButton(); this._realVideoFrame(); });
-      e.video?.addEventListener("pause", () => { if (this.manualPlayback) return; this.playing = false; this._updatePlayButton(); this._emitState(); });
+      e.video?.addEventListener("play", () => { if(e.video.paused || !["file","url"].includes(this.source?.kind))return; this._clearError(); this.playing = true; this._updatePlayButton(); this._realVideoFrame(); this._emitState(); });
+      e.video?.addEventListener("pause", () => { if (this.manualPlayback || !e.video.paused) return; this.playing = false; this._updatePlayButton(); this._emitState(); });
       e.video?.addEventListener("ended", () => { this.playing = false; this._updatePlayButton(); this._emitState(); });
-      e.video?.addEventListener("error", () => this._renderError(e.video.error?.message || this.t("video.loadError")));
+      e.video?.addEventListener("error", () => {
+        if (["file","url"].includes(this.source?.kind) && e.video.error) this._renderError(this.t("video.loadError"));
+      });
     }
 
     setTranslator(translator) {
@@ -280,15 +342,15 @@
       this.pause();
       this._releaseObjectUrl();
       if (String(url).startsWith("blob:") && localFile instanceof Blob) this.localFile = localFile;
+      this.mapping = new TimeMapping(descriptor.timeMapping || descriptor.time_mapping || (descriptor.asset ? {method:"unmapped"} : {}));
       this.source = {
         kind: "url",
         size: descriptor.byte_size == null ? undefined : Number(descriptor.byte_size),
         name: descriptor.video_name || descriptor.videoName || this.t("video.databaseVideo"),
         duration: Number(descriptor.duration_s || descriptor.duration || 0),
-        fps: Number(descriptor.frame_rate_hz || descriptor.frameRate || DEFAULT_FPS),
+        ...frameTiming(descriptor, this.mapping),
         descriptor
       };
-      this.mapping = new TimeMapping(descriptor.timeMapping || descriptor.time_mapping || {});
       this._showSource("video");
       this.elements.video.src = url;
       this.elements.video.load();
@@ -324,12 +386,17 @@
 
     togglePlayback() {
       if (!this.source) return;
-      if (this.playing) this.pause();
+      // Native play() clears paused before Chrome delivers the play event.
+      if (this.playing || (["file", "url"].includes(this.source.kind) && this.elements.video.paused === false)) this.pause();
       else this.play();
     }
 
-    play() {
-      if (!this.source) return;
+    async play() {
+      if (!this.source || !(this.source.duration>0)) return false;
+      if(this.playing)return true;
+      const revision=++this.playRevision,source=this.source;
+      this.preserveSignalView=false;
+      if (this.outsideClock) this.seekVideo(this.currentVideoTime);
       if (this.currentVideoTime >= this.source.duration) this.seekVideo(0);
       if (["file", "url"].includes(this.source.kind)) {
         this.manualPlayback = this.playbackRate < .0625;
@@ -340,11 +407,15 @@
         if (this.manualPlayback) {
           this.elements.video.pause(); this.playing = true;
           this.syntheticStartedAt = performance.now(); this.syntheticStartedTime = this.currentVideoTime;
-          this._updatePlayButton(); this._slowVideoFrame(); this._emitState(); return;
+          this._updatePlayButton(); this._slowVideoFrame(); this._emitState(); return true;
         }
-        const result = this.elements.video.play();
-        result?.catch?.(() => this._renderError(this.t("video.playBlocked")));
-        return;
+        try{
+          await this.elements.video.play();
+          return this.playRevision===revision && this.source===source && !this.elements.video.paused;
+        }catch{
+          if(this.playRevision===revision && this.source===source)this._renderError(this.t("video.playBlocked"));
+          return false;
+        }
       }
       this.playing = true;
       this.syntheticStartedAt = performance.now();
@@ -352,9 +423,11 @@
       this._updatePlayButton();
       this._syntheticFrame();
       this._emitState();
+      return true;
     }
 
     pause() {
+      this.playRevision++;
       this.manualPlayback = false;
       if (["file", "url"].includes(this.source?.kind)) this.elements.video.pause();
       this.playing = false;
@@ -394,12 +467,14 @@
     stepFrames(delta) {
       if (!this.source) return;
       this.pause();
-      const fps = Math.max(1, Number(this.source.fps || DEFAULT_FPS));
-      this.seekVideo(this.currentVideoTime + Number(delta || 0) / fps);
+      const index = clamp(frameAt(this.source, this.currentVideoTime) + Math.trunc(delta), 0,
+        frameAt(this.source, this.source.duration));
+      this.seekVideo(this.source.frameTimes ? this.source.frameTimes[index] : index / this.source.fps);
     }
 
-    seekVideo(videoSeconds) {
+    seekVideo(videoSeconds, {preserveView=false} = {}) {
       if (!this.source) return;
+      this.preserveSignalView=preserveView;
       const next = clamp(Number(videoSeconds) || 0, 0, Number(this.source.duration || 0));
       this.outsideClock = false;
       this.currentVideoTime = next;
@@ -413,16 +488,16 @@
       this._emitTime();
     }
 
-    seekNeural(neuralSeconds) {
-      if (!this.source) return;
+    seekNeural(neuralSeconds, options) {
+      if (!this.source || !this.recording || this.mapping.method === "unmapped") return;
       const time = this.mapping.neuralToVideo(neuralSeconds);
-      if (!Number.isFinite(time)) {
+      if (!Number.isFinite(time) || time < 0 || time > this.source.duration) {
         this.pause();
         this.outsideClock = true;
         this._renderTime();
         return;
       }
-      this.seekVideo(time);
+      this.seekVideo(time,options);
     }
 
     setCollapsed(collapsed) {
@@ -450,19 +525,19 @@
       this.animationFrame = requestAnimationFrame(() => this._syntheticFrame());
     }
 
-    _realVideoFrame() {
-      if (!this.playing || this.manualPlayback || !["file", "url"].includes(this.source?.kind)) return;
+    _realVideoFrame(revision=this.playRevision) {
+      if (revision!==this.playRevision || !this.playing || this.manualPlayback || !["file", "url"].includes(this.source?.kind)) return;
       this._syncFromRealVideo();
       if (typeof this.elements.video.requestVideoFrameCallback === "function") {
-        this.elements.video.requestVideoFrameCallback(() => this._realVideoFrame());
+        this.elements.video.requestVideoFrameCallback(() => this._realVideoFrame(revision));
       } else {
-        this.animationFrame = requestAnimationFrame(() => this._realVideoFrame());
+        this.animationFrame = requestAnimationFrame(() => this._realVideoFrame(revision));
       }
     }
 
     _syncFromRealVideo() {
       if (!this.source || !["file", "url"].includes(this.source.kind)) return;
-      this.outsideClock = false;
+      if (this.outsideClock) return;
       this.currentVideoTime = Number(this.elements.video.currentTime || 0);
       this._renderTime();
       this._emitTime();
@@ -534,11 +609,11 @@
       context.arc(width - 42, 34, 9, 0, Math.PI * 2);
       context.fill();
       context.fillStyle = "#aab7bd";
-      context.font = '600 14px "Cascadia Mono", Consolas, monospace';
+      context.font = '600 1rem "Cascadia Mono", Consolas, monospace';
       context.textAlign = "left";
       context.fillText("SYNTHETIC VALIDATION · CAM 01", 20, 30);
       context.fillStyle = "#8f9da4";
-      context.font = '12px "Cascadia Mono", Consolas, monospace';
+      context.font = '0.875rem "Cascadia Mono", Consolas, monospace';
       context.fillText(`${formatClock(frame.time)} · FRAME ${String(frame.frameIndex).padStart(7, "0")}`, 20, height - 21);
       context.textAlign = "right";
       context.fillStyle = "#d8e3e8";
@@ -550,28 +625,38 @@
     }
 
     _showSource(kind) {
+      this.preserveSignalView=false;
+      this.outsideClock=false;
+      this.elements.panel?.removeAttribute("data-outside-clock");
       if (this.elements.empty) this.elements.empty.hidden = true;
-      if (this.elements.error) this.elements.error.hidden = true;
+      this._clearError();
       if (this.elements.video) this.elements.video.hidden = kind !== "video";
       if (this.elements.canvas) this.elements.canvas.hidden = kind !== "synthetic";
       if (this.elements.controls) this.elements.controls.hidden = false;
       if (this.elements.mapping) this.elements.mapping.hidden = false;
       this.elements.panel?.classList.add("has-source");
-      this.elements.panel?.classList.remove("has-error");
     }
 
     _renderEmpty() {
       this.pause();
+      this.outsideClock=false;
+      this.elements.panel?.removeAttribute("data-outside-clock");
       this.source = null;
       if (this.elements.empty) this.elements.empty.hidden = false;
       if (this.elements.video) { this.elements.video.hidden = true; this.elements.video.removeAttribute("src"); }
       if (this.elements.canvas) this.elements.canvas.hidden = true;
       if (this.elements.controls) this.elements.controls.hidden = true;
       if (this.elements.mapping) this.elements.mapping.hidden = true;
-      this.elements.panel?.classList.remove("has-source", "has-error");
+      this.elements.panel?.classList.remove("has-source");
+      this._clearError();
       this._renderSourceLabel();
       this._renderStatus();
       this._emitState();
+    }
+
+    _clearError() {
+      this.elements.panel?.classList.remove("has-error");
+      if (this.elements.error) this.elements.error.hidden = true;
     }
 
     _renderError(message) {
@@ -581,16 +666,24 @@
         this.elements.error.hidden = false;
         this.elements.error.textContent = message;
       }
+      this._emitState();
     }
 
     _renderTime() {
       const duration = Number(this.source?.duration || 0);
-      if (this.elements.seek) this.elements.seek.value = String(clamp(this.currentVideoTime, 0, duration || 1));
-      if (this.elements.current) this.elements.current.textContent = formatClock(this.currentVideoTime);
-      const neuralTime = this.mapping.videoToNeural(this.currentVideoTime);
+      if (this.outsideClock) this.elements.panel?.setAttribute("data-outside-clock",this.t("video.outsideClock"));
+      else this.elements.panel?.removeAttribute("data-outside-clock");
+      if (this.elements.seek) {
+        this.elements.seek.value = String(clamp(this.currentVideoTime, 0, duration || 1));
+        this.elements.seek.setAttribute("aria-valuetext",this.outsideClock ? this.t("video.outsideClock") : formatClock(this.currentVideoTime));
+        this.elements.seek.style.setProperty("--event-progress",`${duration?clamp(this.currentVideoTime/duration,0,1)*100:0}%`);
+      }
+      if (this.elements.current) this.elements.current.textContent = this.outsideClock ? '—' : formatClock(this.currentVideoTime);
+      const neuralTime = this.currentNeuralTime();
       if (this.elements.neural) this.elements.neural.textContent = !this.outsideClock && Number.isFinite(neuralTime)
         ? `${neuralTime.toFixed(3)} s` : this.t("video.outsideClock");
-      if (this.elements.frame) this.elements.frame.textContent = String(Math.floor(this.currentVideoTime * Number(this.source?.fps || DEFAULT_FPS))).padStart(7, "0");
+      if (this.elements.frame) this.elements.frame.textContent = String(frameAt(this.source, this.currentVideoTime)).padStart(7, "0");
+      this.eventTimeline?.update();
     }
 
     _renderStatus() {
@@ -598,7 +691,7 @@
       const verification = this.mapping.verificationStatus === "verified" ? this.t("video.verified") : this.t("video.unverified");
       const method = this.source?.kind === "synthetic" && this.mapping.method === "frame_timestamps"
         ? this.t("video.syntheticClock")
-        : this.t(`video.method.${this.mapping.method}`);
+        : this.t(`video.method.${this.mapping.method === "unmapped" ? "unknown" : this.mapping.method}`);
       this.elements.status.textContent = this.source ? `${verification} · ${method}` : this.t("video.noSource");
       this.elements.status.dataset.status = this.source ? this.mapping.verificationStatus : "empty";
       if (this.elements.offset) this.elements.offset.value = String(this.mapping.offsetSeconds);
@@ -615,13 +708,23 @@
       this.elements.play.title = this.t(this.playing ? "video.pause" : "video.play");
     }
 
+    currentNeuralTime() {
+      if (!this.recording) return NaN;
+      const time=this.mapping.videoToNeural(this.currentVideoTime),duration=Number(this.recording?.duration);
+      return Number.isFinite(time) && time>=0 && (!(duration>0) || time<=duration) ? time : NaN;
+    }
+
     _emitTime() {
       if (!this.source) return;
-      const neuralTime = this.mapping.videoToNeural(this.currentVideoTime);
-      if (this.outsideClock || !Number.isFinite(neuralTime)) return;
+      const neuralTime = this.currentNeuralTime();
+      if (this.outsideClock || !Number.isFinite(neuralTime)) {
+        this.onUnmappedVideoTime?.();
+        return;
+      }
       this.onNeuralTime?.(neuralTime, {
         videoTime: this.currentVideoTime,
         playing: this.playing,
+        preserveView: this.preserveSignalView && !this.playing,
         follow: this.follow,
         source: this.source,
         mapping: this.mapping
@@ -655,6 +758,7 @@
     DEFAULT_FPS,
     VIDEO_EXTENSIONS,
     TimeMapping,
+    frameTiming,
     VideoSyncController,
     syntheticBehaviorAt,
     formatClock,

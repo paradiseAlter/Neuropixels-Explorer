@@ -1,4 +1,5 @@
 "use strict";
+const {setExplorerPreference}=require('./workspace-preferences.cjs');
 const {chromium}=require("playwright");
 const fs=require("node:fs"),path=require("node:path"),assert=require("node:assert/strict");
 (async()=>{
@@ -6,23 +7,25 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
   const base=process.env.WORKSPACE_TEST_URL||"http://127.0.0.1:8792";
   const browser=await chromium.launch({channel:"chrome",headless:true});
   const page=await browser.newPage({viewport:{width:1440,height:900},acceptDownloads:true});
+  await page.addInitScript(()=>{window.showSaveFilePicker=undefined;});
   const errors=[];page.on("pageerror",e=>errors.push(e.message));
   const box=s=>page.locator(s).boundingBox();
   const seek=async t=>{await page.locator("#video-seek").evaluate((e,t)=>{e.value=t;e.dispatchEvent(new Event("input",{bubbles:true}));},String(t));};
   try {
-    await page.goto(base); await page.selectOption("#language-select","zh-CN");
+    await page.goto(base); await setExplorerPreference(page,"#language-select","zh-CN");
     await page.locator('[data-project-action="catalog"]').waitFor({timeout:20000});
     await page.screenshot({path:path.join(out,"01-start.png")});
     assert((await box("#open-folder-button")).x<30);
     await page.locator('[data-project-action="catalog"]').click();
-    await page.waitForFunction(()=>document.querySelector("#activity-status").textContent.includes("p90"),{},{timeout:120000});
+    await page.locator('#signal-workspace .sw-space [data-unit] canvas[aria-label$=" Hz"]').first().waitFor({state:"visible",timeout:120000});
     await page.waitForFunction(()=>document.querySelector("#behavior-video").readyState>=2,{},{timeout:30000});
     await page.screenshot({path:path.join(out,"02-workspace.png")});
-    const neuralBefore=await box("#activity-anatomy-canvas"),videoBefore=await box("#behavior-video");
+    const neuralBefore=await box("#signal-workspace"),videoBefore=await box("#behavior-video");
     assert(videoBefore.width>430);assert(videoBefore.height>240);
     assert(await page.locator("#mini-probe svg").isVisible());
     await page.locator("#find-unit-button").click();await page.locator("#find-unit-input").fill("1066256490");
     await page.locator('[data-find-unit-id="1066256490"]').click();
+    await page.locator('.sw-space [data-unit="1066256490"] .sw-name').click();
     await page.waitForFunction(()=>document.querySelector(".mini-probe-selection").textContent.includes("3440"));
     assert((await page.locator(".mini-probe-selection").textContent()).includes("VISp"));
     await page.locator("#inspect-unit-button").click();
@@ -30,14 +33,14 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
     assert.equal((await page.locator("#probe-region").textContent()).trim(),"VISp");
     await page.screenshot({path:path.join(out,"03-probe-inspector.png")});await page.locator("#close-unit-inspector").click();
     await seek(20); await page.locator("#annotation-toggle").click();
-    await page.locator("[data-range-around]").click();
+    await page.locator("[data-event-zoom=in]").click();
     let strip=await box(".annotation-track-plot svg");
-    await page.mouse.move(strip.x+strip.width*.2,strip.y+4);await page.mouse.down();await page.mouse.move(strip.x+strip.width*.45,strip.y+4,{steps:10});await page.mouse.up();
+    await page.mouse.move(strip.x+strip.width*.2,strip.y+strip.height*.65);await page.mouse.down();await page.mouse.move(strip.x+strip.width*.45,strip.y+strip.height*.65,{steps:10});await page.mouse.up();
     await page.locator('[data-field="label"]').fill("自主定义的行为");await page.locator('[data-action="quick-save"]').click();
     assert.equal(await page.locator("[data-clip]").count(),1);
-    assert.equal((await box("#activity-anatomy-canvas")).height,neuralBefore.height);
+    assert.equal((await box("#signal-workspace")).height,neuralBefore.height);
     assert.equal((await box("#behavior-video")).height,videoBefore.height);
-    const d=page.waitForEvent("download");await page.locator('[data-action="save"]').click();await(await d).saveAs(path.join(out,"annotations.project.json"));
+    const d=page.waitForEvent("download");await page.locator("#behavior-video").click({button:"right"});await page.locator("[data-workspace-action=save-annotations]").click();await(await d).saveAs(path.join(out,"annotations.project.json"));
     const saved=JSON.parse(fs.readFileSync(path.join(out,"annotations.project.json")));assert.equal(saved.segments.length,1);
     await page.locator("[data-clip]").click();
     await page.screenshot({path:path.join(out,"04-video-annotation.png")});
@@ -46,7 +49,7 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
     await page.locator('[data-scheme]').selectOption({label:"Default"});
     await page.screenshot({path:path.join(out,"05-batch-review.png")});
     await page.locator('[data-action="close"]').click();
-    await page.locator('[data-action="undo"]').click();
+    await page.locator("#annotation-toggle").focus();await page.keyboard.press("Control+z");
     await page.locator("#annotation-toggle").click();
     await page.setViewportSize({width:1920,height:1080});await page.screenshot({path:path.join(out,"06-wide.png")});
     await page.setViewportSize({width:1280,height:800});await page.screenshot({path:path.join(out,"07-laptop.png")});

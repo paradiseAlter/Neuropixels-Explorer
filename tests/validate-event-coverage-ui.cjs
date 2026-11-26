@@ -10,6 +10,7 @@ vm.runInNewContext(fs.readFileSync(require.resolve('../scripts/event-analysis-ui
 const UI=sandbox.window.NeuropixelsEventAnalysisUI;
 function fixture(){
  const fields=Object.fromEntries(['unitIds','coverage','source','activeOnly','subject','track','start','end','binWidth','eventType','k','seed','normalization','stability'].map(k=>[k,{value:'',checked:false,disabled:false,replaceChildren(){}}]));
+ const repeatField={hidden:true};fields.repeats={value:'4',disabled:true,closest:()=>repeatField};
  fields.unitIds.value='7';fields.source.value='experiment';fields.start.value='-1';fields.end.value='1';fields.binWidth.value='1';fields.eventType.value='stim';fields.k.value='0';
  const status={dataset:{},textContent:''},listeners={};dialog={open:false,addEventListener:(n,f)=>listeners[n]=f,querySelector:s=>s.startsWith('[name=')?fields[s.match(/name="([^"]+)"/)[1]]:s==='[data-ea-status]'?status:{disabled:false,hidden:false},querySelectorAll:()=>[],close(){this.open=false;}};
  const ui=new UI({state:{datasetToken:'token',activeRecording:{key:'rec',spikeTimesFile:{name:'times'},spikeClustersFile:{name:'ids'},byName:new Map()},experimentView:{selectedUnitId:9}},button:{},annotations:{doc:null},video:{mapping:{toJSON:()=>({})}},getUnits:()=>[{id:7},{id:9}]});

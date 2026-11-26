@@ -293,32 +293,42 @@
       this.render();
     }
 
-    setAnnotations(intervals) {
+    setAnnotations(intervals, recorded = false) {
       this.annotations = intervals || [];
+      this.recordedLabels = recorded;
+      this.behaviorStripKey = null;
       this.render();
     }
 
     _drawBehaviorStrip() {
       if (!this.behaviorStrip) return;
       const { start, end } = this.state.visibleRange;
-      const clips = (this.annotations || []).filter(c => c.start < end && c.end > start);
-      const key = JSON.stringify([clips, start, end, this.state.selectedInterval]);
+      const key = JSON.stringify([start, end, this.width, this.state.selectedInterval]);
       if (key === this.behaviorStripKey) return;
       this.behaviorStripKey = key;
       this.behaviorStrip.replaceChildren();
-      if (!clips.length) { this.behaviorStrip.textContent = "Saved behavior · select a clip here, or drag on signals"; return; }
-      for (const clip of clips) {
-        const button = document.createElement("button");
+      let lastPixel = -1;
+      for (const clip of this.annotations || []) {
+        if (clip.start >= end || (clip.point ? clip.start < start : clip.end <= start)) continue;
         const left = Math.max(start, clip.start), right = Math.min(end, clip.end);
+        // Recording rows are sorted. The arrows reach every event even at subpixel density.
+        if (this.recordedLabels) {
+          const pixel = Math.floor((left-start)/(end-start)*Math.max(1,this.width-GUTTER_WIDTH));
+          if (pixel === lastPixel) continue;
+          lastPixel = pixel;
+        }
+        const button = document.createElement("button");
         button.type = "button";
         button.textContent = clip.label || "Unlabeled";
-        button.title = `${clip.label || "Unlabeled"} · ${clip.start.toFixed(3)}–${clip.end.toFixed(3)} s neural · ${clip.subject} / ${clip.track}`;
+        const timing = clip.start.toFixed(3) + (clip.point ? '' : '–'+clip.end.toFixed(3));
+        button.title = `${clip.label || "Unlabeled"} · ${timing} s · ${this.recordedLabels ? clip.sourceTable+' #'+clip.sourceId : clip.subject+' / '+clip.track}`;
         button.setAttribute("aria-label", button.title);
         button.setAttribute("aria-pressed", String(this.state.selectedInterval?.start === clip.start && this.state.selectedInterval?.end === clip.end));
         button.style.left = `${100 * (left - start) / (end - start)}%`;
-        button.style.width = `${100 * (right - left) / (end - start)}%`;
+        button.style.width = clip.point ? '3px' : `${100 * (right - left) / (end - start)}%`;
+        if (clip.point) button.style.padding = '0';
         button.style.setProperty("--clip-color", clip.color);
-        button.onclick = () => this.callbacks.onAnnotationSelect?.(clip.id);
+        button.onclick = () => this.callbacks.onAnnotationSelect?.(clip.id, clip);
         this.behaviorStrip.append(button);
       }
     }
@@ -505,7 +515,7 @@
         context.stroke();
         const suffix = this.width - GUTTER_WIDTH < 300 ? "" : ` ${count === 1 ? "Unit" : "Units"}`;
         const label = `${level ? "Subgroup" : "Group"} · ${count}${suffix}`;
-        context.font = '600 10px "Cascadia Mono", Consolas, monospace';
+        context.font = '600 0.75rem "Cascadia Mono", Consolas, monospace';
         const width = context.measureText(label).width + 14;
         let x = right - width - 6;
         badges.forEach((badge) => { if (Math.abs(badge.y - y) < 20) x = Math.min(x, badge.x - width - 5); });
@@ -530,7 +540,7 @@
       context.moveTo(0, HEADER_HEIGHT - .5);
       context.lineTo(this.width, HEADER_HEIGHT - .5);
       context.stroke();
-      context.font = '650 9px "Cascadia Mono", Consolas, monospace';
+      context.font = '650 0.75rem "Cascadia Mono", Consolas, monospace';
       context.fillStyle = colors.muted;
       context.textBaseline = "middle";
       context.fillText("SHANK", 10, 15.5);
@@ -639,7 +649,7 @@
         context.fillStyle = index % 2 ? colors.rowAlt : colors.row;
         context.fillRect(0, section.y, 43, section.height);
         context.fillStyle = colors.soft;
-        context.font = '700 11px "Cascadia Mono", Consolas, monospace';
+        context.font = '700 0.8125rem "Cascadia Mono", Consolas, monospace';
         context.textBaseline = "middle";
         const shank = this._rowShank(section.rows[0]);
         context.fillText(shank == null ? "S—" : `S${shank + 1}`, 11, section.y + section.height / 2);
@@ -669,12 +679,12 @@
         }
         if (region === "Unmapped") this._drawUnmappedHatch(context, 94, section.y, 86, section.height, colors);
         context.fillStyle = colors.soft;
-        context.font = '650 9px "Cascadia Mono", Consolas, monospace';
+        context.font = '650 0.75rem "Cascadia Mono", Consolas, monospace';
         context.textBaseline = "middle";
         context.fillText(region.length > 13 ? `${region.slice(0, 12)}…` : region, 101, section.y + section.height / 2 - (section.height >= 29 && unit?.trackAmbiguous ? 5 : 0));
         if (section.height >= 29 && unit?.trackAmbiguous) {
           context.fillStyle = colors.muted;
-          context.font = '550 7px "Cascadia Mono", Consolas, monospace';
+          context.font = '550 0.6875rem "Cascadia Mono", Consolas, monospace';
           context.fillText("TRACK · UNCERTAIN", 101, section.y + section.height / 2 + 7);
         }
         const depths = section.rows.flatMap((row) => row.kind === "unit"
@@ -682,7 +692,7 @@
           : [row.minimumDepth, row.maximumDepth]).filter((value) => value != null);
         if (depths.length) {
           context.fillStyle = colors.muted;
-          context.font = '550 8px "Cascadia Mono", Consolas, monospace';
+          context.font = '550 0.6875rem "Cascadia Mono", Consolas, monospace';
           context.textBaseline = "top";
           context.fillText(String(Math.round(Math.min(...depths))), 51, section.y + 3);
           if (section.height >= 28) {
@@ -703,12 +713,12 @@
         const groupSelected = row.kind === "aggregate" && row.key === this.state.selectedGroupKey;
         context.textBaseline = "middle";
         context.fillStyle = selected ? colors.accentStrong : row.kind === "aggregate" ? colors.warn : colors.soft;
-        context.font = `${selected ? 700 : 620} ${selected ? 10 : 9}px "Cascadia Mono", Consolas, monospace`;
+        context.font = `${selected ? 700 : 620} 0.75rem "Cascadia Mono", Consolas, monospace`;
         if (row.kind === "aggregate") {
           context.fillText(`◇ ${row.count} ${row.count === 1 ? "Unit" : "Units"}`, 190, middle - (height >= 30 ? 5 : 0));
           if (height >= 30) {
             context.fillStyle = colors.muted;
-            context.font = '550 7px "Cascadia Mono", Consolas, monospace';
+            context.font = '550 0.6875rem "Cascadia Mono", Consolas, monospace';
             const depth = row.minimumDepth == null ? "depth —" : `${Math.round(row.minimumDepth)}–${Math.round(row.maximumDepth)} µm`;
             context.fillText(depth, 190, middle + 7);
           }
@@ -716,7 +726,7 @@
           context.fillText(`Unit ${Number(row.unit.id)}`, 190, middle - (expanded ? 5 : 0));
           if (expanded) {
             context.fillStyle = colors.muted;
-            context.font = '550 8px "Cascadia Mono", Consolas, monospace';
+            context.font = '550 0.6875rem "Cascadia Mono", Consolas, monospace';
             context.fillText(unitRegion(row.unit), 190, middle + 8);
           } else if (unitRegion(row.unit) === "Unmapped") {
             context.strokeStyle = colors.muted;
@@ -792,7 +802,7 @@
       context.fillStyle = "rgba(0,0,0,.16)";
       context.fillRect(plotLeft, top, plotWidth, height - 33);
       context.fillStyle = colors.accentStrong;
-      context.font = '650 10px "Cascadia Mono", Consolas, monospace';
+      context.font = '650 0.75rem "Cascadia Mono", Consolas, monospace';
       context.fillText(formatIdentity(unit), plotLeft + 9, y + 15);
       const left = lowerBound(this.selectedSpikeTimes, rangeStart);
       const right = lowerBound(this.selectedSpikeTimes, rangeEnd + Number.EPSILON);
@@ -841,7 +851,7 @@
         }
       }
       context.fillStyle = colors.muted;
-      context.font = '550 8px "Cascadia Mono", Consolas, monospace';
+      context.font = '550 0.6875rem "Cascadia Mono", Consolas, monospace';
       context.textAlign = "right";
       context.fillText(`${visibleSpikes} spikes · ${mode}`, this.width - 9, y + height - 5);
       context.textAlign = "left";
@@ -866,11 +876,11 @@
       context.rect(GUTTER_WIDTH, HEADER_HEIGHT, this.width - GUTTER_WIDTH, this.height - HEADER_HEIGHT - AXIS_HEIGHT);
       context.clip();
       for (const clip of this.annotations || []) {
-        if (clip.end <= this.state.visibleRange.start || clip.start >= this.state.visibleRange.end) continue;
+        if ((clip.point ? clip.start < this.state.visibleRange.start : clip.end <= this.state.visibleRange.start) || clip.start >= this.state.visibleRange.end) continue;
         const left = this._timeToX(clip.start), right = this._timeToX(clip.end);
         context.fillStyle = clip.color;
         context.globalAlpha = .13;
-        context.fillRect(left, HEADER_HEIGHT, right - left, this.height - HEADER_HEIGHT - AXIS_HEIGHT);
+        context.fillRect(left, HEADER_HEIGHT, Math.max(1,right - left), this.height - HEADER_HEIGHT - AXIS_HEIGHT);
         context.globalAlpha = .95;
         context.fillRect(left, HEADER_HEIGHT, right - left, 5);
       }
@@ -904,7 +914,7 @@
       context.lineTo(x + .5, this.height - AXIS_HEIGHT);
       context.stroke();
       context.fillStyle = colors.good;
-      context.font = '600 8px "Cascadia Mono", Consolas, monospace';
+      context.font = '600 0.6875rem "Cascadia Mono", Consolas, monospace';
       context.fillText(`${Number(this.state.cursorTime || 0).toFixed(3)} s`, Math.min(this.width - 64, x + 5), HEADER_HEIGHT + 10);
     }
 
@@ -920,7 +930,7 @@
       const start = Number(this.state.visibleRange?.start || 0);
       const end = Number(this.state.visibleRange?.end ?? this.data?.duration ?? 0);
       context.fillStyle = colors.muted;
-      context.font = '500 8px "Cascadia Mono", Consolas, monospace';
+      context.font = '500 0.6875rem "Cascadia Mono", Consolas, monospace';
       context.textBaseline = "middle";
       const tickCount = Math.max(1, Math.min(5, Math.floor((this.width - GUTTER_WIDTH) / 90)));
       for (let tick = 0; tick <= tickCount; tick += 1) {

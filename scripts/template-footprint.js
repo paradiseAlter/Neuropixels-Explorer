@@ -26,7 +26,10 @@
   }
   function render(data, selectedIndex, lang = "en") {
     const w = words(lang);
-    if (!data || data.status !== "available") return `<p role="status">${escape(data ? w[data.status] || w.invalid : w.loading)}</p>`;
+    if (!data || data.status !== "available") {
+      const severity = !data || data.status === "no_spikes" ? "" : ["missing_geometry","missing_templates"].includes(data.status) ? "warning" : "error";
+      return `<p role="status"${severity ? ` data-severity="${severity}"` : ""}>${escape(data ? w[data.status] || w.invalid : w.loading)}</p>`;
+    }
     const channels = data.channels, chosen = channels.find(c => c.index === selectedIndex) || channels.find(c => c.index === data.peakChannelIndex) || channels[0];
     const g = geometry(channels);
     const label = c => `${w.index} ${c.index}${c.channelId == null ? "" : ` / ${w.channel} ${c.channelId}`}`;

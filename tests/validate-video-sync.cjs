@@ -23,6 +23,23 @@ assert.strictEqual(first.frameIndex, 150, "Synthetic frame number should be exac
 assert.strictEqual(first.syncPulse, true, "Five-second boundaries should expose a validation sync pulse");
 assert.strictEqual(videoSync.formatClock(65.125), "00:01:05.125");
 
+const step=(descriptor, time, delta, mapping)=>{
+  const source={duration:descriptor.duration_s,...videoSync.frameTiming(descriptor,mapping)};
+  let target;
+  videoSync.VideoSyncController.prototype.stepFrames.call({source,currentVideoTime:time,pause(){},seekVideo(value){target=value;}},delta);
+  return target;
+};
+const variable={duration_s:1,frame_count:7,frame_times_s:[0,.011,.042,.15,.27,.51,.81]};
+assert.equal(step(variable,.06,1),.15);
+assert.equal(step(variable,.51,-5),0);
+assert.equal(step(variable,.011,5),.81);
+assert.equal(step(variable,.81,1),.81);
+assert.throws(()=>videoSync.frameTiming({...variable,frame_count:8}),/complete/);
+const compressed={frameClock:{video_s:[0,.5,.98]}};
+const allen={duration_s:1,frame_count:60,frame_rate_hz:60};
+assert.equal(step(allen,.5,5,compressed),35/60);
+assert.equal(step({...variable,frame_times_s:undefined},.06,1,{frameClock:{video_s:variable.frame_times_s}}),.15);
+
 const fakeVideo = { name: "behavior.mp4" };
 assert.deepStrictEqual(videoSync.videoFilesForRecording({ files: [{ name: "spike_times.npy" }, fakeVideo] }), [fakeVideo]);
 
@@ -41,7 +58,7 @@ assert.throws(() => registry.register(provider), /already registered/);
 unregister();
 assert.strictEqual(registry.providers().length, 0);
 
-const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const html = fs.readFileSync(path.join(root, "scripts", "explorer-shell.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles", "app.css"), "utf8");
 const app = fs.readFileSync(path.join(root, "scripts", "app.js"), "utf8");
 const service = fs.readFileSync(path.join(root, "server", "neuropixels_explorer", "service.py"), "utf8");
@@ -56,7 +73,7 @@ const service = fs.readFileSync(path.join(root, "server", "neuropixels_explorer"
   "RAW VOLTAGE PORT",
   "scripts/video-sync.js",
   "scripts/stream-contracts.js"
-].forEach((needle) => assert(html.includes(needle), `index.html should include ${needle}`));
+].forEach((needle) => assert(html.includes(needle), `Explorer shell should include ${needle}`));
 assert(css.includes(".video-sync-panel") && css.includes(".sync-playhead"), "Video and shared-playhead styles should exist");
 assert(app.includes("handleVideoNeuralTime") && app.includes("setPlaybackTime"), "App should connect video time to neural plots");
 assert(service.includes("def video_media") && service.includes("Accept-Ranges"), "Database video should support browser range requests");

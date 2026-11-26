@@ -296,6 +296,7 @@
         const dot = document.createElement("i");
         const title = document.createElement("strong");
         const description = document.createElement("span");
+        window.NeuropixelsUnitMarks?.bind(title,item.recording,item.clusterId);
         title.textContent = this.t("probe.unitLabel", { id: item.clusterId });
         description.textContent = `${this.t("probe.probeShank", { probe: 1, shank: (shankIdOf(item.result) ?? 0) + 1 })} · ${item.region?.region || this.t("units.unmapped")}`;
         row.append(dot, title, description);
@@ -316,7 +317,7 @@
         const distance = Math.abs(Number(location.y) - Number(targetDepth));
         const quality = location.label?.quality || "unknown";
         const region = this.regionForLocation(location)?.region || this.t("units.unmapped");
-        return `<button type="button" data-cluster-id="${location.id}"><span><strong>${this.t("probe.unitLabel", { id: location.id })}</strong><em>${quality} · ${region}</em></span><b>${distance.toFixed(0)} \u00b5m</b></button>`;
+        return `<button type="button" data-cluster-id="${location.id}"><span><strong ${window.NeuropixelsUnitMarks?.attrs(this.recording,location.id)||''}>${this.t("probe.unitLabel", { id: location.id })}</strong><em>${quality} · ${region}</em></span><b>${distance.toFixed(0)} \u00b5m</b></button>`;
       }).join("");
     }
 
@@ -519,6 +520,7 @@
         const meta = document.createElement("em");
         const depth = document.createElement("b");
         const region = this.regionForLocation(marker.location)?.region || this.t("units.unmapped");
+        window.NeuropixelsUnitMarks?.bind(title,this.recording,marker.location.id);
         title.textContent = `${this.t("probe.unitLabel", { id: marker.location.id })}${marker.isFocused ? ` · ${this.t("probe.focused")}` : marker.open ? ` · ${this.t("units.open")}` : ""}`;
         meta.textContent = `${marker.location.label?.quality || "unknown"} · ${region} · ch ${finite(marker.location.peakChannel) ?? "—"}`;
         depth.textContent = `${Number(marker.location.y).toFixed(0)} \u00b5m`;
@@ -617,7 +619,7 @@
       this.segmentHitTargets = [];
       if (!this.geometry.length || !this.shankIds.length) {
         context.fillStyle = PROBE_THEME.emptyText;
-        context.font = '10px "Cascadia Mono", Consolas, monospace';
+        context.font = '0.75rem "Cascadia Mono", Consolas, monospace';
         context.textAlign = "center";
         context.fillText(this.items.length ? this.t("probe.groupingUnavailable") : this.t("review.selectUnit"), width / 2, height / 2);
         this.hideTooltip();
@@ -645,7 +647,7 @@
       this.layout = { panels, top, bottom, minimumY, maximumY };
       const yFor = (value) => top + (maximumY - clamp(Number(value), minimumY, maximumY)) / (maximumY - minimumY) * (bottom - top);
 
-      context.font = '10px "Cascadia Mono", Consolas, monospace';
+      context.font = '0.75rem "Cascadia Mono", Consolas, monospace';
       panels.forEach((panel) => {
         const channels = [];
         for (let channel = 0; channel < this.geometry.length / 2; channel += 1) {
@@ -659,7 +661,7 @@
         context.textAlign = "center";
         context.fillText(this.t("probe.shankShort", { shank: Number(panel.probeId) + 1 }), (panel.left + panel.right) / 2, 16);
         context.fillStyle = PROBE_THEME.mutedText;
-        context.font = '9px "Cascadia Mono", Consolas, monospace';
+        context.font = '0.75rem "Cascadia Mono", Consolas, monospace';
         context.fillText(this.t("probe.unitCountShort", { count: locationCount }), (panel.left + panel.right) / 2, 30);
         context.fillStyle = PROBE_THEME.panel;
         context.fillRect(panel.left, top, panel.right - panel.left, bottom - top);
@@ -685,7 +687,7 @@
           context.stroke();
           if (segmentHeight >= 13 && panelWidth >= 38 && !NON_NEURAL.has(String(segment.region).toLowerCase())) {
             context.fillStyle = PROBE_THEME.bandText;
-            context.font = '8px "Cascadia Mono", Consolas, monospace';
+            context.font = '0.6875rem "Cascadia Mono", Consolas, monospace';
             context.textAlign = "center";
             const label = String(segment.region).length > 8 ? `${String(segment.region).slice(0, 7)}...` : String(segment.region);
             context.fillText(label, (panel.left + panel.right) / 2, segmentTop + Math.min(segmentHeight - 3, 10));
@@ -710,7 +712,7 @@
           context.stroke();
         });
         context.globalAlpha = 1;
-        context.font = '9px "Cascadia Mono", Consolas, monospace';
+        context.font = '0.75rem "Cascadia Mono", Consolas, monospace';
       });
 
       const openById = new Map(this.items.map((item) => [Number(item.clusterId), item]));
@@ -780,7 +782,7 @@
 
         if (group.markers.length > 1) {
           const count = String(group.markers.length);
-          context.font = '700 8px "Cascadia Mono", Consolas, monospace';
+          context.font = '700 0.6875rem "Cascadia Mono", Consolas, monospace';
           const badgeWidth = Math.max(13, context.measureText(count).width + 7);
           const badgeX = clamp(group.x + 6, primary.panel.left + 2, primary.panel.right - badgeWidth - 2);
           const badgeY = clamp(group.y - 8, top + 1, bottom - 12);
@@ -799,7 +801,7 @@
       const focusedMarker = markers.find((marker) => marker.isFocused);
       if (focusedMarker) {
         const text = `UNIT ${focusedMarker.location.id} · ${Number(focusedMarker.location.y).toFixed(0)} \u00b5m`;
-        context.font = '700 8px "Cascadia Mono", Consolas, monospace';
+        context.font = '700 0.6875rem "Cascadia Mono", Consolas, monospace';
         const labelWidth = context.measureText(text).width + 10;
         const labelX = clamp(focusedMarker.x + 10, 8, Math.max(8, width - labelWidth - 8));
         const labelY = clamp(focusedMarker.y - 20, top + 2, bottom - 15);
@@ -813,7 +815,7 @@
       }
 
       context.fillStyle = PROBE_THEME.depthText;
-      context.font = '9px "Cascadia Mono", Consolas, monospace';
+      context.font = '0.75rem "Cascadia Mono", Consolas, monospace';
       context.textAlign = "left";
       context.fillText(`${maximumY.toFixed(0)} \u00b5m`, outer, height - 7);
       context.textAlign = "right";

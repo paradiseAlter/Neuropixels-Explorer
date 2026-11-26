@@ -39,7 +39,7 @@ assert(templates.missingRecordings[0].files[0].filename === "templates.npy", "Th
 assert(templates.missingRecordings[0].files[0].roles[0] === "templates", "The ingest role should be explicit");
 
 const root = path.resolve(__dirname, "..");
-const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const html = fs.readFileSync(path.join(root, "scripts", "explorer-shell.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "scripts", "app.js"), "utf8");
 const service = fs.readFileSync(path.join(root, "server", "neuropixels_explorer", "ingest.py"), "utf8");
 assert(html.includes('id="supplement-file-input"') && html.includes('id="supplement-folder-input"'), "Both supplement pickers must be local assets");

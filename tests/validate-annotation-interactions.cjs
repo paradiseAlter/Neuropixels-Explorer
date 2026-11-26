@@ -73,12 +73,10 @@ assert.equal(previewTime,12.5);assert.equal(ui.video.currentVideoTime,9,"Hover m
 ui.video.playing=true;ui.video.currentVideoTime=14.135;ui.previewEnd=14;
 ui.video.pause=()=>{ui.video.playing=false;};ui.video.seekVideo=t=>{ui.video.currentVideoTime=t;};
 ui.checkPreviewEnd();assert.equal(ui.video.currentVideoTime,14);assert.equal(ui.previewEnd,null);
-const listeners={};const rateInput={value:"0.25",addEventListener:(type,fn)=>(listeners[type]||=[]).push(fn),setPointerCapture(){},hasPointerCapture(){return false;},blur(){},select(){}};
+const listeners={};const rateInput={value:"0.25",addEventListener:(type,fn)=>(listeners[type]||=[]).push(fn),setCustomValidity(){}};
 let speed=.25;const speedController={elements:{customSpeed:rateInput},playbackRate:.25,setPlaybackRate(value){speed=value;this.playbackRate=value;return true;}};
 VideoSyncController.prototype._install.call(speedController);
-listeners.pointerdown[0]({button:0,clientX:100,pointerId:1});
-listeners.pointermove[0]({clientX:110,preventDefault(){}});assert.equal(speed,.35);
-listeners.pointermove[0]({clientX:110,shiftKey:true,preventDefault(){}});assert.equal(speed,.26);
-listeners.pointermove[0]({clientX:-1000,preventDefault(){}});assert.equal(speed,.01);
-listeners.pointermove[0]({clientX:1000,preventDefault(){}});assert.equal(speed,4);
-console.log(JSON.stringify({status:"PASS",checks:"vocabulary without intervals, stable colors, old/new JSON, zoom bounds and anchor, canvas collapse with time preserved, group-to-Unit expansion and detail callback, external controls preserve focus, frame conversion, independent preview, speed scrubbing"}));
+rateInput.value="0.35";listeners.change[0]();assert.equal(speed,.35);
+for(const handler of listeners.keydown)handler({key:"ArrowUp",shiftKey:true,preventDefault(){}});
+assert.equal(speed,.351);
+console.log(JSON.stringify({status:"PASS",checks:"vocabulary without intervals, stable colors, old/new JSON, zoom bounds and anchor, canvas collapse with time preserved, group-to-Unit expansion and detail callback, external controls preserve focus, frame conversion, independent preview, speed input and keyboard steps"}));

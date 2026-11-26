@@ -172,9 +172,7 @@ const features = NeuropixelsVideoFeatures.adaptTimedKeypoints(request, {
 `tests/validate-video-features.cjs` contains a complete executable synthetic
 adapter example with timing, confidence, missingness and transformed coordinates.
 The browser regression repeats that adapter through the actual HTML import UI.
-The example is not a pretrained model or real-video pose estimate. Direct model
-execution, plugin loading, generic DLC/SLEAP file readers, frame delivery to a
-model, and a verified real pose/model dataset remain future extensions.
+The timed-keypoint example is not a pretrained model or real-video pose estimate. The optional local frame-model adapter below adds source-integrated callbacks and frame delivery. Plugin loading, generic DLC/SLEAP file readers and a verified real pose/model dataset remain future extensions.
 
 ## Persistence and compatibility
 
@@ -241,3 +239,107 @@ independent browser-hash parity, multichunk/empty files, regular-file and size
 checks, growth/truncation/replacement, binding, no-cache, busy/lock recovery,
 origin/body limits and no persistent state writes. Empty files have a defined
 hash for algorithm parity but are not accepted as videos.
+
+## Optional local frame-model adapter
+
+The standalone application now embeds `scripts/video-model-adapter.js`. The
+existing JSON exchange remains data-only. The new optional adapter executes only
+trusted model functions deliberately integrated into the application source; it
+has no script-file loader, dynamic import, URL inference endpoint, package install,
+or pretrained model. This is not a sandbox: integrated model code has ordinary
+page privileges and must be reviewed before building/distributing that HTML.
+
+**Run pixel adapter example (first 30 s)** in the same Model features / keypoints
+section reads actual video pixels and returns RGB-channel means. This transparent
+engineering example has no weights and does not identify behaviors. It samples
+explicit half-second support bins (the final bin is clipped to video duration),
+seeks their centers, resizes to 160 x 120, then uses the existing grouping controls.
+Its output is unreviewed and can be named, edited, undone and saved normally. Short
+or constant videos may have insufficient eligible data for grouping. The button
+requires a local video File or browser-project Blob; service URL video remains on
+the prior data-only exchange path. No second operating mode is introduced.
+
+A developer can call the existing annotation controller's method from trusted
+application integration code, then build the single HTML in the normal way:
+
+```javascript
+await annotationController.runVideoModel({
+  model: { name: "my-local-model", version: "1", source: "model provenance" },
+  kind: "features", names: ["feature_a", "feature_b"],
+  units: ["unitless", "unitless"], subject: "animal-1", track: "model-features",
+  async predict({ rgba, width, height, sample }, { input, signal }) {
+    // rgba is Uint8ClampedArray in RGBA order, with width * height * 4 entries.
+    // input.annotations includes schemes, review states and prior feature runs.
+    // input.timeMapping is the unchanged video/neural mapping snapshot.
+    // Return one finite number or null for each declared feature name.
+    return myModel(rgba, width, height, input.annotations, signal);
+  }
+}, explicitlyTimedSamples, { width: 160, height: 120 });
+```
+
+`kind: "keypoints2d"` instead declares `coordinateSpace`, named keypoints and
+optional `poseNormalization`, returning ordered `[x,y,confidence]` triples or null.
+Pixel coordinates describe the resized input image, whose source and target sizes
+are saved; the adapter does not silently map coordinates to the original image.
+Every requested sample supplies `id`, `start`, `end`, and `time`; optional `frame`
+is only producer-supplied provenance. A callback cannot change these identities.
+There is no FPS-derived interval construction in the general API.
+
+`NeuropixelsVideoModels.run({request, file, model, samples, width, height, signal})`
+also returns a validated feature asset without committing it. The application
+controller uses this same API and the established feature Worker, review, undo,
+and project persistence paths. The general API accepts one immutable local Blob,
+checks its ordered-chunk content fingerprint before decoding, and verifies decoded
+duration. It never accepts an arbitrary media URL or filesystem path. Source,
+Recording, annotation document and mapping changes discard pending controller
+results. Cancel/close aborts waiting and releases the independent decoder; late
+model promises are ignored. Trusted synchronous or noncooperative model code cannot
+be forcibly interrupted by this API and must implement bounded work/cooperative
+cancellation. No untrusted-code isolation or remote privacy guarantee is implied.
+
+Decoding uses a separate video/canvas, never the main playback element. RGBA is
+read one sample at a time. Limits are 512 MiB per source, 20,000 samples, 640 x 640
+pixels per frame by area, and 60 million output pixels per run. Feature dimensions,
+cells and final JSON still obey the existing limits. Metadata plus annotation and
+mapping input is a detached deeply frozen snapshot, not mutable application state.
+The exact input snapshot and its `sha256-json/1` digest are retained under
+`featureAsset.adapter`, alongside dimensions and `local-video-model-adapter/1`.
+Repeated runs can increase document size because input provenance includes prior
+runs; the existing 25 MB feature and 50 MB combined-document limits still apply.
+Original source videos and neural files are never modified.
+
+A seek time is a requested browser sampling time, not a measured decoded-frame PTS
+or acquisition clock. Browser frame quantization, resizing, and camera position
+can affect model features; no neural coverage or biological truth follows from a
+successful decode. Unannotated intervals are not negative labels. Missing outputs
+remain explicit nulls/gaps, and candidates are never automatically reviewed.
+
+Portable check: `node tests/validate-video-model-adapter.cjs`. The optional
+`node tests/serve-video-model-check.cjs <local-video>` builds an isolated in-memory
+standalone page without replacing the distributed HTML. Open its printed localhost
+URL to exercise actual decoding, annotation snapshot access, main-product example
+button, cancellation, source replacement and a full project export/reload/import.
+Its QA neural scaffold and label are explicitly synthetic and unmatched to video.
+It does not validate a trained model, DLC/SLEAP integration or behavioral accuracy.
+
+### Local frame-adapter engineering verification (2026-11-15)
+
+The working-tree standalone build from the 4.15.2 base passed 22 focused adapter
+checks, the existing video-feature/annotation/event-response and portable UI suites,
+code-only validation and three-language Help consistency. Actual Chrome decoded the
+30,384,542-byte `side-first120s.mp4` into 16 callback samples, supplied its annotation
+snapshot, and preserved the shared video position. The main pixel-example button
+produced 60 samples. Cancellation and same-name source replacement left annotations
+unchanged. Full project export, page reload and package import restored exact feature,
+annotation, input-snapshot and digest content; all model candidates remained unreviewed.
+A 480 x 900 viewport had no document or review-dialog horizontal overflow. Evidence
+is in ignored `runtime/video-model-validation/browser-report.json`; the harness above
+is reproducible with an explicitly supplied local video. This validates engineering,
+not behavioral labels or trained-model accuracy; the neural scaffold was synthetic.
+
+The Python suite used the installed Anaconda interpreter and a simple runtime temp
+path: 55 of 57 passed. Two Windows launcher checks remained blocked by the executor's
+CIM access restriction. The original default temp path also contains URI-special
+characters that prevented 22 SQLite tests from opening; changing only the test
+process temp directory removed those errors. No service or security setting was
+changed. The standalone adapter does not depend on the optional Python launcher.

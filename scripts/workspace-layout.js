@@ -136,6 +136,7 @@
       splitter.addEventListener('pointerdown', (event) => {
         if (event.button !== 0 || event.target.closest('button') || this.state[this.collapsedKey(side)]) return;
         event.preventDefault();
+        splitter.focus({preventScroll:true});
         splitter.setPointerCapture(event.pointerId);
         this.drag = {
           side,
@@ -151,15 +152,19 @@
         const direction = side === 'probe' ? -1 : 1;
         this.setWidth(side, this.drag.startWidth + (event.clientX - this.drag.startX) * direction, false);
       });
-      const finish = (event) => {
-        if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.side !== side) return;
+      const finish = (event, cancel=false) => {
+        if (!this.drag || (event.pointerId!=null && this.drag.pointerId!==event.pointerId) || this.drag.side!==side) return;
+        if (cancel) this.setWidth(side,this.drag.startWidth,false);
+        const id=this.drag.pointerId;
         this.drag = null;
+        if(splitter.hasPointerCapture?.(id))splitter.releasePointerCapture(id);
         this.elements.layout?.classList.remove('is-resizing');
         splitter.classList.remove('active');
         this.save();
       };
       splitter.addEventListener('pointerup', finish);
-      splitter.addEventListener('pointercancel', finish);
+      splitter.addEventListener('pointercancel', e=>finish(e,true));
+      splitter.addEventListener('lostpointercapture', e=>finish(e,true));
       splitter.addEventListener('dblclick', (event) => {
         if (event.target.closest('button')) return;
         event.preventDefault();
@@ -167,6 +172,7 @@
       });
       splitter.addEventListener('keydown', (event) => {
         if (event.target.closest('button')) return;
+        if (event.key==='Escape' && this.drag?.side===side) {event.preventDefault();event.stopPropagation();finish(event,true);return;}
         if (event.key === 'Home') {
           event.preventDefault();
           this.reset();
@@ -205,6 +211,7 @@
       splitter.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return;
         event.preventDefault();
+        splitter.focus({preventScroll:true});
         splitter.setPointerCapture(event.pointerId);
         this.drag = {
           side: 'probe-height',
@@ -219,20 +226,25 @@
         if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.side !== 'probe-height') return;
         this.setProbeHeight(this.drag.startHeight + (event.clientY - this.drag.startY), false);
       });
-      const finish = (event) => {
-        if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.side !== 'probe-height') return;
+      const finish = (event, cancel=false) => {
+        if (!this.drag || (event.pointerId!=null && this.drag.pointerId!==event.pointerId) || this.drag.side!=='probe-height') return;
+        if(cancel)this.setProbeHeight(this.drag.startHeight,false);
+        const id=this.drag.pointerId;
         this.drag = null;
+        if(splitter.hasPointerCapture?.(id))splitter.releasePointerCapture(id);
         this.elements.layout?.classList.remove('is-resizing-probe-height');
         splitter.classList.remove('active');
         this.save();
       };
       splitter.addEventListener('pointerup', finish);
-      splitter.addEventListener('pointercancel', finish);
+      splitter.addEventListener('pointercancel', e=>finish(e,true));
+      splitter.addEventListener('lostpointercapture', e=>finish(e,true));
       splitter.addEventListener('dblclick', (event) => {
         event.preventDefault();
         this.setProbeHeight(DEFAULT_LAYOUT.probeHeight, true);
       });
       splitter.addEventListener('keydown', (event) => {
+        if (event.key==='Escape' && this.drag?.side==='probe-height') {event.preventDefault();event.stopPropagation();finish(event,true);return;}
         if (event.key === 'Home') {
           event.preventDefault();
           this.setProbeHeight(DEFAULT_LAYOUT.probeHeight, true);

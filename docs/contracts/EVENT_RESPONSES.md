@@ -6,29 +6,27 @@ responses locally. Python is used only for an independent developer reference.
 
 ## Use
 
-Open a local Recording, then **Event responses** in the observation toolbar.
-Choose experimental events or video annotations, an event type,
-Unit IDs, a response window and a bin width. Provide valid acquisition intervals
-as a JSON array of `[start, end]` pairs in neural seconds. The application does
-not replace unknown coverage with the last spike, the video duration or a trial
-table's extent. User-entered coverage is explicitly unverified.
-When the imported NWB actually supplies `units/obs_intervals`, **Use source
-observation intervals** intersects the valid intervals of every selected Unit,
-preserving gaps. Missing or malformed Unit coverage cannot be promoted to valid
-coverage. This is a source-reported observation claim, not independent validation
-of continuous acquisition. The checked Allen VBN sample has no such field.
-Automatically filled coverage is bound to the selected Units. Changing Unit IDs
-or using the selected/all-Units controls clears that source-derived input. A failed
-source lookup or analysis restore also clears coverage instead of leaving an old
-value to be treated as user input. Before computing, an unchanged source proof is
-checked again against the current Unit selection and observation metadata.
-An explicitly edited manual interval remains user-declared and unverified.
-A named manual interval becomes usable immediately when **Save label** is pressed,
-including after an edit; no separate review step is required. Any user-defined
-label, such as walking, uses this same path. Model-generated candidates keep their
-unconfirmed provenance until the user accepts them. No particular observed
-behavior example or publication-level validation is a prerequisite for using or
-developing this general analysis feature; there are no normal/advanced modes.
+The workspace and response dialog expose separate recording and video label sources. Allen VBN lick sensor timestamps at `processing/licking/licks/timestamps` are recording point events with the original row index and neural time. New runs start with all eligible trials and comparison off. An explicit active-trial filter is available for event types carrying that flag. A new analysis opens with the workspace source and type; restoring a saved analysis restores its own inputs.
+
+Open **Event responses** in the signal toolbar. Each new analysis opens with its inputs visible. Choose the event label and Units, using all Units, a brain region, a probe or spike view, explicit IDs, or highlighted signal rows. Filter onsets by the whole recording, the current signal interval, or custom recording times (start inclusive, end exclusive). Set the separate event-relative response window and bin width, then run. Reopen the settings above the results to revise these inputs. Advanced settings include grouping parameters. Automatic windows use the available observation intervals.
+
+In the Probe and spike selection views, select a physical probe and save the highlighted Units to the analysis list. The list records each probe and its local Unit IDs. Removing an entry updates the input for the next run. Panning and zooming in the spike picker affect that view only.
+
+**Combined probes** uses the imported spike arrays of the current session. Each source uses its own sampling rate to convert sample times to neural seconds. Equal local Unit IDs retain their separate source identities. The grouped heatmap, trial raster and saved results identify the probe and its original Unit ID. Selecting an occurrence opens that Unit on its physical probe and returns to the associated video. Kilosort inputs without session metadata require confirmation of a shared acquisition and time origin. Project exports store the source recordings and the analysis result. Reopening the combined scope rebuilds its spike index from those sources.
+With an empty field, available NWB Unit observation intervals are applied automatically,
+including known gaps. If only some selected Units have intervals, their intersection
+is used and the missing Unit IDs are recorded. Without any supplied coverage, calculation
+uses an explicit continuous-observation assumption, shown with the result and retained
+in exports and saved projects. Last spikes and video duration never establish coverage.
+Malformed supplied metadata remains an error; it is not silently treated as absent.
+Explicitly entered intervals remain user-declared, not independently verified.
+
+Named manual intervals are usable directly, including after boundary edits, without
+changing their stored review status. Model candidates retain their source and are not
+silently confirmed. Any user-defined label uses the same analysis path. No particular
+behavior example or publication-level validation is a prerequisite for the feature;
+there are no normal/advanced modes. Responses align to selected interval starts, which
+need not be true behavior onsets.
 
 The experimental selector uses only `sourceKind: experiment` rows. Historical
 annotation rows in an event asset are retained as exclusions with reason
@@ -49,7 +47,7 @@ selectors mean all subjects/tracks. Their saved values are restored before event
 identity checks. Unreviewed or differently filtered intervals retain exclusion
 reasons and are not treated as negative examples.
 
-Set clusters to zero for responses only, or select a cluster count, feature
+Responses start ungrouped. Choose **Group by response shape** to fit the displayed responses. Advanced controls include the cluster count, feature
 normalization and seed. The separate Worker can be cancelled without cancelling
 the shared activity Worker. Results show a selected Unit's mean rate and binned
 trial raster. **Show Unit at event** returns to the existing shared neural-time
@@ -58,11 +56,51 @@ Selecting a group member or **Show Unit without changing time** changes the Unit
 only. The shared time/interval and anatomical order of the main view are retained.
 **Export analysis JSON** exports results and provenance separately. In a browser
 project, **Save analysis in project** saves the latest result for this Recording.
-Export the project package for a portable backup. Opening Event responses again
-restores the saved result only after its exact source content, event selection,
+Export the project package for a portable backup. Opening a saved event analysis from the project menu
+restores its result after its exact source content, event selection,
 annotations and time mapping pass validation. Computation alone does not replace
 a previously saved result. Raw-folder inputs must first become a browser project
 to use result persistence. Different Recordings retain separate saved results.
+
+## Optional condition comparison
+
+**Event response figures** uses the two conditions and included Units of the current analysis. J shows separate trial means for each condition with identical Unit rows, time bins and colour scale. The displayed baseline is each Unit's pre-event mean within its condition when pre-event bins are present. Clustering fits once on the reference, including across probes. K overlays the two trial-averaged curves in Hz, giving each Unit equal weight within its group. L uses one selected real trial per condition and raw spike timestamps for a subset of the analysis Units. M uses the complete analysis Unit set. For each Unit and condition it divides the raw spike count in the chosen half-open time window by the number of trials and the window duration. An optional pre-event window shows absolute baseline rates separately. Hovering reads the plotted values. Exports use the same data, an opaque white background, and 2× resolution.
+
+For Allen image changes, the plots use the presentation start time. Hit and Miss in new analyses come from matching two selected labels within an explicit time window. The plot records both labels and the window. An original trial ID can identify the source row independently of this assignment. The panel references refer to the display questions in [Sun, Zhang et al., Fig. 5J–M](https://guangweizhang.com/publications/Sun%20Zhang%202025%20Science.pdf#page=8). J extends the paper's single clustered heatmap to a matched pair; L and M use the selected Units and events of the loaded recording.
+
+Choose a scalar event field with at least two observed values, then choose a reference and a second value. The values retain their source types, so the number 1 and the string "1" are distinct. Missing and other values are omitted only for the selected two-group comparison. Video annotations also expose their subject and track when varied. A fresh analysis uses an explicitly chosen event or the only available event. With multiple types and no prior choice, select one before running. Historical saved comparisons retain their original provenance. New analyses offer ordinary metadata such as stimulus or block and the explicit two-label rule.
+
+### Matching two event labels
+
+Choose the alignment label, then **Compare trials by → Match two labels (Hit / Miss)** and select a response label. The labels can come from the recording or from video annotations mapped to the same neural clock. Each trial uses the alignment-label onset as zero. The first response-label onset in `[trial onset + start, trial onset + end)` is a Hit. With no matching onset the trial is a Miss. Multiple responses still count as one Hit. The same response may match overlapping trials. A video response window extending outside known mapped video coverage is excluded. A Miss describes the supplied labels, so interpretation depends on which behavior was annotated and how completely.
+
+Advanced settings initially use **0.15 to 0.75 seconds**. Changing these values sets the local default for new analyses. A saved analysis retains its own window and label sources. Imported trial outcome flags are excluded from new condition comparisons. When all trials are Miss, that available group is displayed.
+
+### Repeated events in a response window
+
+By default, raw spike rasters mark other onsets of the alignment label with diamonds. Hovering over a row shows their count and relative times. The exported raster includes the same markers. The test uses the spike response window (left inclusive, right exclusive), independently of the label-matching window. It checks all occurrences in the selected event source and subject/track, including those outside the trial selection or in a different condition. An interval label contributes its onset. Distinct simultaneous occurrences count separately. **Exclude trials with another onset of the same label** removes each affected trial before computing rates, grouping or splitting trials. Saved results retain the selected policy, source onsets and matched response identities.
+
+### Allen presentation and trial identity
+
+An active image change keeps the measured presentation onset. When presentation `start_frame` uniquely matches trial `change_frame`, the event also keeps the original trial ID for tracing the source. This association only uses frame identity. Matching a response label uses its time on the neural clock and works with or without a trials table.
+
+For a paired comparison, the chosen reference condition supplies the fitting
+trials. The other condition uses the same Unit IDs, group assignment and row
+order. A constant reference profile excluded by shape normalization remains
+unassigned. Both conditions use the same colour scale and the same time bins.
+Selecting a trial in the raw spike raster seeks to its source time. Video
+positioning uses the recording's current mapping and media coverage.
+
+During a run, the process view follows one Unit from absolute spike times through
+event-relative spikes, pooled bin counts, firing rate and heatmap row. It uses the
+most recently highlighted Unit when included in the input. The raster previews a
+few trials. Each bin's rate uses the count from **all** included reference trials
+divided by their number and the bin duration in seconds. The clustering step
+shows actual iterations of the main fit. Its row preview uses the same ordering
+as the result heatmap. Process views can be revisited until the inputs change.
+Opening a saved result exposes **Run again** to generate a fresh process trace.
+
+Each row of the screening heatmap is one Unit. The heatmap shows change in Hz from the pre-event mean when a baseline is available, or absolute Hz otherwise. Selecting a row loads exact event-relative spike times for that Unit beside the heatmap. Grouping orders the same Units by response shape in the reference condition. PNG export uses a white plot background for both display themes.
 
 ## Event contract
 
@@ -71,12 +109,13 @@ to use result persistence. Different Recordings retain separate saved results.
 
 - Unique `id`, original `sourceId`, `sourceKind` (`experiment` or `annotation`),
   `type`, `kind` (`point` or `interval`), `start`, and optional `end`.
-- Experimental rows retain `sourceTable` and available conditions (`active`,
-  `is_change`, `omitted`, image and stimulus metadata).
+- Experimental rows retain `sourceTable` and available scalar conditions, including numeric, Boolean and text values.
 - Annotation events retain scheme, review state, subject, track, original
-  video-relative interval, source segment and candidate run identity. The
-  active scheme and shared `TimeMapping` are used. Only reviewed, labelled,
-  fully mapped intervals are included by default. Exclusions retain reasons.
+  video time, source segment and candidate run identity. Point annotations
+  carry `videoStart` and mapped `start`, with `videoEnd` and `end` set to null.
+  Duration annotations carry both endpoints in each timebase. The adapter
+  applies the active scheme and shared `TimeMapping`. By default it includes
+  reviewed, labelled events within the mapping. Exclusions retain reasons.
 
 The Allen HDF5 NWB importer reads `intervals` tables and creates this asset for
 the selected probe Recording. Only image-presentation tables with `image_name`
@@ -125,22 +164,18 @@ VBN BehaviorEcephysSession or every historical source asset.
 
 ## Numerical meaning and limits
 
-Responses align to the event start. Endpoints remain available for future
-offset/duration-aware analysis. Changing a valid interval's end without changing
-its start does not change response counts or rates. Perfect behavioral offset
-judgments are not required for start alignment. The present interval contract
-still requires both endpoints to be representable in the current time mapping;
-this is a representation limit, not an onset-analysis requirement. No extrapolated
-or fabricated neural endpoint is supplied. Bins are half-open `[left, right)`. Only windows
+Responses align to the marked timestamp for a point and to the onset for an
+interval. Video points require a mapping at one timestamp. Video intervals
+require a mapping at both endpoints and retain their end for duration-aware
+analysis. With a fixed onset, changing a valid endpoint leaves the response
+counts and rates unchanged. Bins are half-open `[left, right)`. Only windows
 fully contained in ordered, non-overlapping recording coverage are accepted;
 adjacent coverage intervals are merged. Incomplete windows are excluded, not
 zero-filled. Zero-spike Units remain present.
 
 `neuropixels-event-response/1` retains Unit/event identities, events, excluded
 events, bin edges, parameters, a `[Unit, event, bin]` uint32 count tensor and a
-`[Unit, bin]` float64 mean rate in Hz. The default bound is 8,000,000 count cells.
-The response API permits at most 4,096 Units, 5,000 bins and a configurable
-ceiling of 32,000,000 count cells. Invalid or numerically collapsed bins fail.
+`[Unit, bin]` float64 mean rate in Hz. The response API permits at most 4,096 Units, 5,000 bins per window and 32,000,000 count cells (128 MB of uint32 counts). Callers can set a lower count-cell ceiling. Presets in seconds are −0.1 to +0.4 with 0.005 bins, −2 to +3 with 0.05 bins and −120 to +120 with 1-second bins. The manual fields accept other windows and widths. Invalid or numerically collapsed bins fail.
 
 The dedicated Worker reads paired NPY payloads in blocks of 262,144 rows, verifies
 lengths/dtypes and sorted nonnegative times, and retains only selected Units.
@@ -173,8 +208,8 @@ display as zero; colors clip at ±3 with a signed key. At most 128 row blocks an
 dropping data. The exact members remain selectable and their unaggregated rates
 remain available. A pixel block is not necessarily one Unit or one response bin.
 
-Optional **Check trial split-half sensitivity** runs four balanced random event
-splits at the selected fixed cluster count and normalization. Each half recomputes
+Optional **Check trial split-half sensitivity** runs a user-selected number of balanced random event
+splits (default 50) at the selected fixed cluster count and normalization. Each half recomputes
 its own mean rates from trial counts and fits separately with a recorded seed.
 Adjusted Rand Index compares assignments on shared eligible Units, independent
 of cluster label numbering. Each split requires at least four total events,
@@ -182,8 +217,7 @@ at least max(3, k+1) shared Units, nontrivial assignments and converged fits.
 Failures retain reasons rather than being scored as zero. The result preserves
 each left-half event index (in response event order), half sizes, fit seed,
 eligible Units, exclusions and ARI, plus successful-count/mean/min/max summaries.
-The API permits 1–20 repeats; a conservative 100-million-operation work estimate
-limits extra computation. Closing/cancelling terminates the same disposable Worker.
+The UI and API accept 1–1000 repeats. A per-selection estimate uses the trial tensor size, group count and observed full-fit iterations. The form previews the maximum based on initial fit cost and the run refines it with the observed iteration count. A separate bound limits retained split provenance. When the request exceeds the budget, the result reports the feasible repeat count. Closing/cancelling terminates the same disposable Worker.
 
 These are descriptive sensitivity checks, not independent replications,
 confidence intervals, statistical significance or biological validation.

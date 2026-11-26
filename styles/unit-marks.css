@@ -1,0 +1,10 @@
+/* Per-unit marks use a star in text and a colored outline on probe maps. */
+[data-mark-ref]::after { display:inline-block; padding-inline-start:.13em; font-size:.95em; line-height:1; background-clip:text; color:transparent; }
+.unit-mark-fields { display:grid; gap:.4rem; margin-block:.5rem; }
+.unit-mark-editor { display:flex; align-items:center; gap:.5rem; }
+.unit-mark-editor input[type=text] { flex:1; min-width:0; }
+.unit-mark-editor input[type=color] { width:2.2rem; min-width:2.2rem; height:1.8rem; cursor:pointer; padding:2px; }
+.unit-mark-popup { position:fixed; inset:auto; margin:0; border:1px solid var(--line); border-radius:5px; padding:4px; color:var(--text); background:var(--panel); }
+.unit-mark-popup button,.ea-image-menu [data-mark-action] { display:block; width:100%; text-align:start; }
+[data-mark-action]::before { content:"☆"; color:var(--mark-color); margin-inline-end:.45rem; }
+[data-mark-action][aria-checked=true]::before { content:"★"; }

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-.annotation-panel { overflow: auto; min-height: 0; padding: 12px 18px 16px; background: var(--panel); border-top: 1px solid var(--line); color: var(--text-soft); font-size: 12px; scrollbar-color: var(--scrollbar) transparent; }
+.annotation-panel { overflow: auto; min-height: 0; padding: 12px 18px 16px; background: var(--panel); border-top: 1px solid var(--line); color: var(--text-soft); font-size: 0.875rem; scrollbar-color: var(--scrollbar) transparent; }
 .annotation-panel[hidden], .annotation-timeline[hidden] { display: none; }
 .annotation-panel button, .annotation-panel input, .annotation-panel select { min-height: 30px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-control); color: var(--text); font: inherit; padding: 5px 8px; }
 .annotation-panel button { cursor: pointer; }
@@ -7,16 +7,16 @@
 .annotation-panel button:disabled { opacity: .4; cursor: default; }
 .annotation-panel button:focus-visible, .annotation-panel input:focus-visible, .annotation-panel select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .annotation-panel input[type=checkbox] { min-height: auto; accent-color: var(--accent); }
-.annotation-panel label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
+.annotation-panel label { display: grid; gap: 4px; color: var(--muted); font-size: 0.8125rem; }
 .annotation-panel input { width: 160px; min-width: 0; }
 .annotation-panel p { line-height: 1.5; }
 .annotation-heading, .annotation-toolbar, .annotation-group-tools, .annotation-pagination, .annotation-auto-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 7px; }
 .annotation-heading { justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.annotation-heading strong { color: var(--text); font-size: 15px; }
-.annotation-heading span { margin-left: 10px; padding: 3px 6px; color: var(--accent); background: var(--surface-active); font-size: 11px; }
+.annotation-heading strong { color: var(--text); font-size: 1rem; }
+.annotation-heading span { margin-left: 10px; padding: 3px 6px; color: var(--accent); background: var(--surface-active); font-size: 0.8125rem; }
 .annotation-toolbar > input { width: 145px; }
 .annotation-toolbar > label select { min-width: 135px; max-width: 220px; }
-.annotation-note { margin: 8px 0 12px; color: var(--warn); font-size: 11px; }
+.annotation-note { margin: 8px 0 12px; color: var(--warn); font-size: 0.8125rem; }
 .annotation-content { display: grid; grid-template-columns: minmax(350px, 1fr) minmax(430px, 1fr); gap: 22px; }
 .annotation-group-tools { margin-bottom: 8px; }
 .annotation-group-tools label { min-width: 160px; max-width: 270px; }
@@ -25,53 +25,52 @@
 .annotation-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) 100px; gap: 8px; align-items: center; border-bottom: 1px solid var(--line-soft); padding: 3px 6px; }
 .annotation-row > input { width: auto; }
 .annotation-row > button { display: flex; min-width: 0; align-items: center; gap: 14px; background: none; border: 0; text-align: left; }
-.annotation-row > button > strong { font: 11px/1.5 Consolas, monospace; font-weight: normal; white-space: nowrap; }
+.annotation-row > button > strong { font: 0.8125rem/1.5 Consolas, monospace; font-weight: normal; white-space: nowrap; }
 .annotation-row > button > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .annotation-row.is-selected { background: var(--surface-active); }
-.annotation-review { font-size: 10px; color: var(--warn); }
+.annotation-review { font-size: 0.75rem; color: var(--warn); }
 .annotation-review.is-reviewed { color: var(--good); }
-.annotation-pagination { margin-top: 8px; align-items: center; font-size: 10px; }
+.annotation-pagination { margin-top: 8px; align-items: center; font-size: 0.75rem; }
 .annotation-pagination > span { margin-inline: auto; }
 .annotation-edit > strong { display: block; margin-bottom: 8px; color: var(--text); }
-.annotation-fields { display: grid; grid-template-columns: 110px 110px minmax(140px, 1fr) 110px 110px; gap: 8px; }
+.annotation-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,11rem),1fr)); gap: 8px; }
 .annotation-fields input { width: 100%; }
 .annotation-edit-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .annotation-edit-actions [data-action=add], .annotation-edit-actions [data-action=confirm] { border-color: var(--primary-border); background: var(--primary-bg); color: var(--primary-text); }
 .annotation-algorithm { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
 .annotation-algorithm summary { cursor: pointer; color: var(--accent); }
-.annotation-algorithm p { max-width: 780px; color: var(--muted); font-size: 11px; }
+.annotation-algorithm p { max-width: 780px; color: var(--muted); font-size: 0.8125rem; }
 .annotation-auto-controls input { width: 100px; }
 .annotation-samples { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
-.annotation-samples > strong { font-size: 11px; color: var(--muted); }
+.annotation-samples > strong { font-size: 0.8125rem; color: var(--muted); }
 .annotation-samples > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
 .annotation-sample { display: grid; gap: 5px; min-width: 0; }
 .annotation-sample video { display: block; width: 100%; max-height: 180px; background: #000; }
 .annotation-sample button { text-align: left; }
-.annotation-footer { margin-top: 12px; color: var(--muted); font-size: 10px; }
+.annotation-footer { margin-top: 12px; color: var(--muted); font-size: 0.75rem; }
 .annotation-footer[data-failed=true] { color: var(--error); }
 .annotation-timeline { display: grid; min-width: 0; padding: 0 12px 8px; background: var(--surface-low); touch-action: none; }
-.annotation-track-label { display: grid; align-content: center; padding: 4px 10px; font-size: 10px; color: var(--text-soft); }
-.annotation-track-label small { font-size: 9px; color: var(--muted); }
+.annotation-track-label { display: grid; align-content: center; padding: 4px 10px; font-size: 0.75rem; color: var(--text-soft); }
+.annotation-track-label small { font-size: 0.75rem; color: var(--muted); }
 .annotation-track-plot { min-width: 0; overflow: hidden; }
 .annotation-track-plot svg { display: block; width: 100%; height: 38px; overflow: hidden; }
 .annotation-track-plot rect { fill: var(--surface-active); stroke: var(--accent); stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
-.annotation-track-plot text { fill: var(--text-soft); font-size: 11px; pointer-events: none; }
+.annotation-track-plot text { fill: var(--text-soft); font-size: 0.8125rem; pointer-events: none; }
 .annotation-track-plot g { cursor: pointer; }
 .annotation-track-plot g:focus { outline: none; }
 .annotation-track-plot g:focus rect, .annotation-track-plot .is-selected rect { stroke: var(--text); stroke-width: 2; }
 .annotation-track-plot .is-reviewed rect { fill: var(--surface-open); stroke: var(--good); stroke-dasharray: none; }
 .annotation-track-plot line { stroke: var(--warn); stroke-width: 1.5; pointer-events: none; vector-effect: non-scaling-stroke; }
 .annotation-track-plot .annotation-edge { fill: var(--accent); cursor: ew-resize; stroke: none; }
-@media (max-width: 1650px) { .annotation-fields { grid-template-columns: repeat(3, minmax(90px, 1fr)); } }
 @media (max-width: 1050px) { .annotation-content { grid-template-columns: 1fr; } .annotation-samples > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .annotation-review-dialog { width: min(1150px, 94vw); max-height: 88vh; padding: 0; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 .annotation-review-dialog::backdrop { background: #0009; }
 .annotation-review-dialog .annotation-panel { padding: 24px; }
 .annotation-panel.is-compact { padding: 12px; overflow: visible; border: 0; }
-.annotation-instruction { margin: 0 0 10px; color: var(--text-soft); font-size: 12px; }
+.annotation-instruction { margin: 0 0 10px; color: var(--text-soft); font-size: 0.875rem; }
 .annotation-quick-actions, .annotation-context-actions, .annotation-compact-footer { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.annotation-quick-actions button, .annotation-context-actions button { font-size: 11px; }
+.annotation-quick-actions button, .annotation-context-actions button { font-size: 0.8125rem; }
 .annotation-quick-editor { margin: 12px 0; padding: 10px; border-radius: 5px; background: var(--surface-active); }
 .annotation-range-fields { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
 .annotation-range-fields input { width: 110px; font-family: Consolas, monospace; }
@@ -81,25 +80,47 @@
 .annotation-context-actions { margin-top: 8px; }
 .annotation-compact-footer { margin: 12px 0 8px; }
 .annotation-compact-footer span { flex: 1; color: var(--muted); }
-.annotation-compact-footer button { padding: 4px 7px; font-size: 11px; }
-.annotation-panel.is-compact > small { display: block; font-size: 10px; color: var(--muted); }
-.annotation-video-scale { display: flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font: 10px Consolas, monospace; }
+.annotation-compact-footer button { padding: 4px 7px; font-size: 0.8125rem; }
+.annotation-panel.is-compact > small { display: block; font-size: 0.75rem; color: var(--muted); }
+.annotation-video-scale { display: flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted); font: 0.75rem Consolas, monospace; }
 .annotation-video-scale span:first-child { margin-right: auto; }
 .annotation-video-scale span:last-child { margin-left: auto; }
-.annotation-video-scale button { padding: 4px; background: transparent; border: 0; color: var(--text-soft); cursor: pointer; font-size: 10px; }
+.annotation-video-scale button { padding: 4px; background: transparent; border: 0; color: var(--text-soft); cursor: pointer; font-size: 0.75rem; }
 .annotation-video-scale button:hover { color: var(--accent); }
 .annotation-track-plot svg { height: 46px; cursor: crosshair; border: 1px solid var(--line-soft); border-radius: 4px; }
 .annotation-track-plot .annotation-track-background { fill: var(--surface-control); stroke: none; }
 .annotation-track-plot .annotation-draft { fill: var(--canvas-selection); stroke: var(--accent); stroke-dasharray: none; pointer-events: none; }
 .annotation-track-plot .is-reviewed rect { fill: var(--good); fill-opacity: .3; }
-.annotation-track-plot text { font-size: 12px; }
+.annotation-track-plot text { font-size: 0.875rem; }
 .annotation-quick-editor { margin: 0 0 6px; padding: 8px; }
 .annotation-range-fields { margin-bottom: 6px; }
 .annotation-range-fields input { min-height: 25px; padding-block: 3px; }
 .annotation-context-actions { margin-top: 6px; }
 .annotation-context-actions button { min-height: 26px; padding: 3px 6px; }
-.annotation-track-picker { display: flex; gap: 8px; align-items: center; padding-top: 6px; color: var(--muted); font-size: 11px; }
+.annotation-track-picker { display: flex; gap: 8px; align-items: center; padding-top: 6px; color: var(--muted); font-size: 0.8125rem; }
 .annotation-track-picker select { max-width: 200px; padding: 4px; background: var(--field); color: var(--text); border: 1px solid var(--line); }
 .annotation-track-plot g > rect { fill: var(--clip-color, var(--accent)); fill-opacity: .3; stroke: var(--clip-color, var(--accent)); }
 .annotation-track-plot .is-selected > rect { stroke: var(--text); stroke-width: 2; }
 .annotation-track-plot .annotation-edge { fill-opacity: .9; }
+.annotation-label-dialog .annotation-heading { display:flex; align-items:center; gap:6px; }
+.annotation-label-dialog .annotation-heading strong { flex:1; }
+.annotation-name-form { display:grid; gap:14px; margin-top:14px; }
+.label-library-bar { display:flex; align-items:center; justify-content:space-between; margin:.8rem 0 .4rem; }
+dialog.annotation-label-dialog[open] { inset-block:min(12vh,5rem) auto; margin:0 auto; max-height:calc(100dvh - min(12vh,5rem) - 1rem); overflow:auto; scrollbar-gutter:stable; }
+.annotation-label-dialog [data-settings-select] { width:100%; padding:.25rem; background:var(--field); color:var(--text); border:1px solid var(--line); border-radius:4px; }
+.annotation-label-dialog [data-settings-select] option { padding:.28rem .5rem; }
+.annotation-name-form label, .annotation-color-field { display:grid; gap:5px; color:var(--muted); }
+.annotation-name-form input, .annotation-name-form select { min-width:0; color:var(--text); background:var(--field); border:1px solid var(--line); border-radius:4px; padding:7px; }
+.annotation-name-form input[type=color] { width:52px; height:30px; padding:2px; }
+.annotation-label-dialog { overflow:auto; max-height:85vh; }
+.annotation-library-events { display:grid; gap:5px; margin-top:16px; }
+.annotation-library-events > div { display:flex; align-items:center; justify-content:space-between; gap:.6em; }
+.annotation-library-events button { font:inherit; }
+.annotation-track-plot g[data-clip] { cursor:grab; }
+.annotation-point-hit { fill:none; stroke:transparent; stroke-width:16; pointer-events:stroke; }
+.annotation-point-pin { fill:var(--clip-color); stroke:var(--clip-color); stroke-width:2; pointer-events:none; }
+.annotation-track-plot g:focus .annotation-point-pin,
+.annotation-track-plot .is-selected .annotation-point-pin { stroke:var(--text); }
+.annotation-track-plot .annotation-ruler { fill:transparent; stroke:none; cursor:grab; }
+.annotation-track-plot .annotation-ruler:active { cursor:grabbing; }
+.annotation-settings-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }

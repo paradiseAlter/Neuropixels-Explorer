@@ -120,7 +120,7 @@
     context.fillRect(0, 0, width, height);
     context.lineCap = "butt";
     context.lineJoin = "miter";
-    context.font = '10px "Cascadia Mono", Consolas, monospace';
+    context.font = '0.75rem "Cascadia Mono", Consolas, monospace';
     return { context, width, height, ratio };
   }
 

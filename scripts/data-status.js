@@ -109,7 +109,7 @@
         key: "video",
         label: "Behavior video synchronization",
         state: recordings.some((recording) => recording?.capabilities?.video) ? "detected" : "future",
-        detail: recordings.some((recording) => recording?.capabilities?.video) ? "Video detected; synchronized viewing is available" : "Synchronized viewer ready · deterministic validation video available"
+        detail: recordings.some((recording) => recording?.capabilities?.video) ? "Video detected · see the player for alignment status" : "Synchronized viewer ready · deterministic validation video available"
       },
       {
         key: "rawVoltage",

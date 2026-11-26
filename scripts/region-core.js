@@ -352,6 +352,7 @@
     unitSchema,
     probeTrackSchema,
     experimentNumber,
+    inspect,
     scanFiles,
     readProbeTrack,
     buildSegments

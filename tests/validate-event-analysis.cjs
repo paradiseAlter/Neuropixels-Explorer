@@ -43,10 +43,19 @@ const features={shape:[5,2,4],unitIds:[10,11,12,13,14],rateHz:new Float64Array([
 test('seeded shape clusters exclude constant curves',()=>{const a=E.clusterResponses(features,{k:2,seed:7}),b=E.clusterResponses(features,{k:2,seed:7});assert.deepEqual(a,b);assert.equal(a.labels[0],a.labels[1]);assert.equal(a.labels[2],a.labels[3]);assert.notEqual(a.labels[0],a.labels[2]);assert.deepEqual(a.excludedUnits,[{unitId:14,reason:'constant_response'}]);assert.equal(a.converged,true);});
 test('cluster constraints',()=>{assert.throws(()=>E.clusterResponses(features,{k:3}),/distinct/);assert.throws(()=>E.clusterResponses(features,{k:0}),/Cluster count/);assert.throws(()=>E.clusterResponses(features,{k:2,seed:NaN}),/seed/);assert.throws(()=>E.clusterResponses(features,{k:2,normalization:'invalid'}),/normalization/);});
 function group(values){return {get:name=>values[name],keys:()=>Object.keys(values)};}
-function col(value){return {value};}
+function col(value){return {value,shape:[value.length]};}
 const tables=group({images:group({id:col([70,71,72]),start_time:col([1,3,4]),stop_time:col([1.25,3.25,4.25]),active:col([true,false,true]),is_change:col([true,true,false]),omitted:col([false,false,true]),image_name:col(['a','b','omitted'])}),bad:group({id:col([1]),start_time:col([NaN])}),trials:group({id:col([90]),start_time:col([2]),stop_time:col([3]),is_change:col([true])})});
 const mock=group({intervals:tables});
 const imported=readAllenEvents(mock,'rec','session');
+test('Allen lick sensor rows retain point times and identity without an intervals table',()=>{
+  const path='processing/licking/licks/timestamps';
+  const file=group({[path]:{shape:[3],value:[0,4.25,NaN]}});
+  const set=readAllenEvents(file,'rec','session');
+  E.validateEventSet(set,'rec');
+  assert.deepEqual(set.events.map(e=>[e.type,e.kind,e.start,e.end,e.sourceId,e.sourceTable]),[
+    ['lick','point',0,null,'0',path],['lick','point',4.25,null,'1',path]]);
+  assert.equal(set.excluded[0].reason,'invalid_timestamp');
+});
 test('NWB source rows and conditions retained',()=>{E.validateEventSet(imported,'rec');assert.equal(imported.events.length,4);assert.equal(imported.events[0].id,'images:70:0');assert.equal(imported.events[0].conditions.active,true);assert.equal(imported.events[1].conditions.active,false);assert.equal(imported.events[2].type,'omission');assert.equal(imported.excluded[0].reason,'invalid_interval');assert.equal(imported.coverage,null);assert.equal(imported.events[3].type,'trials','Trial start must never masquerade as image-change time');});
 test('NWB without events remains supported',()=>{assert.equal(readAllenEvents(group({}),'rec','session').events.length,0);});
 (async()=>{
@@ -60,12 +69,19 @@ test('NWB without events remains supported',()=>{assert.equal(readAllenEvents(gr
   await assert.rejects(core.readSelectedUnitTrains({...pair,spikeTimes:new Blob([npy(new Float64Array([0,2,1,2,3]),'<f8')])},1,[5]),/sorted/);checks++;
   const messages=[],context={self:{postMessage:m=>messages.push(m)},TextDecoder,console};
   vm.runInNewContext(core.createEventWorkerSource(E.workerSource()),context);
-  await context.self.onmessage({data:{files:pair,sampleRate:1,unitIds:[5,9],events,options:opts,limits:{chunkRows:2}}});
+  await context.self.onmessage({data:{files:pair,sampleRate:1,unitIds:[5,9],events,options:opts,retainTrains:true,limits:{chunkRows:2}}});
   assert(!messages.at(-1).error,messages.at(-1).error);assert.deepEqual(Array.from(messages.at(-1).response.counts),Array.from(E.computeResponses(selected.slice(0,2).reverse(),events,opts).counts));checks++;
+  const cached=messages.at(-1),reference=cached.response;
+  assert.deepEqual(Array.from(cached.trains,([id,times])=>[id,Array.from(times)]),[[5,[0,1,2]],[9,[1.5,3]]]);checks++;
+  const fit={k:2,seed:7,normalization:'shape'};
+  await context.self.onmessage({data:{operation:'group',reference:{shape:reference.shape,unitIds:reference.unitIds,rateHz:reference.rateHz,binEdges:reference.binEdges,parameters:reference.parameters},clusters:fit,traceUnitId:9}});
+  assert.deepEqual(Array.from(messages.at(-1).clusters.labels),E.clusterResponses(reference,fit).labels);
+  assert(messages.some(m=>m.progress?.stage==='cluster' && m.progress?.unitId===9));
+  assert(!messages.at(-1).response);checks++;
   await context.self.onmessage({data:{files:pair,sampleRate:1,unitIds:[5,9],events,options:{...opts,coverage:undefined}}});assert.match(messages.at(-1).error,/Explicit recording coverage/);checks++;
   const electrodes=group({id:col([100]),probe_id:col([1]),probe_horizontal_position:col([0]),probe_vertical_position:col([20]),location:col(['VISp'])});
-  const units=group({id:col([5,9]),spike_times_index:col([3,5]),peak_channel_id:col([100,100]),quality:col(['good','good']),spike_times:{slice:range=>new Float64Array([.1,1,2,1.5,4].slice(range[0][0],range[0][1]))}});
-  const file=group({'general/extracellular_ephys/electrodes':electrodes,units,'general/devices':group({probeC:{attrs:{probe_id:col(1),sampling_rate:col(1000)}}}),identifier:col('session'),intervals:tables});
+  const units=group({id:col([5,9]),spike_times_index:col([3,5]),peak_channel_id:col([100,100]),quality:col(['good','good']),spike_times:{shape:[5],slice:range=>new Float64Array([.1,1,2,1.5,4].slice(range[0][0],range[0][1]))}});
+  const file=group({'general/institution':col('Allen Institute for Brain Science'),'general/extracellular_ephys/electrodes':electrodes,units,'general/devices':group({probeC:{attrs:{probe_id:col(1),sampling_rate:col(1000)}}}),identifier:col('session'),intervals:tables});
   const r=await readAllen(file,'probeC');const eventAsset=r.files.find(f=>f.name==='explorer-events.json');assert(eventAsset);E.validateEventSet(JSON.parse(eventAsset.data),'allen-session-probeC');checks++;
   const files=r.files.map(a=>{const f=new File([a.data],a.name);Object.defineProperty(f,'relativePath',{value:a.path});return f;});
   const groups=core.groupExperimentFiles(files),indexed=await core.indexExperiment(groups[0]);assert(indexed.eventsFile);assert.equal(indexed.capabilities.events,true);checks++;

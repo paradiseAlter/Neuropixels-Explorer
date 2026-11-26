@@ -77,7 +77,7 @@
     return `${(size / 1024 ** order).toFixed(order > 1 ? 2 : 0)} ${units[order]}`;
   }
 
-  function groupExperimentFiles(files) {
+  function groupExperimentFiles(files, { partial = false } = {}) {
     const groups = new Map();
     [...files].forEach((file) => {
       const parts = pathOf(file).split("/").filter(Boolean);
@@ -94,7 +94,7 @@
       groups.set(directory, group);
     });
     return [...groups.values()]
-      .filter((group) => REQUIRED.some((name) => group.byName.has(name)))
+      .filter((group) => partial || REQUIRED.some((name) => group.byName.has(name)))
       .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }));
   }
 
@@ -262,9 +262,9 @@
     };
   }
 
-  async function indexExperiment(group) {
+  async function indexExperiment(group, { partial = false } = {}) {
     const missing = REQUIRED.filter((name) => !group.byName.has(name));
-    if (missing.length) throw new Error(`${group.name}: missing ${missing.join(", ")}`);
+    if (!partial && missing.length) throw new Error(`${group.name}: missing ${missing.join(", ")}`);
     const spikeTimesFile = group.byName.get("spike_times.npy");
     const spikeClustersFile = group.byName.get("spike_clusters.npy");
     const paramsFile = group.byName.get("params.py");
@@ -272,18 +272,40 @@
     const amplitudeMetricFile = group.byName.get("cluster_amplitude.tsv");
     const contaminationFile = group.byName.get("cluster_contampct.tsv");
     const [timesHeader, clustersHeader, paramsText, labelsText, amplitudeText, contaminationText] = await Promise.all([
-      readNpyHeader(spikeTimesFile),
-      readNpyHeader(spikeClustersFile),
-      paramsFile.text(),
+      spikeTimesFile && readNpyHeader(spikeTimesFile),
+      spikeClustersFile && readNpyHeader(spikeClustersFile),
+      paramsFile && paramsFile.text(),
       labelsFile ? labelsFile.text() : Promise.resolve(""),
       amplitudeMetricFile ? amplitudeMetricFile.text() : Promise.resolve(""),
       contaminationFile ? contaminationFile.text() : Promise.resolve("")
     ]);
-    if (timesHeader.shape.length !== 1 || clustersHeader.shape.length !== 1) throw new Error(`${group.name}: spike arrays must be one-dimensional`);
-    if (timesHeader.count !== clustersHeader.count) throw new Error(`${group.name}: spike array lengths differ`);
-    const sampleRate = parseSampleRate(paramsText);
-    const lastSample = await readNpyLastValue(spikeTimesFile, timesHeader);
+    for (const [header,file] of [[timesHeader,spikeTimesFile],[clustersHeader,spikeClustersFile]]) {
+      if (!header) continue;
+      if (header.shape.length !== 1) throw new Error(`${file.name}: spike arrays must be one-dimensional`);
+      if (header.dataOffset + header.count * header.itemSize !== file.size) throw new Error(`${file.name}: NPY size does not match its shape`);
+    }
+    if (timesHeader && clustersHeader && timesHeader.count !== clustersHeader.count) throw new Error(`${group.name}: spike array lengths differ`);
+    const sampleRate = paramsFile ? parseSampleRate(paramsText) : null;
+    const lastSample = timesHeader ? await readNpyLastValue(spikeTimesFile, timesHeader) : null;
     const clusterLabels = parseClusterLabels(labelsText);
+    const unitSummaryMap = new Map();
+    if(missing.length && clustersHeader){
+      // Rows are independent; bound memory even for recordings with millions of spikes.
+      const {dataOffset,itemSize,descr,count}=clustersHeader;
+      for(let start=0;start<count;start+=131072){
+        const size=Math.min(131072,count-start),offset=dataOffset+start*itemSize;
+        const bytes=await spikeClustersFile.slice(offset,offset+size*itemSize).arrayBuffer();
+        const values=typedData(bytes,{...clustersHeader,count:size,dataOffset:0}),view=values?null:new DataView(bytes);
+        for(let row=0;row<size;row++){
+          const id=values?Number(values[row]):scalarFromDataView(view,row*itemSize,descr);
+          const entry=unitSummaryMap.get(id);
+          if(entry)entry.count++;else unitSummaryMap.set(id,{id,count:1});
+        }
+      }
+      const labeled=new Set(clusterLabels.map(unit=>unit.id));
+      for(const id of unitSummaryMap.keys())if(!labeled.has(id))clusterLabels.push({id,quality:"unknown"});
+      clusterLabels.sort((a,b)=>a.id-b.id);
+    }
     const usefulFiles = group.files.filter((file) => USEFUL_NAMES.has(fileNameOf(file)));
     const totalBytes = group.files.reduce((total, file) => total + Number(file.size || 0), 0);
     return {
@@ -296,9 +318,11 @@
       eventsFile: group.byName.get("explorer-events.json") || null,
       coverageFile: group.byName.get("explorer-coverage.json") || null,
       sampleRate,
-      spikeCount: timesHeader.count,
-      duration: Number(lastSample || 0) / sampleRate,
+      missingInputs: missing,
+      spikeCount: timesHeader?.count ?? clustersHeader?.count ?? null,
+      duration: lastSample !== null && sampleRate ? Number(lastSample) / sampleRate : null,
       clusterLabels,
+      unitSummaryMap,
       amplitudeByCluster: parseClusterMetric(amplitudeText, ["amplitude"]),
       contaminationByCluster: parseClusterMetric(contaminationText, ["contampct", "contamination", "contamination_pct"]),
       totalBytes,
@@ -307,6 +331,34 @@
       capabilities: capabilitiesFor(group),
       headers: { spikeTimes: timesHeader, spikeClusters: clustersHeader }
     };
+  }
+
+  // Preview the source rows directly, including before a sampling rate or Unit assignment is available.
+  async function readSpikeRows(recording, start = 0, length = 128) {
+    const count = Math.min(length, Math.max(0, recording.spikeCount - start));
+    async function read(file, header) {
+      if (!file) return null;
+      const offset = header.dataOffset + start * header.itemSize;
+      const view = new DataView(await file.slice(offset, offset + count * header.itemSize).arrayBuffer());
+      return Array.from({length:count}, (_, i) => scalarFromDataView(view, i * header.itemSize, header.descr));
+    }
+    const [samples, ids] = await Promise.all([
+      read(recording.spikeTimesFile, recording.headers.spikeTimes),
+      read(recording.spikeClustersFile, recording.headers.spikeClusters)
+    ]);
+    return { samples, ids, start, count };
+  }
+
+  async function previewKilosortFile(file) {
+    if(!fileNameOf(file).endsWith(".npy")) {
+      const text=await file.slice(0,1024).text();
+      return text.split(/\r?\n/).slice(0,4).map(line=>line.slice(0,160)).join("\n");
+    }
+    const header=await readNpyHeader(file);
+    const length=Math.min(12,header.count);
+    const view=new DataView(await file.slice(header.dataOffset,header.dataOffset+header.itemSize*length).arrayBuffer());
+    const values=Array.from({length},(_,i)=>Number(scalarFromDataView(view,i*header.itemSize,header.descr).toPrecision(6)));
+    return header.shape.join(" × ")+" · "+header.descr+"\n"+values.join(", ")+(header.count>length?" …":"");
   }
 
   async function validateSupplementFile(recording, file) {
@@ -380,7 +432,7 @@
     return total / values.length;
   }
 
-  const ACTIVITY_PREPROCESSING_VERSION = "3.0.0";
+  const ACTIVITY_PREPROCESSING_VERSION = "3.1.0";
   const ACTIVITY_LEVELS = Object.freeze([128, 256, 512, 1024, 2048]);
 
   function activityFileFingerprint(files, sampleRate, dataVersion = 0) {
@@ -441,7 +493,7 @@
     const duration = times.header.count ? Number(times.valueAt(times.header.count - 1)) / Number(sampleRate) : 0;
     const binCount = Math.max(64, Math.min(2048, Math.round(Number(requestedBinCount) || 512)));
     const binSeconds = duration > 0 ? duration / binCount : 1;
-    const countsByUnit = new Map();
+    const countsByUnit = new Map((options.silentUnitIds || []).map(id => [id, 0]));
     const positionSums = new Map();
     const templatesByUnit = new Map();
 
@@ -466,7 +518,8 @@
 
     const sortedIds = [...countsByUnit.keys()].sort((left, right) => left - right);
     const unitIndex = new Map(sortedIds.map((id, index) => [id, index]));
-    const unitIds = Int32Array.from(sortedIds);
+    const IdArray = sortedIds.some(id => id < -2147483648 || id > 2147483647) ? Float64Array : Int32Array;
+    const unitIds = IdArray.from(sortedIds);
     const unitCounts = new Uint32Array(unitIds.length);
     const unitRateHz = new Float32Array(unitIds.length);
     const unitX = new Float32Array(unitIds.length);
@@ -554,8 +607,8 @@
     return result;
   }
 
-  function buildActivityPyramidBuffers(buffers, sampleRate, sourceFingerprint = "") {
-    const finest = buildActivityOverviewBuffers(buffers, sampleRate, ACTIVITY_LEVELS[ACTIVITY_LEVELS.length - 1], { includeCounts: true });
+  function buildActivityPyramidBuffers(buffers, sampleRate, sourceFingerprint = "", silentUnitIds = []) {
+    const finest = buildActivityOverviewBuffers(buffers, sampleRate, ACTIVITY_LEVELS[ACTIVITY_LEVELS.length - 1], { includeCounts: true, silentUnitIds });
     const levels = [];
     for (const binCount of ACTIVITY_LEVELS) {
       let matrices;
@@ -887,6 +940,41 @@
     };
   }
 
+  function signalIndex(buffers) {
+    const times = parseNpyArrayBuffer(buffers.spikeTimes), ids = parseNpyArrayBuffer(buffers.spikeClusters);
+    const vector=h=>h.shape.length===1 || (h.shape.length===2 && h.shape[1]===1);
+    if (!vector(times.header) || !vector(ids.header) || times.header.count !== ids.header.count || !/[iu][1248]$/.test(ids.header.descr))
+      throw Error("Invalid paired spike arrays");
+    let previous = -Infinity;
+    const integerTimes = /[iu][1248]$/.test(times.header.descr);
+    for (let i=0; i<times.header.count; i++) {
+      const sample = times.valueAt(i);
+      if (!Number.isFinite(sample) || sample<0 || sample<previous || (integerTimes && !Number.isSafeInteger(sample)) || !Number.isSafeInteger(ids.valueAt(i)))
+        throw Error("Invalid or unordered spike data");
+      previous = sample;
+    }
+    return {times, ids};
+  }
+  function signalWindow(index, sampleRate, unitIds, start, end) {
+    if (!Number.isFinite(sampleRate) || sampleRate<=0 || !Number.isFinite(start) || !Number.isFinite(end) || end<=start ||
+        !Array.isArray(unitIds) || unitIds.some(id=>!Number.isSafeInteger(id))) throw Error("Invalid signal window");
+    const {times,ids}=index;
+    const rows = new Map(unitIds.map(id=>[id,[]]));
+    const lowerBound=time=>{
+      let lo=0, hi=times.header.count;
+      while(lo<hi) {
+        const mid=Math.floor((hi+lo)/2);
+        if(times.valueAt(mid)/sampleRate<time) lo=mid+1; else hi=mid;
+      }
+      return lo;
+    };
+    const stop=lowerBound(end);
+    for(let i=lowerBound(start); i<stop; i++) {
+      const row=rows.get(ids.valueAt(i));
+      if(row) row.push(times.valueAt(i)/sampleRate);
+    }
+    return [...rows].map(([id,values])=>[id,Float64Array.from(values)]);
+  }
   function intervalActivityBuffers(buffers, sampleRate, start, end, duration) {
     const times = parseNpyArrayBuffer(buffers.spikeTimes);
     const clusters = parseNpyArrayBuffer(buffers.spikeClusters);
@@ -908,6 +996,11 @@
   async function readSelectedUnitTrains(files, sampleRate, unitIds, options = {}, progress = () => {}) {
     if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Array.isArray(unitIds) || !unitIds.length || unitIds.length > 4096 || unitIds.some(id => !Number.isSafeInteger(id)) || new Set(unitIds).size !== unitIds.length) throw new Error('Invalid sample rate or Unit selection');
     const maxSpikes = options.maxSelectedSpikes ?? 8000000, chunkRows = options.chunkRows ?? 262144;
+    const windows = options.timeWindows;
+    if (windows != null && (!Array.isArray(windows) || windows.some((w,i)=>!Array.isArray(w) || w.length!==2 || !w.every(Number.isFinite) || w[0]<0 || w[1]<=w[0] || (i>0 && w[0]<windows[i-1][1])))) throw new Error('Invalid neural-time reading windows');
+    let windowIndex = 0;
+    const timeRange = options.timeRange ?? null;
+    if (timeRange !== null && (!Array.isArray(timeRange) || timeRange.length !== 2 || !timeRange.every(Number.isFinite) || timeRange[0] < 0 || timeRange[1] <= timeRange[0])) throw new Error('Invalid neural-time reading range');
     if (!Number.isSafeInteger(maxSpikes) || maxSpikes < 1 || maxSpikes > 32000000 || !Number.isSafeInteger(chunkRows) || chunkRows < 1 || chunkRows > 1048576) throw new Error('Invalid spike reading memory limit');
     async function header(file) {
       if (!file?.slice || !Number.isSafeInteger(file.size)) throw new Error('Missing spike array file');
@@ -923,23 +1016,32 @@
     }
     const a = await header(files.spikeTimes), b = await header(files.spikeClusters);
     if (a.count !== b.count || !/[iu][1248]$/.test(b.descr)) throw new Error('Spike array lengths differ or Unit IDs are not integers');
+    const integerTime = /[iu][1248]$/.test(a.descr);
+    const littleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
     const arrays = new Map(unitIds.map(id => [id, []])); let total = 0, previous = -Infinity;
     for (let offset = 0; offset < a.count; offset += chunkRows) {
       const n = Math.min(chunkRows, a.count - offset);
       const [times, ids] = await Promise.all([[files.spikeTimes, a], [files.spikeClusters, b]].map(async ([file, h]) => {
         const buffer = await file.slice(h.dataOffset + offset * h.itemSize, h.dataOffset + (offset + n) * h.itemSize).arrayBuffer();
         if (buffer.byteLength !== n * h.itemSize) throw new Error('Spike array changed or was truncated during reading');
-        return new DataView(buffer);
+        const native = littleEndian && typedData(buffer, {...h, dataOffset:0, count:n});
+        if (native) return i => Number(native[i]);
+        const view = new DataView(buffer);
+        return i => scalarFromDataView(view, i * h.itemSize, h.descr);
       }));
       for (let i = 0; i < n; i++) {
-        const sample = scalarFromDataView(times, i * a.itemSize, a.descr);
-        if (/[iu][1248]$/.test(a.descr) && !Number.isSafeInteger(sample)) throw new Error('Spike sample index exceeds exact integer precision');
+        const sample = times(i);
+        if (integerTime && !Number.isSafeInteger(sample)) throw new Error('Spike sample index exceeds exact integer precision');
         const time = sample / sampleRate;
-        const id = scalarFromDataView(ids, i * b.itemSize, b.descr);
+        const id = ids(i);
         if (!Number.isFinite(time) || time < 0 || time < previous || !Number.isSafeInteger(id)) throw new Error('Spike arrays must have sorted nonnegative times and safe integer Unit IDs');
         previous = time;
+        if (windows) {
+          while (windowIndex < windows.length && time >= windows[windowIndex][1]) windowIndex++;
+          if (windowIndex === windows.length || time < windows[windowIndex][0]) continue;
+        }
         const selected = arrays.get(id);
-        if (selected) { if (++total > maxSpikes) throw new Error('Selected spike trains exceed the memory limit; select fewer Units'); selected.push(time); }
+        if (selected && (!timeRange || (time >= timeRange[0] && time < timeRange[1]))) { if (++total > maxSpikes) throw new Error('Selected spike trains exceed the memory limit; select fewer Units or a shorter range'); selected.push(time); }
       }
       progress({ phase: 'reading-spikes', completed: offset + n, total: a.count });
     }
@@ -951,17 +1053,73 @@
     return `"use strict";
       const parseNpyHeaderBuffer = ${parseNpyHeaderBuffer.toString()};
       const scalarFromDataView = ${scalarFromDataView.toString()};
+      const typedData = ${typedData.toString()};
       const readSelectedUnitTrains = ${readSelectedUnitTrains.toString()};
       ${eventSource}
+      function fit(reference, options, stability, trace) {
+        let clusters=null;
+        for(let k=options?.k||0;k>0;k--){
+          try{clusters=EventAnalysis.clusterResponses(reference,{...options,k},trace);break;}
+          catch(error){
+            if(!options.auto || !/Not enough eligible Units|Fewer distinct response profiles|Empty cluster/.test(error.message))throw error;
+          }
+        }
+        trace?.order(reference, clusters);
+        const diagnostics = stability ? EventAnalysis.splitHalfStability(reference,clusters,stability,progress=>self.postMessage({progress})) : null;
+        return {clusters,diagnostics};
+      }
       self.onmessage = async ({data}) => {
         try {
-          EventAnalysis.validateEventSet(data.events, data.options.recordingId);
-          const trains = await readSelectedUnitTrains(data.files, data.sampleRate, data.unitIds, data.limits, progress => self.postMessage({progress}));
+          if(data.operation==="group"){
+            const reference=data.reference;
+            const trace=EventAnalysis.createProcessTrace(progress=>self.postMessage({progress}),data.traceUnitId,
+              {unitId:data.traceUnitId,referenceOutcome:reference.condition,conditionField:EventAnalysis.comparisonOf(reference.parameters)?.field});
+            self.postMessage(fit(reference,data.clusters,data.stability,trace));
+            return;
+          }
+          let limits = data.limits;
+          if (data.operation !== 'trains') {
+            const plan = EventAnalysis.validateResponsePlan(data.unitIds,data.events,data.options);
+            const timeWindows = EventAnalysis.eventWindows(plan.events,plan.edges[0],plan.edges[plan.n]);
+            limits = {...limits,timeWindows};
+          }
+          const trains = await readSelectedUnitTrains(data.files, data.sampleRate, data.unitIds, limits, progress => self.postMessage({progress}));
+          if (data.operation==='trains') {
+            for (const train of trains) train.spikes = Float64Array.from(train.spikes);
+            self.postMessage({trains}, trains.map(train => train.spikes.buffer));
+            return;
+          }
           self.postMessage({progress:{phase:'computing-responses'}});
-          const response = EventAnalysis.computeResponses(trains, data.events, data.options);
-          const clusters = data.clusters ? EventAnalysis.clusterResponses(response, data.clusters) : null;
-          const diagnostics = data.stability ? EventAnalysis.splitHalfStability(response,clusters,data.stability,progress=>self.postMessage({progress})) : null;
-          self.postMessage({response,clusters,diagnostics}, [response.counts.buffer, response.rateHz.buffer]);
+          const trace = data.traceProcess === true
+            ? EventAnalysis.createProcessTrace(progress => self.postMessage({progress}), data.traceUnitId) : null;
+          const response = EventAnalysis.computeResponses(trains, data.events, data.options, trace);
+          const comparison=EventAnalysis.comparisonOf(response.parameters);
+          const reference = comparison && (data.clusters || data.stability)
+            ? EventAnalysis.conditionResponse(response, comparison.values[0]) : response;
+          const grouping=fit(reference,data.clusters,data.stability,trace);
+          const transfers=[response.counts.buffer,response.rateHz.buffer];
+          const cached=data.retainTrains && trains.reduce((n,t)=>n+t.spikes.length*8,0)<=32*1024*1024
+            ? trains.map(t=>[t.unitId,Float64Array.from(t.spikes)]) : null;
+          if(cached)for(const [,spikes] of cached)transfers.push(spikes.buffer);
+          self.postMessage({response,...grouping,trains:cached},transfers);
+        } catch (error) { self.postMessage({error:error?.message || String(error)}); }
+      };`;
+  }
+
+  function createPopulationDynamicsWorkerSource(dynamicsSource) {
+    if (typeof dynamicsSource !== 'string' || !dynamicsSource) throw new Error('Population dynamics source is required');
+    return `"use strict";
+      const parseNpyHeaderBuffer = ${parseNpyHeaderBuffer.toString()};
+      const scalarFromDataView = ${scalarFromDataView.toString()};
+      const typedData = ${typedData.toString()};
+      const readSelectedUnitTrains = ${readSelectedUnitTrains.toString()};
+      ${dynamicsSource}
+      self.onmessage = async ({data}) => {
+        try {
+          const trains = await readSelectedUnitTrains(data.files, data.sampleRate, data.unitIds,
+            {...data.limits,timeRange:[data.options.start,data.options.end]}, progress => self.postMessage({progress}));
+          const result = PopulationDynamics.run(trains, data.options, progress => self.postMessage({progress}));
+          self.postMessage({result});
         } catch (error) { self.postMessage({error:error?.message || String(error)}); }
       };`;
   }
@@ -984,6 +1142,8 @@
       const selectActivityPyramidLevel = ${selectActivityPyramidLevel.toString()};
       const analyzeUnitBuffers = ${analyzeUnitBuffers.toString()};
       const intervalActivityBuffers = ${intervalActivityBuffers.toString()};
+      const signalIndex = ${signalIndex.toString()};
+      const signalWindow = ${signalWindow.toString()};
       const cache = new Map();
       const MAX_RESIDENT = 2;
 
@@ -1027,19 +1187,16 @@
       }
 
       async function loadEntry(message) {
-        if (cache.has(message.experimentKey)) {
-          const existing = cache.get(message.experimentKey);
-          cache.delete(message.experimentKey);
-          cache.set(message.experimentKey, existing);
-          return existing;
-        }
-        const buffers = {};
-        for (const [key, file] of Object.entries(message.files || {})) {
-          if (file) buffers[key] = await file.arrayBuffer();
-        }
-        const entry = { buffers };
-        cache.set(message.experimentKey, entry);
+        const key=message.experimentKey, entry=cache.get(key) || {buffers:{}, loading:new Map()};
+        cache.delete(key);
+        cache.set(key,entry);
         while (cache.size > MAX_RESIDENT) cache.delete(cache.keys().next().value);
+        for (const [key, file] of Object.entries(message.files || {})) {
+          if (!file || entry.buffers[key]) continue;
+          if (!entry.loading.has(key)) entry.loading.set(key,file.arrayBuffer()
+            .then(buffer=>{entry.buffers[key]=buffer;}).finally(()=>entry.loading.delete(key)));
+          await entry.loading.get(key);
+        }
         return entry;
       }
 
@@ -1060,7 +1217,7 @@
               self.postMessage({ type: "activity-overview-progress", requestId: message.requestId, phase: "reading", progress: 18 });
               const entry = await loadEntry(message);
               self.postMessage({ type: "activity-overview-progress", requestId: message.requestId, phase: "building-pyramid", progress: 38 });
-              pyramid = buildActivityPyramidBuffers(entry.buffers, Number(message.sampleRate), String(message.sourceFingerprint || ""));
+              pyramid = buildActivityPyramidBuffers(entry.buffers, Number(message.sampleRate), String(message.sourceFingerprint || ""), message.silentUnitIds);
               self.postMessage({ type: "activity-overview-progress", requestId: message.requestId, phase: "writing", progress: 88 });
               await persistentActivityPut(persistentKey, pyramid);
             }
@@ -1072,6 +1229,12 @@
             return;
           }
           const entry = await loadEntry(message);
+          if (message.type === "signal-window") {
+            entry.signalIndex ||= signalIndex(entry.buffers);
+            const rows=signalWindow(entry.signalIndex,message.sampleRate,message.unitIds,message.start,message.end);
+            self.postMessage({type:"signal-window-result",requestId:message.requestId,rows},rows.map(([,t])=>t.buffer));
+            return;
+          }
           if (message.type === "interval-activity") {
             self.postMessage({ type: "interval-result", requestId: message.requestId, ...intervalActivityBuffers(entry.buffers, message.sampleRate, message.start, message.end, message.duration) });
             return;
@@ -1094,6 +1257,8 @@
     LABEL_FILES,
     USEFUL_NAMES,
     intervalActivityBuffers,
+    signalIndex,
+    signalWindow,
     pathOf,
     fileNameOf,
     roleForFile,
@@ -1105,12 +1270,17 @@
     readNpyHeader,
     parseNpyArrayBuffer,
     readSelectedUnitTrains,
+    typedData,
+    scalarFromDataView,
     createEventWorkerSource,
+    createPopulationDynamicsWorkerSource,
     parseSampleRate,
     parseClusterLabels,
     parseClusterMetric,
     capabilitiesFor,
     indexExperiment,
+    readSpikeRows,
+    previewKilosortFile,
     validateSupplementFile,
     mergeSupplementFiles,
     ACTIVITY_PREPROCESSING_VERSION,

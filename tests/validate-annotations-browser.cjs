@@ -1,6 +1,7 @@
 "use strict";
 // Run against a local Explorer containing a representative recording.
 // Requires Playwright, ANNOTATION_TEST_URL and ANNOTATION_TEST_VIDEO.
+const {setExplorerPreference}=require('./workspace-preferences.cjs');
 const { chromium } = require("playwright");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,6 +11,13 @@ const assert = require("node:assert/strict");
   fs.mkdirSync(output, { recursive: true });
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, acceptDownloads: true });
+  const fileAction = async action => {
+    const button=page.locator(`[data-action="${action}"]`);
+    if(!await button.isVisible())await button.locator("xpath=ancestor::details[1]/summary").click();
+    await button.click();
+  };
+  // Exercise the download fallback. Native writable files are checked in validate-annotation-editing-browser.
+  await page.addInitScript(()=>{window.showSaveFilePicker=undefined;});
   const errors = []; page.on("pageerror", (e) => errors.push(e.message));
   try {
     await page.goto(process.env.ANNOTATION_TEST_URL || "http://127.0.0.1:8790/?database=1");
@@ -42,7 +50,7 @@ const assert = require("node:assert/strict");
     await page.locator('[data-scheme]').selectOption({ label: "Default" });
     assert.equal(await page.locator(".annotation-review.is-reviewed").count(), 1);
     await page.screenshot({ path: path.join(output, "02-manual-annotation.png") });
-    const downloadEvent = page.waitForEvent("download"); await page.locator('[data-action="save"]').click();
+    const downloadEvent = page.waitForEvent("download"); await fileAction("save");
     const download = await downloadEvent; await download.saveAs(path.join(output, "ui-project.json"));
     const saved = JSON.parse(fs.readFileSync(path.join(output, "ui-project.json"), "utf8"));
     assert.equal(saved.segments.length, 1);
@@ -81,8 +89,8 @@ const assert = require("node:assert/strict");
     await page.waitForFunction(() => { const v = document.querySelector("#behavior-video"); return !v.paused && v.currentTime >= 1 && v.currentTime < 2; });
     await page.locator('[data-action="loop"]').click();
     await page.locator("#behavior-video").evaluate((v) => v.pause());
-    assert.match(await page.locator("#annotation-timeline").getAttribute("title"), /unverified|未验证|未核实|sin verificar|no verificada/i);
-    const csvEvent = page.waitForEvent("download"); await page.locator('[data-action="csv"]').click();
+    assert.match(await page.locator("[data-sync-note]").innerText(), /unverified|未验证|尚未验证|未核实|sin verificar|no verificada/i);
+    const csvEvent = page.waitForEvent("download"); await fileAction("csv");
     await (await csvEvent).saveAs(path.join(output, "ui-export.csv"));
     assert(fs.readFileSync(path.join(output, "ui-export.csv"), "utf8").includes('"unverified"'));
     // The public demo is processed locally; no true behavior accuracy is implied.
@@ -103,7 +111,7 @@ const assert = require("node:assert/strict");
     assert(await page.locator("[data-samples] video").count() > 0);
     await page.screenshot({ path: path.join(output, "07-group-video-previews.png") });
     await page.locator(".annotation-heading").scrollIntoViewIfNeeded();
-    const resultsEvent = page.waitForEvent("download"); await page.locator('[data-action="save"]').click();
+    const resultsEvent = page.waitForEvent("download"); await fileAction("save");
     await (await resultsEvent).saveAs(path.join(output, "discovery-project.json"));
     const project = JSON.parse(fs.readFileSync(path.join(output, "discovery-project.json"), "utf8"));
     assert(project.segments.length > 1); assert.equal(project.runs.length, 1);
@@ -112,7 +120,7 @@ const assert = require("node:assert/strict");
     await page.screenshot({ path: path.join(output, "04-ultrawide.png") });
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.locator('[data-action="close"]').click();
-    await page.locator("#language-select").selectOption("zh-CN");
+    await setExplorerPreference(page,"#language-select","zh-CN");
     await page.locator('[data-action="review"]').click();
     await page.screenshot({ path: path.join(output, "05-chinese.png") });
     await page.reload();

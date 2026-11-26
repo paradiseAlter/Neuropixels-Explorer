@@ -24,31 +24,35 @@
     finite(start, "start"); finite(end, "end");
     check(start >= 0 && end > start && end <= duration + 1e-6, "Interval must be inside the video, with start < end");
   }
+  function checkKind(kind) { check(kind === "point" || kind === "interval", "Invalid annotation event kind"); }
+  function labelKind(doc, name) { return own(doc.labelKinds, name) ? doc.labelKinds[name] : "interval"; }
   function create(context) {
     return { schema: SCHEMA, context: clone(context), runs: [], segments: [], schemes: [
       { id: "default", name: "Default", mappings: {}, labels: {}, reviewed: {}, groups: {} }
     ], activeSchemeId: "default", updatedAt: new Date().toISOString() };
   }
   function scheme(doc) { return doc.schemes.find((s) => s.id === doc.activeSchemeId); }
-  function groupKey(doc, segment) { return scheme(doc).groups[segment.id] || (segment.runId ? `${segment.runId}/${segment.groupId}` : "manual"); }
-  function label(doc, segment) {
-    const s = scheme(doc);
-    return own(s.labels, segment.id) ? s.labels[segment.id] : s.mappings[groupKey(doc, segment)] || "";
+  function groupKey(doc, segment, s=scheme(doc)) { return s.groups[segment.id] || (segment.runId ? `${segment.runId}/${segment.groupId}` : "manual"); }
+  function label(doc, segment, s=scheme(doc)) {
+    return own(s.labels, segment.id) ? s.labels[segment.id] : s.mappings[groupKey(doc, segment, s)] || "";
   }
   function reviewed(doc, segment) { return scheme(doc).reviewed[segment.id] === true; }
   const PALETTE = ["#67c3cf", "#d99bea", "#edbd62", "#8acb91", "#ee90ab", "#8dabee", "#e49b72", "#bccb6d"];
+  function nextLabelColor(doc) {
+    const used = new Set(Object.values(doc.labelColors || {}));
+    let index = used.size, color;
+    do {
+      color = PALETTE[index] || `hsl(${(index * 137.508 % 360).toFixed(3)} 65% 68%)`;
+      index++;
+    } while (used.has(color));
+    return color;
+  }
   function ensureColors(doc) {
     doc.labelColors ||= {};
     for (const s of doc.schemes) {
       for (const value of [...(doc.vocabulary || []), ...Object.values(s.labels), ...Object.values(s.mappings)]) {
         if (!value || own(doc.labelColors, value)) continue;
-        const used = new Set(Object.values(doc.labelColors));
-        let index = used.size, color;
-        do {
-          color = PALETTE[index] || `hsl(${(index * 137.508 % 360).toFixed(3)} 65% 68%)`;
-          index++;
-        } while (used.has(color));
-        Object.defineProperty(doc.labelColors, value, { value: color, enumerable: true, writable: true, configurable: true });
+        Object.defineProperty(doc.labelColors, value, { value: nextLabelColor(doc), enumerable: true, writable: true, configurable: true });
       }
     }
     return doc;
@@ -58,8 +62,8 @@
     if (!doc) return [];
     return doc.segments.filter(s => !track || JSON.stringify([s.subject, s.track]) === track).map(s => ({
       id: s.id, label: label(doc, s), color: color(doc, label(doc, s)), subject: s.subject, track: s.track,
-      start: mapping.videoToNeural(s.start), end: mapping.videoToNeural(s.end)
-    })).filter(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start);
+      start: mapping.videoToNeural(s.start), end: mapping.videoToNeural(s.end), ...(s.kind === "point" ? { kind: "point" } : {})
+    })).filter(s => Number.isFinite(s.start) && Number.isFinite(s.end) && (s.kind === "point" ? s.end === s.start : s.end > s.start));
   }
   function validate(doc, context) {
     check(doc?.schema === SCHEMA, "Unsupported annotation project version");
@@ -73,7 +77,11 @@
     const ids = new Set();
     doc.segments.forEach((s) => {
       text(s.id, "segment ID"); check(!ids.has(s.id), "Duplicate segment ID"); ids.add(s.id);
-      interval(s.start, s.end, context.duration);
+      if (own(s, "kind")) checkKind(s.kind);
+      if (s.kind === "point") {
+        finite(s.start, "point time");
+        check(s.start === s.end && s.start >= 0 && s.start <= context.duration + 1e-6, "Point must have one timestamp inside the video");
+      } else interval(s.start, s.end, context.duration);
       text(s.subject, "subject"); text(s.track, "track");
       check(s.runId == null || runs.has(s.runId), "Unknown algorithm run");
       if (s.runId != null) text(s.groupId, "group ID");
@@ -104,6 +112,10 @@
       check(colors.every(c => typeof c === "string" && (/^#[a-f\d]{6}$/i.test(c) || /^hsl\(\d+(?:\.\d+)? 65% 68%\)$/.test(c))), "Invalid label color");
       check(new Set(colors).size === colors.length, "Label colors must be distinct");
     }
+    if (doc.labelKinds != null) {
+      check(typeof doc.labelKinds === "object" && !Array.isArray(doc.labelKinds), "Invalid label event kinds");
+      for (const [name, kind] of Object.entries(doc.labelKinds)) { text(name, "label name"); checkKind(kind); }
+    }
     return ensureColors(clone(doc));
   }
   function change(doc, fn) {
@@ -112,10 +124,12 @@
     next.updatedAt = new Date().toISOString();
     return validate(next, doc.context);
   }
-  function addLabel(doc, value) {
+  function addLabel(doc, value, kind, color) {
     const name = text(String(value).trim(), "label name");
     return change(doc, next => {
       next.vocabulary = [...new Set([...(next.vocabulary || []), ...Object.keys(next.labelColors || {}), name])];
+      if (kind !== undefined) (next.labelKinds ||= {})[name] = kind;
+      if (color !== undefined) (next.labelColors ||= {})[name] = color;
     });
   }
   function zoomRange(range, anchor, factor, duration, fps = 30) {
@@ -149,10 +163,12 @@
       });
     });
   }
-  function add(doc, { start, end, label: value = "", subject = "animal-1", track = "behavior" }) {
+  function add(doc, { start, end, label: value = "", kind = end === undefined ? labelKind(doc, value) : "interval", subject = "animal-1", track = "behavior" }) {
+    checkKind(kind);
+    if (kind === "point" && end === undefined) end = start;
     return change(doc, (next, s) => {
       const id = uid();
-      next.segments.push({ id, start, end, subject, track, runId: null, groupId: null,
+      next.segments.push({ id, start, end, ...(kind === "point" ? { kind } : {}), subject, track, runId: null, groupId: null,
         origin: { method: "manual", start, end } });
       s.labels[id] = value.trim(); s.reviewed[id] = Boolean(value.trim());
     });
@@ -162,16 +178,25 @@
       const segment = next.segments.find((a) => a.id === id);
       check(segment, "Select a segment first");
       for (const key of ["start", "end", "subject", "track"]) if (own(values, key)) segment[key] = values[key];
+      if (segment.kind === "point" && own(values, "start") && !own(values, "end")) segment.end = segment.start;
       if (own(values, "label")) s.labels[id] = String(values.label).trim();
       if (["start", "end", "subject", "track"].some((key) => own(values, key))) next.schemes.forEach((other) => { other.reviewed[id] = false; });
       s.reviewed[id] = false;
     });
   }
-  function remove(doc, ids) {
-    return change(doc, (next) => {
-      const removeIds = new Set(ids);
-      next.segments = next.segments.filter((s) => !removeIds.has(s.id));
-      next.schemes.forEach((s) => ids.forEach((id) => ["labels", "reviewed", "groups"].forEach((f) => delete s[f][id])));
+  function remove(doc, ids, labelName) {
+    return change(doc, next => {
+      const removed = new Set(ids);
+      next.segments = next.segments.filter(seg => !removed.has(seg.id));
+      for (const s of next.schemes) {
+        for (const id of removed) for (const field of ["labels","reviewed","groups"]) delete s[field][id];
+        if (labelName) for (const [group,value] of Object.entries(s.mappings)) if(value===labelName)delete s.mappings[group];
+      }
+      if(labelName) {
+        next.vocabulary=(next.vocabulary || []).filter(name=>name!==labelName);
+        delete next.labelColors?.[labelName];
+        delete next.labelKinds?.[labelName];
+      }
     });
   }
   function split(doc, id, time) {
@@ -190,6 +215,7 @@
     check(ids.length >= 2, "Select at least two adjacent clips");
     const parts = ids.map((id) => doc.segments.find((s) => s.id === id)).sort((a, b) => (a?.start || 0) - (b?.start || 0));
     check(parts.every(Boolean), "Unknown segment");
+    check(parts.every(s => s.kind !== "point"), "Select duration events to merge");
     check(parts.every((s) => s.subject === parts[0].subject && s.track === parts[0].track), "Merged clips must use the same subject and track");
     let end = parts[0].end;
     parts.slice(1).forEach((s) => { check(s.start <= end + 1e-6, "Clips must overlap or touch; gaps cannot be filled silently"); end = Math.max(end, s.end); });
@@ -256,19 +282,20 @@
     }
     const mapTime = (time) => typeof mapping.videoToNeural === "function"
       ? mapping.videoToNeural(time) : metadata.offset_s + time * metadata.scale;
-    const rows = [["segment_id", "video", "subject", "track", "video_start_s", "video_end_s", "neural_start_s", "neural_end_s", "label_scheme", "label", "status", "review_group", "run_id", "original_group_id", "sync_status", "sync_offset_s", "sync_scale", "sync_method", "sync_model"]];
+    const rows = [["segment_id", "video", "subject", "track", "video_start_s", "video_end_s", "neural_start_s", "neural_end_s", "label_scheme", "label", "status", "review_group", "run_id", "original_group_id", "sync_status", "sync_offset_s", "sync_scale", "sync_method", "sync_model", "event_kind"]];
     for (const s of [...doc.segments].sort((a, b) => a.start - b.start)) {
-      const start = mapTime(s.start), end = mapTime(s.end), mapped = Number.isFinite(start) && Number.isFinite(end);
+      const point = s.kind === "point";
+      const start = mapTime(s.start), end = point ? null : mapTime(s.end), mapped = Number.isFinite(start) && (point || Number.isFinite(end));
       rows.push([
-      s.id, doc.context.videoName, s.subject, s.track, s.start, s.end,
+      s.id, doc.context.videoName, s.subject, s.track, s.start, point ? "" : s.end,
       mapped ? start : "", mapped ? end : "",
       scheme(doc).name, label(doc, s), reviewed(doc, s) ? "reviewed" : "suggested", groupKey(doc, s), s.runId, s.groupId,
       mapped ? metadata.verification_status : "unmapped", metadata.offset_s, metadata.scale,
-      metadata.method || "unknown", metadata.provenance?.frame_clock ? "frame_clock" : "affine"
+      metadata.method || "unknown", metadata.provenance?.frame_clock ? "frame_clock" : "affine", point ? "point" : "interval"
     ]);
     }
     return rows.map((row) => row.map(cell).join(",")).join("\r\n");
   }
   return { SCHEMA, CANDIDATE_SCHEMA, create, validate, change, clone, scheme, groupKey, label, reviewed, ensureColors, color, project,
-    addLabel, zoomRange, importCandidates, add, edit, remove, split, merge, assign, nameGroup, regroup, addScheme, groups, samples, toCSV };
+    addLabel, labelKind, nextLabelColor, zoomRange, importCandidates, add, edit, remove, split, merge, assign, nameGroup, regroup, addScheme, groups, samples, toCSV };
 });

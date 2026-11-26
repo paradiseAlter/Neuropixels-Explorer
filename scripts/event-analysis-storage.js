@@ -18,16 +18,30 @@
   }
   function validate(record){
     const r=record?.response,p=r?.parameters,shape=r?.shape;
-    check(r?.schema==='neuropixels-event-response/1'&&r.version===E.VERSION,'Unsupported saved response version');
+    check(r?.schema==='neuropixels-event-response/1'&&['event-response/1',E.VERSION,E.CONDITION_VERSION,E.COMPARISON_VERSION,E.RULE_VERSION].includes(r.version),'Unsupported saved response version');
     check(Array.isArray(shape)&&shape.length===3&&shape.every(n=>Number.isSafeInteger(n)&&n>0),'Invalid saved response shape');
-    const [u,t,b]=shape,cells=u*t*b;check(u<=4096&&t<=100000&&b<=5000&&Number.isSafeInteger(cells)&&cells<=32000000,'Saved response exceeds supported limits');
+    const [u,t,b]=shape,cells=u*t*b;check(u<=4096&&t<=100000&&b<=E.MAX_BINS&&Number.isSafeInteger(cells)&&cells<=E.MAX_CELLS,'Saved response exceeds supported limits');
     check(Array.isArray(r.unitIds)&&r.unitIds.length===u&&r.unitIds.every(Number.isSafeInteger)&&new Set(r.unitIds).size===u,'Invalid saved Unit identities');
     E.validateEventSet({schema:E.SCHEMA,timebase:'neural_seconds',recordingId:r.recordingId,events:r.events});
     check(r.events.length===t&&Array.isArray(r.eventIds)&&r.eventIds.length===t&&r.eventIds.every((id,i)=>id===r.events[i].id),'Invalid saved event identities');
     check(r.counts instanceof Uint32Array&&r.counts.length===cells&&r.rateHz instanceof Float64Array&&r.rateHz.length===u*b,'Invalid saved response tensors');
     check(p&&p.alignment==='start'&&[p.start,p.end,p.binWidth].every(Number.isFinite)&&p.binWidth>0&&p.end>p.start,'Invalid saved response parameters');
+    const comparison=E.comparisonOf(p), reference=comparison?.values[0];
+    check(r.version===E.RULE_VERSION ? (p.responseRule || p.repeatPolicy) && p.referenceOutcome==null :
+      !p.responseRule && !p.repeatPolicy && (p.comparison!=null)===(r.version===E.COMPARISON_VERSION) && (p.referenceOutcome!=null)===(r.version===E.CONDITION_VERSION),'Unsupported saved comparison version');
+    if(p.responseRule)check(r.events.every(e=>e.matchedResponseId===null || typeof e.matchedResponseId==='string'),'Invalid saved label matches');
+    if(p.repeatPolicy)check(['keep','exclude'].includes(p.repeatPolicy) && Array.isArray(r.sameLabelOnsets) && r.sameLabelOnsets.length<=100000 && r.sameLabelOnsets.every((t,i,ts)=>Number.isFinite(t)&&t>=0&&(!i||t>=ts[i-1])),'Invalid saved repeated-event onsets');
+    if(p.eventRange!=null)check(Array.isArray(p.eventRange)&&p.eventRange.length===2&&p.eventRange.every(Number.isFinite)&&p.eventRange[0]>=0&&p.eventRange[1]>p.eventRange[0]&&r.events.every(e=>e.start>=p.eventRange[0]&&e.start<p.eventRange[1]),'Invalid saved event time selection');
+    let referenceTrials = t;
+    if (comparison) {
+      check(r.condition==null && (r.version!==E.CONDITION_VERSION || p.activeOnly===true && record.input?.sourceKind==='experiment'), 'Invalid saved comparison parameters');
+      check(r.events.every(e=>(!p.eventType || e.type===p.eventType) && e.sourceKind===record.input?.sourceKind && (!p.activeOnly || e.conditions?.active===true)
+        && comparison.values.includes(E.conditionValue(e,comparison.field))), 'Invalid saved trial outcomes');
+      referenceTrials = r.events.filter(e=>E.conditionValue(e,comparison.field)===reference).length;
+      check(referenceTrials>0,'Missing reference-condition trials');
+    }
     check(Array.isArray(r.binEdges)&&r.binEdges.length===b+1&&r.binEdges.every((v,i)=>Number.isFinite(v)&&Math.abs(v-(p.start+i*p.binWidth))<=1e-10*Math.max(1,Math.abs(v)))&&Math.abs(r.binEdges[b]-p.end)<=1e-10*Math.max(1,Math.abs(p.end)),'Invalid saved bin edges');
-    E.validateCoverage(p.coverage);
+    if(r.version==='event-response/1')E.validateCoverage(p.coverage);else E.responseCoverage(p.coverage);
     for(let unit=0;unit<u;unit++)for(let bin=0;bin<b;bin++){
       let sum=0;for(let trial=0;trial<t;trial++)sum+=r.counts[(unit*t+trial)*b+bin];
       const value=r.rateHz[unit*b+bin],expected=sum/(t*p.binWidth);
@@ -35,6 +49,7 @@
     }
     const c=record.clusters;
     if(c){
+      check(comparison?c.referenceOutcome===reference:c.referenceOutcome==null, 'Saved clusters disagree with the reference condition');
       check(c.schema==='neuropixels-response-clusters/1'&&c.method==='kmeans-farthest-initialization/1'&&['shape','rate'].includes(c.normalization)&&Number.isSafeInteger(c.k)&&c.k>0&&c.k<=32,'Unsupported saved clusters');
       check(Array.isArray(c.unitIds)&&c.unitIds.length>0&&new Set(c.unitIds).size===c.unitIds.length&&c.unitIds.every(id=>r.unitIds.includes(id))&&Array.isArray(c.labels)&&c.labels.length===c.unitIds.length&&c.labels.every(n=>Number.isInteger(n)&&n>=0&&n<c.k),'Invalid saved cluster identities');
       check(Array.isArray(c.centroids)&&c.centroids.length===c.k&&c.centroids.every(row=>Array.isArray(row)&&row.length===b&&row.every(Number.isFinite)),'Invalid saved centroids');
@@ -45,14 +60,26 @@
     check(Number.isFinite(record.input.sampleRate)&&record.input.sampleRate>0,'Invalid saved sample rate');
     const fingerprints=record.input.sourceFingerprints;
     check(/^[a-f0-9]{64}$/.test(record.input.eventDigest)&&Array.isArray(fingerprints)&&fingerprints.length>=3&&fingerprints.every(f=>['spikeTimes','spikeClusters','sampleRate','events','coverage'].includes(f.role)&&/^[a-f0-9]{64}$/.test(f.digest)&&f.algorithm==='sha256-ordered-chunks/1'&&f.chunkBytes===CHUNK&&Number.isSafeInteger(f.size)&&f.size>=0)&&new Set(fingerprints.map(f=>f.role)).size===fingerprints.length&&['spikeTimes','spikeClusters','sampleRate'].every(role=>fingerprints.some(f=>f.role===role)),'Missing saved source fingerprints');
-    check(record.provenance?.recordingId===r.recordingId&&['user-declared-unverified','source-reported-unit-intersection'].includes(record.provenance.coverageOrigin),'Missing saved coverage provenance');
-    if(record.diagnostics)validateDiagnostics(record.diagnostics,r,record.clusters);
+    const origin=record.provenance?.coverageOrigin;
+    check(record.provenance?.recordingId===r.recordingId&&['user-declared-unverified','source-reported-unit-intersection','source-reported-partial-unit-intersection','unknown-continuous-assumption'].includes(origin),'Missing saved coverage provenance');
+    check((p.coverage===null)===(origin==='unknown-continuous-assumption'),'Saved coverage assumption disagrees with its intervals');
+    if(record.diagnostics)validateDiagnostics(record.diagnostics,r,record.clusters,referenceTrials);
+    if(record.view!=null) {
+      const v=record.view;
+      check((comparison ? comparison.values.includes(v.outcome) : v.outcome==='all') && Array.isArray(v.unitIds)
+        && v.unitIds.length<=u && new Set(v.unitIds).size===v.unitIds.length && v.unitIds.every(id=>r.unitIds.includes(id)),
+        'Invalid saved comparison view');
+      check(v.eventId==null || r.events.some(e=>e.id===v.eventId && (!comparison || E.conditionValue(e,comparison.field)===v.outcome)),
+        'Saved event does not belong to the displayed condition');
+    }
     return record;
   }
-  function validateDiagnostics(d,response,clusters){
-    const p=d.parameters,t=response.shape[1],uint=n=>Number.isSafeInteger(n)&&n>=0&&n<=4294967295;
-    check(d.schema==='neuropixels-response-stability/1'&&['available','partial','unavailable'].includes(d.status)&&d.trialOrder==='response.eventIds'&&Array.isArray(d.runs)&&p?.split==='seeded-balanced-random-event-halves/1'&&p.comparison==='adjusted-rand-index/1','Unsupported saved stability diagnostics');
-    check(Number.isSafeInteger(p.repeats)&&p.repeats>=1&&p.repeats<=20&&uint(p.seed)&&p.k===(clusters?.k??0)&&p.normalization===(clusters?.normalization??'shape'),'Invalid saved stability parameters');
+  function validateDiagnostics(d,response,clusters,t){
+    const p=d.parameters,reference=E.comparisonOf(response.parameters)?.values[0],uint=n=>Number.isSafeInteger(n)&&n>=0&&n<=4294967295;
+    check(d.schema==='neuropixels-response-stability/1'&&['available','partial','unavailable'].includes(d.status)&&
+      (reference!=null?d.trialOrder==='conditionResponse.eventIds'&&d.referenceOutcome===reference:d.trialOrder==='response.eventIds'&&d.referenceOutcome==null)
+      &&Array.isArray(d.runs)&&p?.split==='seeded-balanced-random-event-halves/1'&&p.comparison==='adjusted-rand-index/1','Unsupported saved stability diagnostics');
+    check(Number.isSafeInteger(p.repeats)&&p.repeats>=1&&p.repeats<=E.MAX_SPLITS&&uint(p.seed)&&p.k===(clusters?.k??0)&&p.normalization===(clusters?.normalization??'shape'),'Invalid saved stability parameters');
     if(!d.runs.length){check(d.status==='unavailable'&&typeof d.reason==='string'&&d.reason.length>0,'Missing stability unavailability reason');check((d.successful==null||d.successful===0)&&['meanARI','minARI','maxARI'].every(key=>d[key]==null),'Empty stability runs cannot have a summary');return;}
     check(d.runs.length===p.repeats,'Incomplete saved stability runs');const values=[];
     for(const [i,run]of d.runs.entries()){
@@ -74,7 +101,7 @@
     validate(record);const {counts,rateHz,...response}=record.response;
     check(12+counts.byteLength+rateHz.byteLength<=MAX_BYTES,'Analysis asset exceeds storage limits');
     const tensors=[tensorBytes(counts,'counts'),tensorBytes(rateHz,'rate')];
-    const payload={record:{response,clusters:record.clusters||null,diagnostics:record.diagnostics||null,provenance:record.provenance,input:record.input},countsLength:counts.length,rateLength:rateHz.length,countsSHA256:await digest(tensors[0]),rateSHA256:await digest(tensors[1])};
+    const payload={record:{response,clusters:record.clusters||null,diagnostics:record.diagnostics||null,provenance:record.provenance,input:record.input,...(record.view!=null?{view:record.view}:{})},countsLength:counts.length,rateLength:rateHz.length,countsSHA256:await digest(tensors[0]),rateSHA256:await digest(tensors[1])};
     const manifest={schema:SCHEMA,...payload,metadataSHA256:await digestJSON(payload)};
     const json=new TextEncoder().encode(JSON.stringify(manifest));check(json.length<=MAX_META&&12+json.length+tensors[0].length+tensors[1].length<=MAX_BYTES,'Analysis asset exceeds storage limits');
     const prefix=new Uint8Array(12);prefix.set(new TextEncoder().encode(MAGIC));new DataView(prefix.buffer).setUint32(8,json.length,true);
@@ -86,7 +113,7 @@
     const length=new DataView(prefix.buffer).getUint32(8,true);check(length<=MAX_META&&12+length<=blob.size,'Invalid saved analysis metadata');
     const m=JSON.parse(await blob.slice(12,12+length).text());check(m.schema===SCHEMA,'Unsupported saved analysis schema');
     const {schema,metadataSHA256,...payload}=m;check(await digestJSON(payload)===metadataSHA256,'Saved analysis metadata checksum mismatch');
-    check(Number.isSafeInteger(m.countsLength)&&m.countsLength>0&&m.countsLength<=32000000&&Number.isSafeInteger(m.rateLength)&&m.rateLength>0&&m.rateLength<=20480000,'Invalid saved tensor size');
+    check(Number.isSafeInteger(m.countsLength)&&m.countsLength>0&&m.countsLength<=E.MAX_CELLS&&Number.isSafeInteger(m.rateLength)&&m.rateLength>0&&m.rateLength<=20480000,'Invalid saved tensor size');
     const start=12+length,middle=start+4*m.countsLength;check(middle+8*m.rateLength===blob.size,'Truncated or oversized saved analysis');
     const countsBuffer=await blob.slice(start,middle).arrayBuffer(),rateBuffer=await blob.slice(middle).arrayBuffer();
     check(await digest(countsBuffer)===m.countsSHA256&&await digest(rateBuffer)===m.rateSHA256,'Saved analysis checksum mismatch');
@@ -96,9 +123,20 @@
   }
   async function verifySources(record,sources,eventSet,sampleRate,signal,progress){
     check(record.response.recordingId===eventSet.recordingId&&record.input.sampleRate===sampleRate,'Saved analysis belongs to different recording parameters');
-    check(await digestJSON(eventSet)===record.input.eventDigest,'Events, annotations or time mapping changed; recompute this analysis');
-    const p=record.response.parameters,coverage=E.validateCoverage(p.coverage),selected=eventSet.events.filter(e=>(!p.eventType||e.type===p.eventType)&&(!p.activeOnly||e.conditions?.active===true)),included=[],excluded=[];
-    for(const e of selected)if(coverage.some(c=>e.start+p.start>=c[0]&&e.start+p.end<=c[1]))included.push(e);else excluded.push({id:e.id,reason:'incomplete_recording_coverage'});
+    let digest=await digestJSON(eventSet);
+    if(digest!==record.input.eventDigest && record.response.version!==E.RULE_VERSION && record.input.sourceKind==='annotation' && !record.response.parameters.comparison && eventSet.events.some(e=>e.conditions)){
+      // Older annotation adapters did not expose custom segment conditions to analysis.
+      eventSet={...eventSet,events:eventSet.events.map(({conditions,...event})=>event)};
+      digest=await digestJSON(eventSet);
+    }
+    check(digest===record.input.eventDigest,'Events, annotations or time mapping changed; recompute this analysis');
+    const p=record.response.parameters;
+    let included,excluded,onsets;
+    if(record.response.version==='event-response/1'){
+      const coverage=E.validateCoverage(p.coverage),selected=eventSet.events.filter(e=>(!p.eventType||e.type===p.eventType)&&(!p.activeOnly||e.conditions?.active===true));included=[];excluded=[];
+      for(const e of selected)if(coverage.some(c=>e.start+p.start>=c[0]&&e.start+p.end<=c[1]))included.push(e);else excluded.push({id:e.id,reason:'incomplete_recording_coverage'});
+    }else({events:included,excluded,onsets}=E.selectResponseEvents(eventSet,p,true));
+    if(p.repeatPolicy)check(JSON.stringify(onsets)===JSON.stringify(record.response.sameLabelOnsets),'Saved repeated events disagree with the source');
     check(JSON.stringify(included)===JSON.stringify(record.response.events)&&JSON.stringify(excluded)===JSON.stringify(record.response.excludedEvents),'Saved event selection disagrees with its source and parameters');
     check(JSON.stringify(await sourceFingerprints(sources,signal,progress))===JSON.stringify(record.input.sourceFingerprints),'Source file content changed; recompute this analysis');
     abort(signal);return true;

@@ -17,6 +17,11 @@ const sources=[{role:'spikeTimes',file:new Blob(['12345'])},{role:'spikeClusters
 (async()=>{
  const record={response,clusters:E.clusterResponses(response,{k:2,seed:42}),provenance:{recordingId:'rec',coverageOrigin:'user-declared-unverified'},input:{sourceKind:'experiment',sampleRate:1,eventDigest:await P.digestJSON(events),sourceFingerprints:await P.sourceFingerprints(sources)}};
  const blob=await P.pack(record),restored=await P.unpack(blob);assert.deepEqual(restored.response,response);assert.deepEqual(restored.clusters,record.clusters);checks++;
+ const selection={outcome:'all',unitIds:[9],eventId:'b'};
+ const ungrouped=await P.unpack(await P.pack({...record,clusters:null,view:selection}));
+ assert.deepEqual(ungrouped.view,selection);assert.equal(ungrouped.clusters,null);
+ await assert.rejects(P.pack({...record,view:{...selection,eventId:'absent'}}),/Saved event/);
+ await assert.rejects(P.pack({...record,view:{...selection,outcome:'hit'}}),/comparison view/);checks++;
  await P.verifySources(restored,sources,events,1);checks++;
  await assert.rejects(P.verifySources(restored,[{role:'spikeTimes',file:new Blob(['12346'])},...sources.slice(1)],events,1),/content changed/);checks++;
  await assert.rejects(P.verifySources(restored,sources,{...events,events:events.events.slice(0,1)},1),/Events/);

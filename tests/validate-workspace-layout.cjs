@@ -88,6 +88,12 @@ elements.unitSplitter.emit("pointermove", { clientX: 148 });
 elements.unitSplitter.emit("pointerup", { clientX: 148 });
 assert.equal(elements.layout.style.getPropertyValue("--unit-panel-width"), "320px", "Pointer drag should resize the Units panel");
 assert(storage.getItem(STORAGE_KEY), "Pointer resize should persist the layout");
+for (const type of ["pointercancel","keydown"]) {
+  elements.unitSplitter.emit("pointerdown",{clientX:100});
+  elements.unitSplitter.emit("pointermove",{clientX:154});
+  elements.unitSplitter.emit(type,{key:"Escape"});
+  assert.equal(elements.layout.style.getPropertyValue("--unit-panel-width"),"320px");
+}
 
 elements.probeSplitter.emit("pointerdown", { clientX: 100 });
 elements.probeSplitter.emit("pointermove", { clientX: 160 });

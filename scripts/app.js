@@ -15,7 +15,6 @@
   const databaseClient = window.NeuropixelDatabaseClient;
   const WorkspaceLayout = window.NeuropixelsWorkspaceLayout.WorkspaceLayout;
   const VideoSyncController = window.NeuropixelsVideoSync.VideoSyncController;
-  const ActivityAnatomyCanvas = window.NeuropixelsActivityOverview.ActivityAnatomyCanvas;
   let themeSnapshot = themeController.snapshot();
   let languageSnapshot = languageController.snapshot();
   const t = (key, values) => languageController.t(key, values);
@@ -29,7 +28,6 @@
     folderInput: document.getElementById("folder-input"),
     supplementFileInput: document.getElementById("supplement-file-input"),
     supplementFolderInput: document.getElementById("supplement-folder-input"),
-    dropZone: document.getElementById("explorer-view"),
     loadingView: document.getElementById("loading-view"),
     loadingProgress: document.getElementById("loading-progress"),
     loadingTitle: document.getElementById("loading-title"),
@@ -44,6 +42,7 @@
     dataStatusGroups: document.getElementById("data-status-groups"),
     closeDataStatus: document.getElementById("close-data-status"),
     themeSelect: document.getElementById("theme-select"),
+    textSize: document.getElementById("text-size"),
     languageSelect: document.getElementById("language-select"),
     helpButton: document.getElementById("help-button"),
     helpDrawer: document.getElementById("help-drawer"),
@@ -60,8 +59,6 @@
     experimentFacts: document.getElementById("experiment-facts"),
     experimentTime: document.getElementById("experiment-time-readout"),
     activityStatus: document.getElementById("activity-status"),
-    activityCanvas: document.getElementById("activity-anatomy-canvas"),
-    activityTooltip: document.getElementById("activity-tooltip"),
     activityEmpty: document.getElementById("activity-empty"),
     videoHost: document.getElementById("experiment-video-region"),
     videoSplitter: document.getElementById("video-region-splitter"),
@@ -108,7 +105,6 @@
     dialogFolder: document.getElementById("dialog-folder-name"),
     dialogBody: document.getElementById("dialog-body"),
     closeDialog: document.getElementById("close-data-dialog"),
-    dropOverlay: document.getElementById("drop-overlay"),
     toast: document.getElementById("toast"),
     probeCanvas: document.getElementById("probe-canvas"),
     probeCount: document.getElementById("probe-count"),
@@ -162,13 +158,12 @@
   elements.videoHost?.append(elements.videoPanel);
   document.getElementById("probe-dock").append(document.getElementById("mini-probe"));
   document.getElementById("toggle-probe-dock").addEventListener("click", (event) => {
-    const dock = document.getElementById("probe-dock");
+    const dock = document.getElementById("mini-probe");
     dock.hidden = !dock.hidden;
     event.currentTarget.setAttribute("aria-expanded", String(!dock.hidden));
     document.querySelector(".observation-bench").classList.toggle("probe-hidden", dock.hidden);
   });
   // The editor and time strip belong to the video, not a new workspace row.
-  elements.videoTransport.after(document.getElementById("annotation-timeline"));
   elements.videoBody.append(document.getElementById("annotation-panel"));
   // Keep the player and its tools in separate panes when video sits above neural activity.
   const videoControls = document.createElement("div");
@@ -177,14 +172,11 @@
     if (!child.classList.contains("video-stage")) videoControls.append(child);
   }
   elements.videoBody.append(videoControls);
-  const videoHeaderActions = elements.videoPanel.querySelector(".video-sync-header-actions");
-  videoHeaderActions.prepend(document.getElementById("annotation-toggle"), document.getElementById("video-alignment"));
-  elements.videoPanel.querySelector(".video-sync-header > div").append(document.getElementById("video-link-note"));
   const playbackOptions = document.createElement("details");
   playbackOptions.className = "playback-options";
   playbackOptions.innerHTML = '<summary data-design-copy="playbackOptions">Playback details</summary><div></div>';
-  playbackOptions.querySelector("div").append(elements.videoTransport.querySelector(".video-seek"), elements.videoTransport.querySelector(".video-custom-rate"), elements.videoTransport.querySelector(".video-jump"));
-  document.getElementById("annotation-timeline").after(playbackOptions);
+  playbackOptions.querySelector("div").append(elements.videoTransport.querySelector(".video-custom-rate"), elements.videoTransport.querySelector(".video-jump"));
+  elements.videoTransport.after(playbackOptions);
   elements.videoSpeed.addEventListener("change", () => {
     if (elements.videoSpeed.value === "custom") playbackOptions.open = true;
   });
@@ -219,12 +211,8 @@
     playbackNeuralTime: null,
     overviewToken: 0,
     overviewAbortController: null,
-    activityLevelAbortController: null,
-    activityLevelToken: 0,
-    activityLevelTimer: null,
     activityOverviewCache: new Map(),
     activeActivityOverview: null,
-    activityLayoutSummary: null,
     videoSplitPercent: 44,
     videoStackedPercent: 50,
     workspacePresentation: "side",
@@ -256,11 +244,17 @@
   }
 
   function videoSplitKey() {
+    if (state.workspacePresentation !== "stacked" && !videoIsEmphasized() &&
+        !document.getElementById("analysis-pages").hidden && !elements.videoPanel.classList.contains("has-source"))
+      return "analysisEmptyVideoPercent";
     return state.workspacePresentation === "stacked"
       ? (videoIsEmphasized() ? "videoStackedFocusPercent" : "videoStackedPercent")
       : (videoIsEmphasized() ? "videoFocusSplitPercent" : "videoSplitPercent");
   }
-  function defaultVideoSplit() { return videoIsEmphasized() ? 60 : state.workspacePresentation === "stacked" ? 50 : 44; }
+  function defaultVideoSplit() {
+    if (videoSplitKey() === "analysisEmptyVideoPercent") return 25;
+    return videoIsEmphasized() ? 60 : state.workspacePresentation === "stacked" ? 50 : 44;
+  }
   function restoreVideoSplit() { setVideoSplitPercent(state[videoSplitKey()] || defaultVideoSplit()); }
   function setVideoSplitPercent(value) {
     const focused = videoIsEmphasized();
@@ -299,10 +293,13 @@
     const splitter = elements.videoSplitter;
     const body = elements.experimentBody;
     if (!splitter || !body) return;
+    let drag=null;
     splitter.setAttribute("aria-valuemin", "25");
     splitter.setAttribute("aria-valuemax", "50");
     splitter.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
+      drag={id:event.pointerId,percent:state[videoSplitKey()] ?? defaultVideoSplit()};
+      splitter.focus({preventScroll:true});
       splitter.classList.add("is-dragging");
       splitter.setPointerCapture?.(event.pointerId);
     });
@@ -313,30 +310,51 @@
         ? (event.clientY - rectangle.top) / Math.max(1, rectangle.height) * 100
         : (rectangle.right - event.clientX) / Math.max(1, rectangle.width) * 100);
     });
-    const finish = (event) => {
-      if (splitter.hasPointerCapture?.(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+    const finish = (event,cancelled=false) => {
+      if (!drag || (event.pointerId!=null && drag.id!==event.pointerId)) return;
+      const {id,percent}=drag;drag=null;
+      if (cancelled) setVideoSplitPercent(percent);
+      if (splitter.hasPointerCapture?.(id)) splitter.releasePointerCapture(id);
       splitter.classList.remove("is-dragging");
     };
     splitter.addEventListener("pointerup", finish);
-    splitter.addEventListener("pointercancel", finish);
+    splitter.addEventListener("pointercancel", event=>finish(event,true));
+    splitter.addEventListener("lostpointercapture", event=>finish(event,true));
     splitter.addEventListener("dblclick", () => setVideoSplitPercent(defaultVideoSplit()));
     splitter.addEventListener("keydown", (event) => {
+      if (event.key==="Escape" && drag) {event.preventDefault();event.stopPropagation();finish(event,true);return;}
       const stacked = state.workspacePresentation === "stacked";
       if (!(stacked ? ["ArrowUp", "ArrowDown", "Home"] : ["ArrowLeft", "ArrowRight", "Home"]).includes(event.key)) return;
       event.preventDefault();
       setVideoSplitPercent(event.key === "Home" ? defaultVideoSplit() : Number(splitter.getAttribute("aria-valuenow")) + (["ArrowLeft", "ArrowDown"].includes(event.key) ? 2 : -2));
     });
-    for (const button of document.querySelectorAll("[data-workspace-layout]")) button.addEventListener("click", () => setWorkspacePresentation(button.dataset.workspaceLayout));
-    setWorkspacePresentation(new URLSearchParams(location.search).get("layout") || "stacked");
+    const compact = matchMedia("(max-width:900px), (max-height:640px)");
+    const preferenceKey = "neuropixels-explorer-presentation";
+    let preferred;
+    try { preferred = localStorage.getItem(preferenceKey); } catch { /* Storage is optional. */ }
+    const requested = new URLSearchParams(location.search).get("layout");
+    if (requested === "side" || requested === "stacked") preferred = requested;
+    const applyPresentation = () => setWorkspacePresentation(compact.matches ? "stacked" : preferred);
+    for (const button of document.querySelectorAll("[data-workspace-layout]")) button.addEventListener("click", () => {
+      preferred = button.dataset.workspaceLayout;
+      try { localStorage.setItem(preferenceKey, preferred); } catch { /* Keep the choice in this tab. */ }
+      applyPresentation();
+    });
+    compact.addEventListener("change", applyPresentation);
+    applyPresentation();
     const resize = restoreVideoSplit;
     new ResizeObserver(resize).observe(body);
-    new MutationObserver(resize).observe(document.getElementById("mini-probe"), { attributes: true, attributeFilter: ["class"] });
+    const paneChanges = new MutationObserver(resize);
+    paneChanges.observe(document.getElementById("mini-probe"), { attributeFilter: ["class"] });
+    paneChanges.observe(elements.videoPanel, { attributeFilter: ["class"] });
+    paneChanges.observe(document.getElementById("analysis-pages"), { attributeFilter: ["hidden"] });
   }
 
   installVideoSplitter();
 
   let helpReturnFocus = null;
   let activeHelpControl = null;
+  let pendingHelpControl = null, helpTimer = 0, originalHelpTitle = null, temporaryHelpName = false;
 
   const workspaceLayout = new WorkspaceLayout({
     layout: document.getElementById("review-layout"),
@@ -350,11 +368,15 @@
   });
 
   let videoController = null;
+  let videoEvents = null;
   let projectUI = null;
   let miniProbe = null;
   let annotationController = null;
-  let pinnedComparison = null;
+  let behaviorLabels = null;
+  let analysisTabs = null;
+  let patterns = null;
   let eventAnalysis = null;
+  let populationDynamics = null;
 
   const plots = new PlotManager({
     detail: document.getElementById("spike-detail-canvas"),
@@ -435,6 +457,7 @@
     collapse: elements.videoCollapse
   }, {
     onNeuralTime: (time, context) => handleVideoNeuralTime(time, context),
+    onUnmappedVideoTime: () => annotationController?.update(),
     onStateChange: (snapshot) => {
       if (snapshot?.hasSource && state.pendingVideoCursorTime != null) {
         const desired = state.pendingVideoCursorTime;
@@ -450,74 +473,329 @@
     state.pendingVideoCursorTime = Number(state.experimentView.cursorTime || 0);
   }, { capture: true }));
 
-  const activityCanvas = new ActivityAnatomyCanvas({
-    canvas: elements.activityCanvas,
-    behaviorStrip: document.getElementById("neural-behavior-strip"),
-    tooltip: elements.activityTooltip,
-    empty: elements.activityEmpty
-  }, {
-    onStateChange: (patch, snapshot) => handleExperimentViewChange(patch, snapshot),
-    onCursorCommit: (time) => videoController?.seekNeural(time),
-    onUnitSelect: (unitId) => selectActivityUnit(unitId),
-    onAnnotationSelect: (id) => annotationController?.select(id, { openEditor: false }),
-    onAggregateSelect: () => renderExperimentHeader(),
-    onAnatomySelect: () => renderExperimentHeader(),
-    onLayoutChange: (summary) => {
-      state.activityLayoutSummary = summary;
-      renderActivityStatus();
+  const signalWorkspace = new window.NeuropixelsSignalWorkspace(document.getElementById('signal-workspace'), {
+    getRecording:()=>state.activeRecording, getView:()=>state.experimentView, setView:setExperimentView, selectUnit:selectActivityUnit,
+    captureContext:()=>({
+      source:behaviorLabels.source, types:{...behaviorLabels.types}, lastVideoLabel:behaviorLabels.lastVideoLabel||'',
+      clipKey:annotationController.key, clips:[...annotationController.selected], track:annotationController.activeTrack,
+      editorOpen:annotationController.opened
+    }),
+    restoreContext:context=>{
+      if (!context) return;
+      if (context.clipKey===annotationController.key) {
+        behaviorLabels.source=context.source;
+        behaviorLabels.types={...context.types};
+        behaviorLabels.lastVideoLabel=context.lastVideoLabel;
+        const ids=new Set(annotationController.doc?.segments?.map(row=>row.id)||[]);
+        annotationController.selected=new Set(context.clips.filter(id=>ids.has(id)));
+        annotationController.activeTrack=context.track;
+        annotationController.opened=context.editorOpen;
+        annotationController.render();
+      }
+      behaviorLabels.render();
+    },
+    loadWindow:loadSignalWindow, localSpikeWindows:()=>state.dataMode!=='database', selectLabel:selectBehaviorLabel, t,
+    onPatternQuery:(range,unitIds)=>openBehaviorPatterns(range,unitIds)
+  });
+  for (const button of [elements.videoPrevious,elements.videoNext,elements.videoPlay]) {
+    button?.addEventListener('click',()=>signalWorkspace.checkpoint(),true);
+  }
+  const videoJump=document.getElementById('video-seek-seconds');
+  videoJump?.addEventListener('change',()=>signalWorkspace.checkpoint(),true);
+  videoJump?.addEventListener('keydown',e=>{if(e.key==='Enter')signalWorkspace.checkpoint();},true);
+  const annotationStrip=document.getElementById('annotation-timeline');
+  const beforeClip=e=>{if(e.target.closest('[data-clip]'))signalWorkspace.checkpoint();};
+  annotationStrip.addEventListener('click',beforeClip,true);
+  annotationStrip.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')beforeClip(e);},true);
+  function revealNeuralTime(time, interval=null, showWholeInterval=false) {
+    const current=state.experimentView.visibleRange, duration=state.activeRecording?.duration;
+    if (!Number.isFinite(time) || !duration) return;
+    const left=showWholeInterval && interval ? Math.min(time,interval.start) : time;
+    const right=showWholeInterval && interval ? Math.max(time,interval.end) : time;
+    const span=Math.min(duration,Math.max(current.end-current.start || 2,right-left));
+    const start=Math.max(0,Math.min(duration-span,(left+right-span)/2));
+    videoController.pause();
+    setExperimentView({cursorTime:time, selectedInterval:interval,
+      visibleRange:left>=current.start && right<=current.end && time<current.end ? current : {start,end:start+span}}, {seekVideo:true});
+  }
+  function selectBehaviorLabel(row, source) {
+    signalWorkspace.checkpoint();
+    behaviorLabels.pickedEvent={recording:state.activeRecording,source,id:row.id,label:row.label};
+    if (source==='annotation') {
+      behaviorLabels.lastVideoLabel=row.label;
+      annotationController?.select(row.id, {openEditor:false,preserveWindow:true});
     }
+    else revealNeuralTime(row.start, row.end>row.start ? {start:row.start,end:row.end} : null);
+  }
+  function analysisProject(){return projectUI?.active?.id ?? state.datasetToken;}
+  async function returnToAnalysisSource(recording,id,cameraId){
+    if(cameraId && !projectUI?.active?.videoLibrary?.some(v=>v.id===cameraId)){
+      showToast(t('joint.restoreVideo'),'error');return false;
+    }
+    if(!await revealAnalysisUnit(recording,id))return false;
+    if(cameraId && projectUI.activeVideo?.id!==cameraId)await projectUI.selectVideo(cameraId);
+    if(cameraId && projectUI.activeVideo?.id!==cameraId){showToast(t('joint.restoreVideo'),'error');return false;}
+    const media=videoController.elements.video;
+    if(cameraId && media.readyState<1){
+      if(media.error){showToast(t('joint.videoLoad'),'error');return false;}
+      const listeners=new AbortController();
+      const loaded=await new Promise(resolve=>{
+        const done=ok=>{clearTimeout(timer);listeners.abort();resolve(ok);};
+        const timer=setTimeout(()=>done(false),15000);
+        media.addEventListener('loadedmetadata',()=>done(true),{signal:listeners.signal});
+        media.addEventListener('error',()=>done(false),{signal:listeners.signal});
+      });
+      if(!loaded || projectUI.activeVideo?.id!==cameraId){showToast(t('joint.videoLoad'),'error');return false;}
+    }
+    return true;
+  }
+  async function openBehaviorPatterns(queryRange=null, unitIds) {
+    const queryRecording=state.activeRecording;
+    const queryRefs=unitIds?.map(id=>queryRecording?.jointUnits?.get(id)||{recordingKey:queryRecording?.key,unitId:id});
+    if(!await prepareProbeAnalysis(queryRefs?.length?queryRefs:undefined))return;
+    const recording=state.activeRecording;
+    if (!recording || !state.activeActivityOverview) return;
+    const selected=window.NeuropixelsJointRecording.analysisIds(recording,queryRefs?.length?queryRefs:[]);
+    unitIds=selected.length?selected:signalWorkspace.selectedUnits();
+    const source=behaviorLabels.source, launcher=behaviorLabels.launcher;
+    const doc=annotationController.doc, mapping=videoController.mapping, cursor=state.experimentView.cursorTime;
+    const annotations=doc ? window.NeuropixelsEventAnalysis.fromAnnotations(doc,mapping,
+      {recordingId:recording.key,reviewedOnly:true,includeNamedManual:true}).events : [];
+    const available=source==='experiment' ? behaviorLabels.recorded : annotations;
+    const label=behaviorLabels.patternType || '';
+    const events=available.filter(row=>(row.label||row.type)===label);
+    const picked=behaviorLabels.pickedEvent;
+    const distance=row=>Math.max(row.start-cursor,0,cursor-(row.end??row.start));
+    const explicit=picked?.recording===recording && picked.source===source && events.find(row=>
+      (row.id===picked.id || row.sourceId===picked.id) && distance(row)<0.001);
+    const anchor=explicit || events.reduce((best,row)=>!best || distance(row)<distance(best)?row:best,null);
+    if (!patterns) {
+      const panel=document.createElement('section');
+      panel.id='behavior-patterns';
+      document.getElementById('experiment-workspace').append(panel);
+      patterns=new window.NeuropixelsBehaviorPatternsUI(panel);
+    }
+    const cameraId=projectUI?.activeVideo?.id;
+    const previous=patterns.input;
+    const contextEvents=[...behaviorLabels.recorded,...annotations];
+    const sameEvents=previous?.contextEvents.length===contextEvents.length&&contextEvents.every((e,i)=>{
+      const old=previous.contextEvents[i];return old.id===e.id && old.start===e.start && old.end===e.end && old.label===e.label && old.type===e.type;
+    });
+    if(!queryRange && previous && !previous.queryRange && patterns.recordingObject===recording && previous.cameraId===cameraId &&
+        patterns.timeMapping===mapping && previous.source===source && previous.label===label && sameEvents &&
+        (!unitIds.length || unitIds.join()===previous.unitIds?.join())){
+      patterns.setCollapsed(false);patterns.root.focus({preventScroll:true});return;
+    }
+    Object.assign(patterns,patternContext(recording,cameraId));
+    patterns.project=analysisProject();patterns.timeMapping=mapping;
+    patterns.open({source,label,events,unitIds:unitIds.length?unitIds:undefined,queryRange,cameraId,anchorId:anchor?.id,recordingKey:recording.key,
+      contextEvents,launcher});
+  }
+  videoEvents = new window.NeuropixelsVideoEventTimeline({
+    overview:document.getElementById('video-event-overview'), detail:document.getElementById('video-event-detail'),
+    video:videoController, getView:()=>state.experimentView, select:selectBehaviorLabel,
+    seekNeural:revealNeuralTime, history:signalWorkspace
   });
-
-  pinnedComparison = new window.NeuropixelsPinnedComparison(document.getElementById("pinned-comparison"), {
-    PlotManager, getView: () => state.experimentView, setView: setExperimentView,
-    onChange: () => renderExperimentHeader(), t
+  behaviorLabels = new window.NeuropixelsBehaviorLabels(document.getElementById('behavior-labels'), {
+    onRows:(rows,source)=>{
+      const kind = source === "experiment" ? "events" : "annotation";
+      document.getElementById("behavior-labels").dataset.importDrop = kind;
+      document.getElementById("video-event-detail").dataset.importDrop = kind;
+      videoEvents.setRows(rows,source);
+    },
+    videoCursor:()=>videoController.currentVideoTime,
+    onLabelSelection:(name,source)=>annotationController?.setMarkLabel(name,source),
+    canvas:signalWorkspace, t, openPatterns:()=>openBehaviorPatterns(), onChange:()=>signalWorkspace.checkpoint(), select:selectBehaviorLabel, cursor:()=>state.experimentView.cursorTime || 0,
+    onSource:source=>{ if(source==='experiment' && annotationController?.opened) annotationController.button.click(); }
   });
-
   annotationController = new window.NeuropixelsAnnotationUI.AnnotationController({
     panel: document.getElementById("annotation-panel"),
     strip: document.getElementById("annotation-timeline"),
     button: document.getElementById("annotation-toggle"),
+    eventTimeline:videoEvents,
+    labelControls:{settings:document.getElementById('annotation-settings'), mark:document.getElementById('annotation-mark'), kind:document.getElementById('annotation-mark-kind'),
+      selectLabel:name=>behaviorLabels.selectVideoLabel(name)},
     video: videoController,
     getRecording: () => state.activeRecording,
     getView: () => state.experimentView,
     setView: (patch, options) => setExperimentView(patch, options),
-    onOpenChange: (opened) => setVideoEmphasis("annotation", opened),
-    onAnnotations: (intervals) => {
-      activityCanvas.setAnnotations(intervals);
-      const legend = document.getElementById("annotation-color-legend");
-      if (legend) {
-        legend.replaceChildren();
-        for (const [label, color] of new Map(intervals.filter(s => s.label).map(s => [s.label, s.color]))) {
-          const item = document.createElement("span"); item.textContent = label; item.style.setProperty("--label-color", color); legend.append(item);
-        }
-      }
+    onOpenChange: (opened) => { if(opened) behaviorLabels.switchTo('annotation'); setVideoEmphasis("annotation", opened); },
+    onAnnotations: () => {
+      const rows=videoEvents.annotationRows(annotationController?.opened ? annotationController.activeTrack : null);
+      const doc=annotationController?.doc;
+      behaviorLabels.setVideo(rows,Object.keys(doc?.labelColors||{}),doc?.segments.length || 0,!!doc);
     },
-    toast: (message) => showToast(message)
+    toast: showToast
   });
 
+  function patternContext(recording,cameraId){
+    const units=state.activeActivityOverview?.units||[];
+    const media=videoController.source,mapping=videoController.mapping,cursor=state.experimentView.cursorTime;
+    return {
+    getRecording:()=>recording,getUnits:()=>units,
+    getCursor:()=>cursor,
+    getVideoRange:()=>{
+      const duration=media?.duration;
+      if (!(duration>0)) return null;
+      const clock=mapping.frameClock?.video_s;
+      const start=mapping.videoToNeural(Math.max(0,clock?.[0] ?? 0));
+      const end=mapping.videoToNeural(Math.min(duration,clock?.at(-1) ?? duration));
+      return Number.isFinite(start) && Number.isFinite(end) && end>Math.max(0,start) ? [Math.max(0,start),end] : null;
+    },
+    getVideoTime:time=>{
+      const v=mapping.neuralToVideo(time);
+      return media && Number.isFinite(v) && v>=0 && v<media.duration ? v : null;
+    },
+    returnToEvent:async(row,time,unitIds=[])=>{
+      if(!await returnToAnalysisSource(recording,unitIds[0],cameraId))return;
+      analysisTabs.signals({focus:false});
+      signalWorkspace.checkpoint();
+      revealNeuralTime(Number.isFinite(time)?time:row.start, row.end>row.start?{start:row.start,end:row.end,unitIds:signalWorkspace.selectedUnits()}:null,true);
+      signalWorkspace.viewport.focus({preventScroll:true});
+    }
+  };
+  }
+
   miniProbe = new window.NeuropixelsMiniProbe(document.getElementById("mini-probe"), selectActivityUnit, (region) => {
-    setExperimentView({ selectedRegion: region, selectedShank: null, selectedUnitId: null, expandedUnitId: null, selectedGroupKey: null, groupFocusPath: [] });
+    signalWorkspace.checkpoint();
+    const first=state.activeActivityOverview?.units.find(unit=>unit.region===region);
+    if (first) signalWorkspace.locateUnit(first.id);
+    setExperimentView({selectedRegion:region});
   });
   miniProbe.intervalReader = (recording, range, signal) => requestWorker({ type: "interval-activity", experimentKey: `${state.datasetToken}:${recording.key}:${Number(recording.dataVersion || 0)}`, files: workerFiles(recording), sampleRate: recording.sampleRate, duration: recording.duration, ...range }, { signal });
-  projectUI = new (window.NeuropixelsBrowserProjectUI || window.NeuropixelsProjectUI)({state, video:videoController, annotations:annotationController, openFiles,
+  miniProbe.readTemplate = async (recording,unit) => (await inspectRecordingUnit(recording,unit)).templateFootprint;
+  projectUI = new (window.NeuropixelsBrowserProjectUI || window.NeuropixelsProjectUI)({state, video:videoController, annotations:annotationController, openFiles, selectRecording, clearNeuralWorkspace, updateRecordingTabs, queueWorkspaceEdit,
     onVideoExpand: (enabled = !state.videoEnlarged) => setVideoEmphasis("video", enabled),
     openCatalog:openDatabaseCatalog, home:()=>showOnly("explorer"), resume:()=>showOnly("explorer"),
     toast:showToast, folderFallback:openPicker});
-  eventAnalysis = new window.NeuropixelsEventAnalysisUI({
-    state, annotations:annotationController, video:videoController, toast:showToast,
-    button:document.getElementById('event-analysis-button'),
-    getUnits:()=>state.activeActivityOverview?.units || recordingUnits(state.activeRecording),
+  const unitMarks=window.NeuropixelsUnitMarks;
+  unitMarks.configure({project:()=>projectUI.browserLocal?projectUI.active:null,failed:error=>showToast(error.message,'error'),
+    save:(id,edit)=>queueWorkspaceEdit(async()=>{
+      if(projectUI.active?.id!==id)return;
+      const result=await projectUI.store.changeAssets(id,(project,assets)=>({
+        project:{...project,unitMarks:edit(project.unitMarks),updated:Date.now()},assets
+      }));
+      if(projectUI.active?.id===id){
+        projectUI.active={...projectUI.active,unitMarks:result.project.unitMarks};
+        projectUI.markChanged();
+      }
+    })});
+  const eventButton = document.getElementById('event-analysis-button');
+  const figuresButton = document.getElementById('event-figures-button');
+  figuresButton.onclick=async()=>{
+    const owned=tab=>tab?.kind==='clusters' && tab.project===analysisProject();
+    const tab=owned(analysisTabs.active)?analysisTabs.active:[...analysisTabs.tabs].reverse().find(t=>owned(t) &&
+      (t.ui?.state.activeRecording.key===state.activeRecording?.key || t.ui?.state.activeRecording.jointSources?.includes(state.activeRecording?.key)));
+    if(tab){tab.activate();tab.ui.openFigures();}
+    else {const ui=await eventAnalysis.open();ui?.openFigures();}
+  };
+  async function prepareProbeAnalysis(refs=[]){
+    const r=state.activeRecording, joint=window.NeuropixelsJointRecording;
+    if(!refs.length || joint.analysisIds(r,refs).length===refs.length)return true;
+    const keys=new Set(refs.map(ref=>ref.recordingKey));
+    try{
+      if(keys.size>1){
+        const available=new Set(jointInputs().map(record=>record.key));
+        if([...keys].some(key=>!available.has(key)))throw Error(t('joint.sessions'));
+        const combined=await activateJointRecording();
+        return !!combined && joint.analysisIds(combined,refs).length===refs.length;
+      }
+      const source=state.recordings.find(record=>keys.has(record.key));
+      if(!source)return false;
+      await selectRecording(source);return state.activeRecording===source;
+    }catch(error){showToast(error.message,'error');return false;}
+  }
+  analysisTabs=new window.NeuropixelsAnalysisTabs(kind=>{
+    (kind==='clusters'?eventAnalysis:populationDynamics).open();
+  });
+  function bindWorkspaceAnalysis(kind,Type,button,optionsFor){
+    const api={
+      update(){
+        if(button){button.textContent=Type.prototype.t('title');button.disabled=!state.activeRecording;}
+        if(kind==='clusters'){figuresButton.textContent=window.NeuropixelsEventFigures.word('entry');figuresButton.disabled=!state.activeRecording;}
+      },
+      async open({saved=false,source=null}={}){
+        if(!await prepareProbeAnalysis())return;
+        const recording=source||state.activeRecording;
+        if(!recording?.spikeTimesFile || !recording?.spikeClustersFile || recording.missingInputs?.length){
+          showToast(Type.prototype.t('unavailable'));return;
+        }
+        const project=analysisProject();
+        const restore=saved || (kind==='dynamics' && !analysisTabs.tabs.some(t=>t.kind===kind&&t.recording.key===recording.key));
+        const options=optionsFor(recording,projectUI?.activeVideo?.id);
+        const units=source && source!==state.activeRecording?await options.getProbeUnits(source):options.getUnits();
+        if(project!==analysisProject())return;
+        const video={source:videoController.source,mapping:videoController.mapping};
+        const tab=analysisTabs.create(kind,project,recording,recording.name);
+        const ui=new Type({...options,workspaceTab:tab,video,annotations:{doc:annotationController.doc},button,
+          toast:showToast,state:{activeRecording:recording,datasetToken:state.datasetToken,experimentView:{...state.experimentView}},
+          getUnits:()=>units,getSavedAnalysis:restore?options.getSavedAnalysis:null});
+        tab.ui=ui;tab.launcher=button||analysisTabs.picker;
+        tab.dispose=()=>{ui.cancel(false);ui.review?.stop();ui.process?.destroy();ui.dispose?.();};
+        tab.onShow=()=>{ui.review?.refreshUnits?.();};
+        try{await ui.open();return ui;}catch(error){analysisTabs.remove(tab);showToast(error.message,'error');}
+      }
+    };
+    if(button)button.onclick=()=>api.open();api.update();return api;
+  }
+  eventAnalysis = bindWorkspaceAnalysis('clusters',window.NeuropixelsEventAnalysisUI,eventButton,(recording,cameraId)=>({
+    getProbeSources:()=>jointInputs(recording),
+    getProbeUnits:probeAnalysisUnits,
+    prepareProbeScope:async(records)=>{
+      if(!records.length || records.some(r=>!state.recordings.includes(r)))throw Error(t('joint.restoreProbe'));
+      return records.length===1?records[0]:getJointRecording(records);
+    },
+    createSpikePicker:(host,options)=>window.NeuropixelsSignalWorkspace.forUnitSelection(host,{
+      ...options,loadWindow:range=>loadSignalWindow(range,options.recording),
+      initialView:options.recording===state.activeRecording?state.experimentView:null,
+      initialScroll:options.recording===state.activeRecording?signalWorkspace.viewport.scrollTop:0
+    }),
+    sourceTitle:s=>t(s==='experiment'?'labels.recorded':'labels.video'),
+    preferredLabels:()=>{
+      const {source,picker,pickedEvent}=behaviorLabels;
+      const picked=pickedEvent && pickedEvent.recording===state.activeRecording && pickedEvent.source===source ? pickedEvent.label : '';
+      return {source,type:picker.value || picked};
+    },
+    highlightedUnits:()=>signalWorkspace.selectedUnits(),
+    button:eventButton,
+    getUnits:recordingAnalysisUnits,
     canSave:()=>!!projectUI?.browserLocal&&!!projectUI.active,
     getSavedAnalysis:r=>projectUI?.getEventAnalysis?.(r)||null,
     saveAnalysis:(r,blob)=>projectUI.saveEventAnalysis(r,blob),
-    selectUnit:unitId=>selectActivityUnit(unitId),
-    returnToSource:(unitId,event)=>{
-      selectActivityUnit(unitId);
-      setExperimentView({cursorTime:event.start,visibleRange:{start:Math.max(0,event.start-1),end:event.start+1.5},selectedInterval:event.end>event.start?{start:event.start,end:event.end}:null});
-      if(event.sourceKind==='annotation')annotationController.select(event.sourceId,{openEditor:false});
+    selectUnit(unitId){return revealAnalysisUnit(this.state.activeRecording,unitId);},
+    async returnToSource(unitId,event){
+      if(!await returnToAnalysisSource(this.state.activeRecording,unitId,cameraId))return;
+      signalWorkspace.checkpoint();
+      const doc=annotationController.doc;
+      if(event.sourceKind==='annotation' && String(doc?.context?.recordingKey)===String(projectUI?.activeVideo?.annotationRecordingKey)
+          && doc?.segments.some(segment=>segment.id===event.sourceId)){
+        annotationController.select(event.sourceId,{openEditor:false,preserveWindow:true});
+      }else{
+        revealNeuralTime(event.start,event.end>event.start?{start:event.start,end:event.end}:null);
+        if(event.sourceKind==='annotation' && Number.isFinite(event.videoStart))videoController.seekVideo(event.videoStart,{preserveView:true});
+      }
     }
-  });
-
+  }));
+  projectUI.openSavedEventAnalysis=async asset=>{
+    const project=analysisProject();
+    const keys=asset.sourceRecordings||[asset.recordingId];
+    const records=keys.map(key=>state.recordings.find(r=>r.key===key));
+    if(records.some(r=>!r))throw Error(t('joint.restoreProbe'));
+    const source=records.length===1?records[0]:await getJointRecording(records);
+    if(source && project===analysisProject())await eventAnalysis.open({saved:true,source});
+  };
+  populationDynamics = bindWorkspaceAnalysis('dynamics',window.NeuropixelsPopulationDynamicsUI,null,(recording,cameraId)=>({
+    getUnits:recordingAnalysisUnits,
+    getProbeSelection:()=>signalWorkspace.selectedUnits(),
+    canSave:()=>!!projectUI?.browserLocal&&!!projectUI.active,
+    getSavedAnalysis:r=>projectUI?.getPopulationDynamics?.(r)||null,
+    saveAnalysis:(r,blob,options)=>projectUI.savePopulationDynamics(r,blob,options),
+    returnToSource:async([start,end])=>{
+      if(!await returnToAnalysisSource(recording,null,cameraId))return;
+      signalWorkspace.checkpoint();
+      setExperimentView({cursorTime:start,visibleRange:{start:Math.max(0,start-1),end:end+1},selectedInterval:{start,end}}, {seekVideo:true});
+    }
+  }));
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
   const number = (value) => Number(value || 0).toLocaleString();
   const percent = (value) => Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}%` : "—";
@@ -534,7 +812,6 @@
     comparisonColors = [...next.palette.units.comparisons];
     elements.themeSelect.value = next.preference;
     setPlotTheme(next.palette.canvas);
-    pinnedComparison?.refresh(next.palette.units.primary);
     setProbeTheme(next.palette.probe);
     plotEntries().forEach((entry) => {
       const palette = paletteForEntry(entry);
@@ -546,7 +823,7 @@
     const focused = focusedEntry();
     elements.detailsContext.style.setProperty("--trace-color", focused?.traceColor || next.palette.probe.unopened);
     syncProbeView();
-    activityCanvas.render();
+    signalWorkspace.render();
   }
 
   function localizeHelpControls() {
@@ -561,6 +838,65 @@
     elements.helpContent.innerHTML = content?.html || "";
     elements.helpContent.scrollTop = 0;
   }
+
+  const tourPanel = document.getElementById("import-walkthrough");
+  const tourSteps = [
+    ["neural", "#workspace-empty-intro, .activity-workspace"],
+    ["anatomy", "#mini-probe, #toggle-probe-dock"],
+    ["events", "[data-label-source=experiment], #experiment-video-region"],
+    ["video", "#video-empty, #video-alignment, #experiment-video-region"]
+  ];
+  const tourStorageKey = "neuropixels.importWalkthrough.dismissed";
+  let tourStep = 0, tourAutomatic = false;
+
+  function renderImportTour(reveal = false) {
+    if (tourPanel.hidden) return;
+    const [key, selectors] = tourSteps[tourStep];
+    document.getElementById("tour-count").textContent = `${tourStep + 1} / ${tourSteps.length}`;
+    document.getElementById("tour-heading").textContent = t("tour." + key);
+    document.getElementById("tour-instruction").textContent = t("tour." + key + "Hint");
+    document.getElementById("tour-back").hidden = tourStep === 0;
+    document.getElementById("tour-next").textContent = t(tourStep + 1 === tourSteps.length ? "tour.done" : "tour.next");
+    document.querySelector(".import-tour-target")?.classList.remove("import-tour-target");
+    const target = selectors.split(", ").map(s => document.querySelector(s)).find(el => el?.getClientRects().length);
+    target?.classList.add("import-tour-target");
+    if (reveal && target && window.matchMedia("(max-width:900px)").matches)
+      target.scrollIntoView({block:"center",behavior:"instant"});
+  }
+  function closeImportTour() {
+    const restoreFocus = tourPanel.contains(document.activeElement);
+    tourPanel.hidden = true;
+    tourAutomatic = false;
+    document.querySelector(".import-tour-target")?.classList.remove("import-tour-target");
+    try { window.localStorage.setItem(tourStorageKey, "1"); } catch {}
+    if (restoreFocus) document.getElementById("open-folder-button").focus({preventScroll:true});
+  }
+  function startImportTour(automatic) {
+    if (automatic) {
+      try { if (window.localStorage.getItem(tourStorageKey)) return; } catch {}
+      if (!projectUI?.browserLocal || projectUI.active) return;
+    }
+    tourStep = 0; tourAutomatic = automatic; tourPanel.hidden = false;
+    renderImportTour();
+    if (!automatic) document.getElementById("tour-next").focus();
+  }
+  document.getElementById("tour-next").addEventListener("click", () => {
+    if (tourStep + 1 === tourSteps.length) return closeImportTour();
+    tourStep++; renderImportTour(true);
+  });
+  document.getElementById("tour-back").addEventListener("click", () => {
+    if (tourStep > 0) { tourStep--; renderImportTour(true); }
+    if (!tourStep) document.getElementById("tour-next").focus({preventScroll:true});
+  });
+  document.getElementById("tour-skip").addEventListener("click", closeImportTour);
+  tourPanel.addEventListener("keydown", event => {
+    if (event.key === "Escape") { event.stopPropagation(); closeImportTour(); }
+  });
+  document.getElementById("tour-replay").addEventListener("click", () => {
+    document.getElementById("workspace-settings").close();
+    analysisTabs?.signals({focus:false});
+    startImportTour(false);
+  });
 
   function openHelp() {
     helpReturnFocus = document.activeElement;
@@ -588,45 +924,76 @@
     const height = tooltip.offsetHeight;
     let left = rectangle.left + rectangle.width / 2 - width / 2;
     left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
-    let top = rectangle.bottom + gap;
-    if (top + height > window.innerHeight - margin) top = rectangle.top - height - gap;
+    let top = rectangle.top - height - gap;
+    if (top < margin) top = rectangle.bottom + gap;
     top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
     tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
   }
 
-  function showContextHelp(control) {
-    if (!control?.dataset.helpKey) return;
-    if (activeHelpControl && activeHelpControl !== control) hideContextHelp(activeHelpControl);
-    activeHelpControl = control;
-    elements.contextTooltip.textContent = t(control.dataset.helpKey);
-    elements.contextTooltip.hidden = false;
-    control.setAttribute("aria-describedby", "context-tooltip");
-    control.setAttribute("aria-expanded", "true");
-    positionContextTooltip(control);
+  const helpTargets = 'button, summary, select[title], input[title], [data-help-key], [role="button"][title]';
+  function hideContextHelp() {
+    clearTimeout(helpTimer);
+    const control = pendingHelpControl;
+    if (!control) return;
+    if (originalHelpTitle !== null && control.getAttribute("title") === "") control.title = originalHelpTitle;
+    if (temporaryHelpName && control.getAttribute("aria-label") === originalHelpTitle) control.removeAttribute("aria-label");
+    temporaryHelpName = false;
+    const ids = (control.getAttribute("aria-describedby") || "").split(/\s+/).filter(id => id && id !== "context-tooltip");
+    if (ids.length) control.setAttribute("aria-describedby", ids.join(" "));
+    else control.removeAttribute("aria-describedby");
+    elements.contextTooltip.hidden = true;
+    // A dialog can replace its contents (and the tooltip) on the next render.
+    if (elements.contextTooltip.parentElement !== document.body) document.body.append(elements.contextTooltip);
+    activeHelpControl = pendingHelpControl = null;
+    originalHelpTitle = null;
   }
 
-  function hideContextHelp(control = activeHelpControl) {
-    if (!control || control !== activeHelpControl) return;
-    control.removeAttribute("aria-describedby");
-    control.setAttribute("aria-expanded", "false");
-    elements.contextTooltip.hidden = true;
-    activeHelpControl = null;
+  function showContextHelp(control, delay) {
+    if (pendingHelpControl === control && (activeHelpControl || delay)) return;
+    hideContextHelp();
+    if (!control) return;
+    const nativeTitle = control.getAttribute("title");
+    const hint = control.dataset.helpKey ? t(control.dataset.helpKey) : nativeTitle || control.getAttribute("aria-label");
+    if (!hint) return;
+    pendingHelpControl = control;
+    originalHelpTitle = nativeTitle;
+    if (nativeTitle) {
+      temporaryHelpName = !control.textContent.trim() && !control.hasAttribute("aria-label") && !control.hasAttribute("aria-labelledby");
+      if (temporaryHelpName) control.setAttribute("aria-label", nativeTitle);
+      control.title = "";
+    }
+    const show = () => {
+      if (!control.isConnected || !control.getClientRects().length) {hideContextHelp();return;}
+      activeHelpControl = control;
+      const tip = elements.contextTooltip;
+      (control.closest("dialog[open]") || document.body).append(tip);
+      tip.textContent = hint;
+      tip.hidden = false;
+      const ids = (control.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
+      control.setAttribute("aria-describedby", [...new Set([...ids, tip.id])].join(" "));
+      positionContextTooltip(control);
+    };
+    if (delay) helpTimer = setTimeout(show, delay);
+    else show();
   }
 
   function applyLanguageSnapshot(next) {
     languageSnapshot = next;
-    pinnedComparison?.refresh();
+    signalWorkspace.render();
     elements.languageSelect.value = next.language;
     i18nApi.translateDocument(document, next.language);
+    renderImportTour();
+    workspaceSettings.render();unitMarks.sync();analysisTabs?.language();
     localizeHelpControls();
     probeViewer.setTranslator?.(t);
     workspaceLayout.setTranslator?.(t);
     videoController?.setTranslator(t);
     annotationController?.render();
     eventAnalysis?.update();
+    populationDynamics?.update();
     if (!elements.helpDrawer.hidden) renderHelpContent();
-    if (activeHelpControl) showContextHelp(activeHelpControl);
+    hideContextHelp();
     if (state.recordings.length) {
       elements.datasetTitle.textContent = state.rootName;
       renderSummary();
@@ -723,9 +1090,20 @@
   }
 
   function handleVideoNeuralTime(time, context = {}) {
-    state.playbackNeuralTime = Number.isFinite(Number(time)) ? Number(time) : null;
+    if (context.preserveView) { annotationController?.update();return; }
+    state.playbackNeuralTime = Number.isFinite(time) ? time : null;
     plotEntries().forEach((entry) => entry.manager.setPlaybackTime(state.playbackNeuralTime));
-    if (state.playbackNeuralTime != null) setExperimentView({ cursorTime: state.playbackNeuralTime });
+    if (state.playbackNeuralTime != null) {
+      const current=state.experimentView.visibleRange, span=current.end-current.start, patch={cursorTime:time};
+      if (context.follow && state.activeActivityOverview && span>0 && (time<current.start || time>=current.end)) {
+        const start=Math.max(0,Math.min(state.activeActivityOverview.duration-span,time-span*.25));
+        patch.visibleRange={start,end:start+span};
+      }
+      state.experimentView={...state.experimentView,...patch};
+      signalWorkspace.setViewState(state.experimentView);
+      elements.experimentTime.textContent=time.toFixed(3)+' s';
+      annotationController?.update();
+    }
     if (!context.follow || state.playbackNeuralTime == null) return;
     const source = focusedEntry() || primaryOpenUnit();
     if (!source?.manager.data) return;
@@ -785,7 +1163,10 @@
     elements.unitSearch.value = "";
     elements.qualityFilter.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.dataset.quality === "all"));
     if (recordingChanged) renderRecordings();
-    if (recordingChanged) videoController?.setRecording(entry.recording, state.databaseCatalog?.videos || []);
+    if(recordingChanged){
+      if(projectUI?.browserLocal && projectUI.active)projectUI.recordingChanged(entry.recording);
+      else videoController?.setRecording(entry.recording,state.databaseCatalog?.videos||[]);
+    }
     renderUnitList();
     requestAnimationFrame(() => {
       elements.unitList.querySelector(`[data-cluster-id="${Number(entry.clusterId)}"]`)?.scrollIntoView({ block: "nearest" });
@@ -862,31 +1243,145 @@
     if (render) renderUnitList();
   }
 
-  function showToast(message) {
-    elements.toast.textContent = message;
-    elements.toast.classList.add("show");
+  function showToast(message, severity = "neutral") {
+    const modal = document.querySelector("dialog[open]");
+    const previous = document.querySelector(".dialog-toast");
+    previous?.remove();
+    const toast = elements.toast;
+    const targets = [toast];
+    if (modal) {
+      const feedback = document.createElement("div");
+      feedback.className = "toast dialog-toast";
+      modal.append(feedback);
+      targets.push(feedback);
+    }
+    for (const target of targets) {
+      target.dataset.severity = severity;
+      target.setAttribute("role", severity === "error" ? "alert" : "status");
+      target.setAttribute("aria-live", severity === "error" ? "assertive" : "polite");
+      target.textContent = message;
+      target.classList.add("show");
+    }
     window.clearTimeout(showToast.timer);
-    showToast.timer = window.setTimeout(() => elements.toast.classList.remove("show"), 2400);
+    showToast.timer = window.setTimeout(() => {
+      toast.classList.remove("show");
+      document.querySelector(".dialog-toast")?.remove();
+    }, severity === "error" ? 6500 : 3200);
   }
 
-  function hideUnitContextMenu() {
+  let menuOrigin=null;
+  function hideUnitContextMenu(restoreFocus=false) {
+    if(elements.unitContextMenu.hidden)return;
     elements.unitContextMenu.hidden = true;
     state.contextUnit = null;
+    if(restoreFocus===true && menuOrigin?.isConnected)menuOrigin.focus({preventScroll:true});
+    menuOrigin=null;
+    elements.unitContextMenu.querySelectorAll('[data-workspace-action],[data-mark-action]').forEach(button=>button.remove());
+    delete elements.unitContextMenu.dataset.workspace;
   }
 
   function openUnitContextMenu(recording, clusterId, clientX, clientY) {
     if (!recording || !Number.isFinite(Number(clusterId))) return;
+    hideUnitContextMenu();
     const key = viewKey(recording, clusterId);
     state.contextUnit = { recording, clusterId: Number(clusterId), key };
     elements.unitContextTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${Number(clusterId)} · ${recording.name}`;
     const removeButton = elements.unitContextMenu.querySelector('[data-unit-action="remove"]');
     removeButton.disabled = !state.openUnits.has(key);
+    unitMarks.appendActions(elements.unitContextMenu,unitMarks.ref(recording,clusterId),()=>hideUnitContextMenu(true));
+    showContextAt(document.activeElement,clientX,clientY);
+  }
+
+  function showContextAt(origin,clientX,clientY) {
+    menuOrigin=origin;
     elements.unitContextMenu.hidden = false;
     const width = elements.unitContextMenu.offsetWidth;
     const height = elements.unitContextMenu.offsetHeight;
     elements.unitContextMenu.style.left = `${Math.max(8, Math.min(Number(clientX) || 8, window.innerWidth - width - 8))}px`;
     elements.unitContextMenu.style.top = `${Math.max(8, Math.min(Number(clientY) || 8, window.innerHeight - height - 8))}px`;
-    elements.unitContextMenu.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
+    const first=[...elements.unitContextMenu.querySelectorAll("button:not(:disabled)")].find(button=>button.offsetWidth);
+    first?.focus({preventScroll:true});
+    hideContextHelp();
+  }
+
+  function openWorkspaceMenu(event, keyboard=false) {
+    const target=event.target;
+    if(event.defaultPrevented || target.closest('input,textarea,select,[contenteditable="true"]'))return;
+    const markedUnit=unitMarks.targetRef(target);
+    if(target.closest('dialog') || (markedUnit && !target.closest('#signal-workspace'))){
+      if(markedUnit)unitMarks.popup(event,markedUnit);
+      return;
+    }
+    const tab=target.closest('.recording-tab')?.querySelector('[data-recording-key]') || target.closest('[data-recording-key]');
+    const row=target.closest('#signal-workspace [data-unit]');
+    const signal=target.closest('#signal-workspace');
+    const video=target.closest('#experiment-video-region,#video-sync-panel');
+    let title,origin;
+    const actions=[];
+    const add=(key,label,run)=>actions.push({key,label,run});
+    const fromControl=(id,key=id)=>{
+      const control=document.getElementById(id);
+      if(control && !control.hidden && !control.disabled)
+        add(key,control.textContent.trim()||control.title,()=>control.click());
+    };
+    if(tab && projectUI.closeRecording) {
+      const key=tab.dataset.recordingKey, record=state.recordings.find(r=>r.key===key);
+      if(!record)return;
+      title=record.name;origin=tab;
+      add('close-recording',projectUI.importText('closeRecording'),()=>projectUI.closeRecording(key));
+      if(projectUI.lastClosedRecording)add('restore-recording',projectUI.importText('restoreRecording')+' · '+projectUI.lastClosedRecording.name,()=>projectUI.undoCloseRecording());
+    }else if(signal && signalWorkspace.data) {
+      const unitId=row?Number(row.dataset.unit):null;
+      origin=row?.querySelector('.sw-name')||signalWorkspace.viewport;
+      title=row?'Unit '+unitId:t('workspace.activityTitle');
+      if(row){
+        const selected=signalWorkspace.selectedUnits().includes(unitId);
+        add('compare',t(selected?'context.unselect':'context.compare'),()=>signalWorkspace.run(()=>signalWorkspace.choose(unitId,true)));
+        add('inspect',t('workspace.inspectUnit'),()=>inspectUnit(unitId,origin));
+      }
+      if(state.experimentView.selectedInterval){
+        const fit=signal.querySelector('[data-sw-fit]'), clear=signal.querySelector('[data-sw-clear]');
+        add('fit',fit.textContent,()=>fit.click());
+        add('clear',clear.getAttribute('aria-label'),()=>clear.click());
+      }
+      const home=signal.querySelector('[data-sw-tool="home"]');
+      add('home',home.title,()=>home.click());
+    }else if(video){
+      origin=target.closest('#video-stage')||video;title=projectUI.importText('videoShort');
+      if(videoController.source){
+        fromControl('annotation-mark');fromControl('video-alignment');
+        fromControl('expand-video');fromControl('replace-video');
+      }else if(projectUI.browserLocal){
+        add('add-video',projectUI.importText('addVideo'),()=>projectUI.action('video'));
+      }
+    }
+    if(!actions.length){title=t('prefs.title');origin=target.closest('button,[tabindex]')||document.getElementById('settings-button');}
+    if(annotationController.doc){
+      add('save-annotations',t('prefs.saveLabels'),()=>annotationController.saveAnnotations({saveAs:false}));
+      add('save-annotations-as',t('prefs.saveLabelsAs'),()=>annotationController.saveAnnotations({saveAs:true}));
+    }
+    if(projectUI.active)add('save-project',t('prefs.save'),()=>projectUI.action('save-project'));
+    add('settings',t('prefs.title'),()=>workspaceSettings.open());
+    event.preventDefault();hideUnitContextMenu();
+    const menu=elements.unitContextMenu;
+    const projectId=projectUI.active?.id,source=videoController.source;
+    menu.dataset.workspace='true';
+    elements.unitContextTitle.textContent=title;
+    for(const {key,label,run} of actions){
+      const button=document.createElement('button');
+      button.type='button';button.setAttribute('role','menuitem');
+      button.dataset.workspaceAction=key;button.textContent=label;
+      button.onclick=async()=>{
+        hideUnitContextMenu(true);
+        if(projectUI.active?.id!==projectId || (video && videoController.source!==source))return;
+        try{await run();}catch(error){showToast(error.message, "error");}
+      };
+      menu.append(button);
+    }
+    if(markedUnit)unitMarks.appendActions(menu,markedUnit,()=>hideUnitContextMenu(true));
+    const bounds=origin.getBoundingClientRect();
+    const atOrigin=keyboard || (!event.clientX&&!event.clientY);
+    showContextAt(origin,atOrigin?bounds.left+8:event.clientX,atOrigin?bounds.bottom:event.clientY);
   }
 
   async function locateUnitOnProbe(recording, clusterId) {
@@ -912,6 +1407,7 @@
   function showOnly(target) {
     elements.loadingView.hidden = target !== "loading";
     elements.explorerView.hidden = target === "loading";
+    if (target === "explorer" && projectUI?.active && tourAutomatic) closeImportTour();
     projectUI?.renderEmptyWorkspace();
   }
 
@@ -969,6 +1465,7 @@
       return {
         sourceIndex,
         id,
+        ...(recording?.jointUnits?.has(id)?{probeName:catalog.probeName,sourceUnitId:catalog.unitId,sourceRecordingKey:catalog.recordingKey}:{}),
         count: Number(result.unitCounts?.[sourceIndex] || 0),
         rateHz: Number(result.unitRateHz?.[sourceIndex] || 0),
         x: nullableNumber(catalog?.x_um) ?? nullableNumber(result.unitX?.[sourceIndex]),
@@ -999,12 +1496,20 @@
   }
 
   function renderExperimentHeader() {
+    analysisTabs?.prune(analysisProject());
+    if(patterns?.input && patterns.project!==analysisProject())patterns.invalidate(null);
+    const r=state.activeRecording, sources=projectUI?.active?.recordingSources;
+    const session=r && sources?.[r.key]?.session;
+    const eventOwner=r?.eventsFile || !session ? r : state.recordings.find(other=>other.eventsFile && sources[other.key]?.session===session) || r;
+    behaviorLabels?.update(r, Boolean(videoController?.source),eventOwner);
     eventAnalysis?.update();
+    populationDynamics?.update();
     const selectedReview = state.activeRecording && state.experimentView.selectedUnitId != null
       ? state.openUnits.get(viewKey(state.activeRecording, state.experimentView.selectedUnitId))?.result : null;
-    miniProbe?.update(state.activeActivityOverview, state.experimentView, state.activeRecording, selectedReview);
+    miniProbe?.update(state.activeActivityOverview, state.experimentView, state.activeRecording, selectedReview,projectUI?.active?.id??state.datasetToken,state.regionResult?.probeTrack);
     projectUI?.syncVideo();
     annotationController?.update();
+    videoEvents?.update();
     const recording = state.activeRecording;
     if (!recording) {
       elements.experimentRecordingName.textContent = "—";
@@ -1021,90 +1526,96 @@
     elements.experimentRecordingName.textContent = recording.name;
     const facts = [
       [t("summary.units"), number(units.length)],
-      ["DURATION", `${Number(recording.duration || overview?.duration || 0).toFixed(1)} s`],
+      ["DURATION", `${(recording.duration ?? overview?.duration)?.toFixed(1) ?? "—"} s`],
       ["ANATOMY", mapped ? `${mapped} mapped · ${shanks.size || "—"} shanks` : t("units.unmapped")],
       ["VIDEO", video ? t(videoController.mapping.verificationStatus === "verified" ? "video.verified" : "video.unverified") : "NOT ATTACHED"]
     ];
     elements.experimentFacts.innerHTML = facts.map(([label, value]) => `<span>${escapeHtml(label)}<strong>${escapeHtml(value)}</strong></span>`).join("");
-    const interval = state.experimentView.selectedInterval;
-    elements.experimentTime.textContent = interval
-      ? `${Number(interval.start).toFixed(3)}–${Number(interval.end).toFixed(3)} s`
-      : `${Number(state.experimentView.cursorTime || 0).toFixed(3)} s`;
+    elements.experimentTime.textContent = `${Number(state.experimentView.cursorTime || 0).toFixed(3)} s`;
     elements.inspectUnitButton.disabled = state.experimentView.selectedUnitId == null;
-    const pinButton = document.getElementById("pin-unit-button");
-    const selectedId = state.experimentView.selectedUnitId;
-    const ready = selectedId != null && state.openUnits.get(viewKey(recording, selectedId))?.result?.spikeTimes;
-    const pinned = selectedId != null && pinnedComparison?.has(selectedId);
-    pinButton.disabled = !ready || pinned || pinnedComparison?.entries.size >= pinnedComparison?.limit;
-    pinButton.textContent = t(pinned ? "workspace.unitPinned" : "workspace.pinUnit");
   }
 
   function renderActivityStatus() {
+    if(state.activeRecording?.missingInputs?.length){renderPartialRecording(state.activeRecording);return;}
     const overview = state.activeActivityOverview;
-    if (!overview) return;
-    const layout = state.activityLayoutSummary;
-    const rows = layout
-      ? `${layout.aggregateRows} anatomical groups${layout.unitRows ? ` + ${layout.unitRows} Unit rows` : ""}`
-      : "anatomical overview";
-    const selected = state.experimentView.selectedUnitId == null ? "" : ` · Unit ${Number(state.experimentView.selectedUnitId)} expanded`;
-    elements.activityStatus.textContent = `${number(overview.units.length)} Units · ${rows} · ${number(overview.binCount)} bins × ${Number(overview.binSeconds).toFixed(3)} s · group = fraction above own p90${selected}`;
+    if (overview) elements.activityStatus.textContent = overview.units.length + ' Units';
   }
 
-  function handleExperimentViewChange(patch, snapshot = null) {
-    state.experimentView = { ...state.experimentView, ...(snapshot || patch || {}) };
-    pinnedComparison?.syncView();
-    if (Object.hasOwn(patch || {}, "expandedUnitId") || Object.hasOwn(patch || {}, "groupFocusPath")) renderActivityStatus();
-    if (Object.prototype.hasOwnProperty.call(patch || {}, "cursorTime")) state.playbackNeuralTime = Number(patch.cursorTime);
-    renderExperimentHeader();
-    if (Object.prototype.hasOwnProperty.call(patch || {}, "visibleRange")) scheduleActivityLevelForRange(state.experimentView.visibleRange);
-  }
-
-  function activityLevelForRange(overview, range) {
-    const available = overview?.pyramid?.availableBinCounts || [512];
-    const duration = Math.max(.001, Number(overview?.duration || 0));
-    const span = Math.max(.001, Number(range?.end || duration) - Number(range?.start || 0));
-    const plotWidth = Math.max(1, Number(elements.activityCanvas?.clientWidth || 1200) - 276);
-    const base = plotWidth < 560 ? 128 : plotWidth < 950 ? 256 : 512;
-    const desired = base * duration / span;
-    return available.find((level) => Number(level) >= desired) || Number(available[available.length - 1]);
-  }
-
-  function scheduleActivityLevelForRange(range) {
-    const recording = state.activeRecording;
-    const current = state.activeActivityOverview;
-    if (!recording || !current?.pyramid?.availableBinCounts?.length) return;
-    const target = activityLevelForRange(current, range);
-    if (Number(current.binCount) === Number(target)) return;
-    if (state.activityLevelTimer) clearTimeout(state.activityLevelTimer);
-    const token = ++state.activityLevelToken;
-    state.activityLevelAbortController?.abort();
-    state.activityLevelAbortController = new AbortController();
-    state.activityLevelTimer = setTimeout(async () => {
+  function renderPartialRecording(recording) {
+    const missing=recording.missingInputs;
+    elements.activityStatus.textContent=t("partial.status",{n:recording.fileCount});
+    elements.activityEmpty.hidden=true;
+    const plot=document.getElementById("signal-workspace");
+    let panel=document.getElementById("partial-signal-preview");
+    if(!panel){
+      panel=document.createElement("section");panel.id="partial-signal-preview";panel.className="partial-signal-preview";
+      plot.after(panel);
+    }
+    const fileRoles={"spike_times.npy":"partial.times","spike_clusters.npy":"partial.units","params.py":"partial.rate"};
+    const hints=missing.map(name=>`<li><code>${escapeHtml(name)}</code> · ${escapeHtml(t(fileRoles[name]))}</li>`).join("");
+    const labels=recording.clusterLabels.filter(unit=>unit.quality!=="unknown");
+    const sampleRate=recording.sampleRate && !recording.timesInSeconds ? ` · ${number(recording.sampleRate)} Hz` : "";
+    const knownHeader=recording.spikeCount==null?recording.name:t("partial.rowCount",{n:number(recording.spikeCount)});
+    const extraFiles=recording.files.filter(file=>!core.REQUIRED.includes(core.fileNameOf(file)));
+    const previewLength=128, lastStart=Math.max(0,(recording.spikeCount||0)-previewLength);
+    panel.innerHTML=`<header><strong>${escapeHtml(knownHeader+sampleRate)}</strong></header>
+      <div class="file-drop-slot" data-import-drop="neural" data-import-files="${escapeHtml(missing.join(" "))}" data-import-recording-key="${escapeHtml(recording.key)}" data-severity="warning"><strong>${escapeHtml(t("drop.neuralMissing"))}</strong><ul>${hints}</ul></div>
+      ${missing.includes("params.py")?`<form><label>${escapeHtml(t("partial.enterRate"))} <input type="number" min="0.000001" step="any" required></label> <button type="submit">${escapeHtml(t("partial.apply"))}</button></form>`:""}
+      <div data-partial-rows></div>${lastStart?`<label class="partial-row-picker"><span>${escapeHtml(t("partial.browse"))}</span><input data-first-row type="number" min="1" max="${lastStart+1}" value="1" step="1"><input type="range" min="0" max="${lastStart}" value="0" aria-label="${escapeHtml(t("partial.browse"))}"></label>`:""}
+      ${labels.length?`<p>${escapeHtml(t("partial.labels",{n:number(labels.length)}))} · ${escapeHtml(labels.slice(0,8).map(u=>'Unit '+u.id+' ('+u.quality+')').join(', '))}</p>`:""}
+      ${extraFiles.map((f,i)=>`<details data-preview-file="${i}" ${i===0&&recording.spikeCount==null?'open':''}><summary>${escapeHtml(f.name)}</summary><pre></pre></details>`).join("")}`;
+    const rowsNode=panel.querySelector("[data-partial-rows]"), slider=panel.querySelector('input[type="range"]');
+    for(const item of panel.querySelectorAll('[data-preview-file]'))item.ontoggle=async()=>{
+      const pre=item.querySelector('pre');
+      if(!item.open||pre.textContent)return;
+      try{pre.textContent=await core.previewKilosortFile(extraFiles[Number(item.dataset.previewFile)]);}
+      catch(error){pre.textContent=error.message;}
+    };
+    let drawToken=0;
+    async function draw() {
+      const token=++drawToken,start=Number(slider?.value||0);
       try {
-        const raw = await loadRecordingActivityOverview(recording, target, {
-          signal: state.activityLevelAbortController.signal
-        });
-        if (token !== state.activityLevelToken || recording !== state.activeRecording) return;
-        const overview = normalizeActivityOverview(raw, recording);
-        state.activeActivityOverview = overview;
-        activityCanvas.setData(overview, { preserveState: true });
-        activityCanvas.setViewState(state.experimentView);
-        const selectedId = state.experimentView.selectedUnitId;
-        const selectedEntry = selectedId == null ? null : state.openUnits.get(viewKey(recording, selectedId));
-        if (selectedEntry?.result) activityCanvas.setSelectedUnitData(selectedEntry.result);
-        renderActivityStatus();
-      } catch (error) {
-        if (error?.name !== "AbortError") elements.activityStatus.textContent = `Activity resolution unavailable · ${error.message}`;
-      }
-    }, 140);
+        const {samples,ids,count}=await core.readSpikeRows(recording,start,previewLength);
+        if(!rowsNode.isConnected||token!==drawToken||!count)return;
+        const xs=samples||Array.from({length:count},(_,i)=>start+i+1);
+        const min=Math.min(...xs),max=Math.max(...xs),unitIds=ids?[...new Set(ids)].sort((a,b)=>a-b):[null];
+        const rowById=new Map(unitIds.map((id,i)=>[id,i]));
+        const baseline=i=>16+16*i, width=640, left=95, height=25+16*unitIds.length;
+        const marks=xs.map((x,i)=>{
+          const px=left+(max===min?0:(x-min)/(max-min))*(width-left-8),y=baseline(rowById.get(ids?ids[i]:null));
+          return 'M'+px.toFixed(2)+' '+(y-7)+'v9';
+        }).join(" ");
+        const axis=!samples?t("partial.ordinal"):recording.sampleRate?"s":t("partial.sample");
+        const format=x=>samples&&recording.sampleRate?(x/recording.sampleRate).toFixed(4):number(x);
+        rowsNode.innerHTML=`<p>${escapeHtml(t("partial.rows",{a:number(start+1),b:number(start+count)}))} · ${escapeHtml(format(min))}–${escapeHtml(format(max))} ${escapeHtml(axis)}</p>
+          <div class="partial-raster"><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(t("partial.rows",{a:number(start+1),b:number(start+count)}))}">${unitIds.map((id,i)=>`<text x="0" y="${baseline(i)}">${id==null?'Spikes':'Unit '+Number(id)}</text>`).join("")}<path d="${marks}"/></svg></div>`;
+      }catch(error){if(rowsNode.isConnected&&token===drawToken)rowsNode.textContent=error.message;}
+    }
+    if(recording.spikeCount)draw();
+    if(slider){
+      const firstRow=panel.querySelector('[data-first-row]');
+      slider.oninput=()=>{firstRow.value=String(Number(slider.value)+1);draw();};
+      firstRow.onchange=()=>{
+        if(!firstRow.value || !firstRow.validity.valid){firstRow.value=String(Number(slider.value)+1);return;}
+        slider.value=String(firstRow.valueAsNumber-1);draw();
+      };
+    }
+    const form=panel.querySelector("form");
+    if(form)form.onsubmit=async event=>{
+      event.preventDefault();
+      const rate=form.querySelector("input").valueAsNumber;
+      if(!Number.isFinite(rate)||rate<=0)return;
+      const file=new File(["# Sampling rate entered in Explorer (Hz)\nsample_rate = "+rate+"\n"],"params.py");
+      if(recording.key!==".")Object.defineProperty(file,"relativePath",{value:recording.key+"/params.py"});
+      try{await projectUI.importNeuralFiles([file]);}catch(error){showToast(error.message, "error");}
+    };
   }
 
-  function setExperimentView(patch, { seekVideo = false } = {}) {
+  function setExperimentView(patch, { seekVideo = false, historyRestore = false } = {}) {
+    if (historyRestore) videoController?.pause();
     state.experimentView = { ...state.experimentView, ...(patch || {}) };
-    pinnedComparison?.syncView();
-    activityCanvas.setViewState(state.experimentView);
-    if (Object.prototype.hasOwnProperty.call(patch || {}, "visibleRange")) scheduleActivityLevelForRange(state.experimentView.visibleRange);
-    if (seekVideo && Number.isFinite(Number(patch?.cursorTime))) videoController?.seekNeural(Number(patch.cursorTime));
+    signalWorkspace.setViewState(state.experimentView);
+    if (seekVideo && Number.isFinite(patch?.cursorTime)) videoController?.seekNeural(patch.cursorTime,{preserveView:historyRestore});
     renderExperimentHeader();
   }
 
@@ -1119,11 +1630,15 @@
     const units = state.activeActivityOverview?.units || [];
     const matches = units.filter((unit) => activityUnitMatches(unit, elements.findUnitInput.value)).slice(0, 30);
     elements.findUnitResults.innerHTML = matches.length
-      ? matches.map((unit) => `<button class="find-unit-result" type="button" role="option" data-find-unit-id="${Number(unit.id)}"><span><strong>${escapeHtml(i18nApi.GLOSSARY.unit[languageSnapshot.language])} ${Number(unit.id)}</strong><small>${escapeHtml([unit.shankId != null && Number.isFinite(Number(unit.shankId)) ? `Shank ${Number(unit.shankId) + 1}` : "Shank —", unit.depthUm == null ? "depth —" : `${Math.round(unit.depthUm)} µm`, unit.region || t("units.unmapped"), unit.quality].join(" · "))}</small></span><b>${Number(unit.rateHz || 0).toFixed(Number(unit.rateHz || 0) < 10 ? 2 : 1)} Hz</b></button>`).join("")
+      ? matches.map((unit) => `<button class="find-unit-result" type="button" role="option" data-find-unit-id="${Number(unit.id)}"><span><strong ${unitMarks.attrs(state.activeRecording,unit.id)}>${escapeHtml(i18nApi.GLOSSARY.unit[languageSnapshot.language])} ${Number(unit.id)}</strong><small>${escapeHtml([unit.shankId != null && Number.isFinite(Number(unit.shankId)) ? `Shank ${Number(unit.shankId) + 1}` : "Shank —", unit.depthUm == null ? "depth —" : `${Math.round(unit.depthUm)} µm`, unit.region || t("units.unmapped"), unit.quality].join(" · "))}</small></span><b>${Number(unit.rateHz || 0).toFixed(Number(unit.rateHz || 0) < 10 ? 2 : 1)} Hz</b></button>`).join("")
       : `<div class="find-unit-empty">${escapeHtml(t("units.none"))}</div>`;
   }
 
   function setFindUnitOpen(open) {
+    if(open && state.activeRecording?.missingInputs?.length){
+      showToast(projectUI.importText("missingFiles")+state.activeRecording.missingInputs.join(", "), "warning");
+      return;
+    }
     const next = Boolean(open);
     elements.findUnitPopover.hidden = !next;
     elements.findUnitButton.setAttribute("aria-expanded", String(next));
@@ -1133,43 +1648,39 @@
     }
   }
 
-  async function selectActivityUnit(unitId) {
-    const recording = state.activeRecording;
+  function selectActivityUnit(unitId, {reveal = true} = {}) {
+    if (!state.activeRecording) return;
+    const units = state.activeActivityOverview?.units;
+    if (unitId === null) {
+      const view = state.experimentView;
+      const previous = units?.find(unit => Number(unit.id) === view.selectedUnitId);
+      signalWorkspace.checkpoint();
+      setExperimentView({selectedUnitId:null, expandedUnitId:null,
+        selectedShank:previous && view.selectedShank === previous.shankId ? null : view.selectedShank,
+        selectedRegion:previous && view.selectedRegion === (previous.region || t("units.unmapped")) ? null : view.selectedRegion});
+      return;
+    }
     const normalized = Number(unitId);
-    if (!recording || !Number.isFinite(normalized)) return;
-    const unit = state.activeActivityOverview?.units.find((item) => Number(item.id) === normalized);
+    const unit = units?.find(item => Number(item.id) === normalized);
     if (!unit) return;
+    signalWorkspace.checkpoint();
     setFindUnitOpen(false);
+    if (reveal) signalWorkspace.focusUnit(normalized);
     setExperimentView({
       selectedUnitId: normalized,
-      expandedUnitId: normalized,
+      expandedUnitId: null,
       selectedGroupKey: null,
       groupFocusPath: [],
       selectedShank: unit.shankId,
       selectedRegion: unit.region || t("units.unmapped")
     });
-    elements.activityStatus.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${normalized} · reading exact spike times…`;
-    try {
-      await openUnitOnly(recording, normalized);
-      if (recording !== state.activeRecording || Number(state.experimentView.selectedUnitId) !== normalized) return;
-      const entry = state.openUnits.get(viewKey(recording, normalized));
-      if (entry?.result) activityCanvas.setSelectedUnitData(entry.result);
-      renderActivityStatus();
-      renderExperimentHeader();
-    } catch (error) {
-      elements.activityStatus.textContent = `Unit ${normalized} · ${error.message}`;
-    }
   }
 
   async function refreshExperimentWorkspace(recording) {
-    pinnedComparison?.clear();
     const token = ++state.overviewToken;
     state.overviewAbortController?.abort();
-    state.activityLevelAbortController?.abort();
     state.overviewAbortController = new AbortController();
-    if (state.activityLevelTimer) clearTimeout(state.activityLevelTimer);
     state.activeActivityOverview = null;
-    state.activityLayoutSummary = null;
     state.experimentView = {
       visibleRange: { start: 0, end: Number(recording?.duration || 0) },
       cursorTime: 0,
@@ -1183,8 +1694,14 @@
     };
     elements.inspectUnitButton.disabled = true;
     elements.activityStatus.textContent = t("workspace.activityLoading");
-    activityCanvas.setData(null);
+    signalWorkspace.setData(null);
+    elements.activityEmpty.hidden = false;
     renderExperimentHeader();
+    document.getElementById("partial-signal-preview")?.remove();
+    if(recording?.missingInputs?.length){
+      renderPartialRecording(recording);
+      return;
+    }
     const started = performance.now();
     try {
       const raw = await loadRecordingActivityOverview(recording, 512, {
@@ -1201,8 +1718,9 @@
       state.activeActivityOverview = overview;
       state.experimentView.visibleRange = { start: 0, end: overview.duration };
       recording.unitSummaryMap = new Map(overview.units.map((unit) => [Number(unit.id), { id: Number(unit.id), count: unit.count, rateHz: unit.rateHz }]));
-      activityCanvas.setData(overview);
-      activityCanvas.setViewState(state.experimentView);
+      elements.activityEmpty.hidden = Boolean(overview.units.length);
+      const recordingKey=JSON.stringify([projectUI?.active?.id ?? state.datasetToken,recording.key,recording.dataVersion||0]);
+      if (!signalWorkspace.setData(overview,{recordingKey})) signalWorkspace.setViewState(state.experimentView);
       renderActivityStatus();
       renderUnitList();
       renderExperimentHeader();
@@ -1308,10 +1826,12 @@
       for (const [key, file] of Object.entries(message.files || {})) {
         if (file) buffers[key] = await file.arrayBuffer();
       }
+      signal?.throwIfAborted();
+      if (message.type==="signal-window") return {rows:core.signalWindow(core.signalIndex(buffers), message.sampleRate, message.unitIds, message.start, message.end)};
       if (message.type === "interval-activity") return core.intervalActivityBuffers(buffers, message.sampleRate, message.start, message.end, message.duration);
       if (message.type === "activity-overview") {
         onProgress?.({ phase: "reading", progress: 18, status: "running" });
-        const pyramid = core.buildActivityPyramidBuffers(buffers, message.sampleRate, message.sourceFingerprint);
+        const pyramid = core.buildActivityPyramidBuffers(buffers, message.sampleRate, message.sourceFingerprint, message.silentUnitIds);
         if (signal?.aborted) throw new DOMException("Background data reader cancelled", "AbortError");
         onProgress?.({ phase: "ready", progress: 100, status: "complete" });
         return {
@@ -1326,7 +1846,11 @@
     }
     const requestId = `review-${++state.workerSequence}`;
     return new Promise((resolve, reject) => {
-      const abort = () => terminateWorker("Activity overview build cancelled");
+      const abort = () => {
+        if (message.type!=="signal-window") { terminateWorker(); return; }
+        state.pending.delete(requestId);
+        reject(new DOMException("Signal window changed","AbortError"));
+      };
       const cleanup = () => signal?.removeEventListener("abort", abort);
       signal?.addEventListener("abort", abort, { once: true });
       state.pending.set(requestId, { resolve, reject, onProgress, cleanup });
@@ -1355,6 +1879,40 @@
     };
   }
 
+  const signalCoverage = new WeakMap();
+  const databaseTrains = new WeakMap();
+  async function loadSignalWindow({unitIds,start,end,signal},recording=state.activeRecording) {
+    let rows;
+    if (state.dataMode==='database') {
+      if (!databaseTrains.has(recording)) databaseTrains.set(recording,new Map());
+      const cache=databaseTrains.get(recording), lower=window.NeuropixelsEventAnalysis.lowerBound;
+      rows=await Promise.all(unitIds.map(async id=>{
+        if (!cache.has(id)) cache.set(id,databaseClient.loadUnitReview(recording,id).then(review=>review.spikeTimes)
+          .catch(error=>{cache.delete(id);throw error;}));
+        const train=await cache.get(id);
+        return [id,train.subarray(lower(train,start),lower(train,end))];
+      }));
+    } else {
+      const result=await requestWorker({type:'signal-window',
+        experimentKey:`${state.datasetToken}:${recording.key}:${Number(recording.dataVersion||0)}`,
+        files:{spikeTimes:recording.spikeTimesFile,spikeClusters:recording.spikeClustersFile},
+        sampleRate:recording.sampleRate,unitIds,start,end},{signal});
+      rows=result.rows;
+    }
+    signal?.throwIfAborted();
+    const result=new Map(rows), file=recording.coverageFile;
+    if (file) {
+      if (!signalCoverage.has(file)) signalCoverage.set(file,file.text().then(text=>JSON.parse(text)));
+      const coverage=await signalCoverage.get(file);
+      result.coverage=new Map();
+      for (const id of unitIds) {
+        const {intervals}=window.NeuropixelsEventAnalysis.commonCoverage(coverage,[id],recording.key,{allowMissing:true});
+        if (intervals) result.coverage.set(id,intervals);
+      }
+    }
+    return result;
+  }
+
   async function inspectRecordingUnit(recording, clusterId) {
     if (state.dataMode === "database") return databaseClient.loadUnitReview(recording, clusterId);
     return requestWorker({
@@ -1364,6 +1922,16 @@
       sampleRate: recording.sampleRate,
       clusterId: Number(clusterId)
     });
+  }
+
+  function recordingAnalysisUnits() {
+    // A source-declared Unit with no spikes is still an analysis column. The
+    // activity overview may omit it, so never use activity as the Unit catalog.
+    const byId = new Map(recordingUnits(state.activeRecording).map(unit => [unit.id, unit]));
+    for (const unit of state.activeActivityOverview?.units || []) {
+      byId.set(unit.id, { ...byId.get(unit.id), ...unit });
+    }
+    return [...byId.values()];
   }
 
   function recordingUnits(recording) {
@@ -1405,7 +1973,7 @@
       return `<div class="unit-row ${focused ? "active" : ""} ${open ? "open" : ""}" role="option" aria-selected="${focused}">
         <button class="unit-row-select" type="button" data-cluster-id="${unit.id}" aria-label="${escapeHtml(loading ? t("units.loadingAria", { id: unit.id }) : t("units.rowAria", { id: unit.id }))}" ${loading ? "disabled" : ""}>
           <span class="unit-row-main">
-            <span class="unit-row-title"><i class="quality-dot ${qualityTone(unit.quality)}"></i><strong>${escapeHtml(i18nApi.GLOSSARY.unit[languageSnapshot.language])} ${unit.id}</strong></span>
+            <span class="unit-row-title"><i class="quality-dot ${qualityTone(unit.quality)}"></i><strong ${unitMarks.attrs(state.activeRecording,unit.id)}>${escapeHtml(i18nApi.GLOSSARY.unit[languageSnapshot.language])} ${unit.id}</strong></span>
             <small>${escapeHtml(unit.quality)} · ${escapeHtml(region)}</small>
           </span>
           <span class="unit-row-metrics"><strong>${loading ? escapeHtml(t("units.loading")) : rate}</strong><span>${spikes} ${escapeHtml(i18nApi.GLOSSARY.spike[languageSnapshot.language])}${open ? ` · ${escapeHtml(t("units.open"))}` : ""}</span></span>
@@ -1415,10 +1983,32 @@
   }
 
   function renderRecordings() {
-    elements.recordingStrip.innerHTML = state.recordings.map((recording, index) => `<button class="recording-button ${recording === state.activeRecording ? "active" : ""}" type="button" data-recording-key="${escapeHtml(recording.key)}" title="${escapeHtml(t("units.countMeta", { count: number(recording.clusterLabels.length), duration: recording.duration.toFixed(1) }))}"><strong>${index + 1}</strong><span>${escapeHtml(recording.name)}</span></button>`).join("");
+    const closeable = Boolean(projectUI?.browserLocal && projectUI.active);
+    const strip=elements.recordingStrip,restoreFocus=strip.contains(document.activeElement);
+    strip.replaceChildren(...state.recordings.map((recording,index)=>{
+      const active=recording===state.activeRecording;
+      const {wrapper,button,close}=window.NeuropixelsWorkspaceTabs.create({
+        active,title:recording.name+" · "+t("units.countMeta",{count:number(recording.clusterLabels.length),duration:recording.duration?.toFixed(1)??"—"}),
+        onSelect:()=>{if(analysisTabs.active)analysisTabs.signals({focus:false});if(recording!==state.activeRecording)selectRecording(recording);},
+        closeLabel:closeable?projectUI.importText('closeRecording')+' · '+recording.name:'',
+        onClose:closeable?()=>projectUI.closeRecording(recording.key).catch(error=>projectUI.failure(error)):null
+      });
+      button.dataset.recordingKey=recording.key;if(active)button.dataset.analysisSignal='';
+      if(close)close.dataset.closeRecording=recording.key;
+      const order=document.createElement('strong'),name=document.createElement('span');order.textContent=index+1;name.textContent=recording.name;
+      button.replaceChildren(order,name);return wrapper;
+    }));
+    if(jointInputs().length>1){
+      const current=Boolean(state.activeRecording?.jointSources);
+      const {wrapper,button}=window.NeuropixelsWorkspaceTabs.create({label:t('joint.title'),title:t('joint.hint'),active:current,
+        onSelect:()=>{if(analysisTabs.active)analysisTabs.signals({focus:false});activateJointRecording().catch(e=>showToast(e.message,'error'));}});
+      button.dataset.jointRecording='';if(current)button.dataset.analysisSignal='';strip.append(wrapper);
+    }
+    analysisTabs?.sync();
+    if(restoreFocus)strip.querySelector('.recording-button.active')?.focus({preventScroll:true});
     requestAnimationFrame(() => {
-      elements.recordingStrip.querySelector(".recording-button.active")?.scrollIntoView({ block: "nearest", inline: "center" });
       updateRecordingScrollControls();
+      window.NeuropixelsWorkspaceTabs.reveal(strip.querySelector(".recording-button.active"));
     });
   }
 
@@ -1430,13 +2020,15 @@
       ? databaseClient.buildActivityOverview(recording, { binCount: level, ...options })
       : (() => {
           const files = workerFiles(recording);
+          const silentUnitIds = (recording.units || []).filter(u => u.spike_count === 0).map(u => u.cluster_id);
           return requestWorker({
           type: "activity-overview",
           experimentKey: cacheKey,
           files,
           sampleRate: recording.sampleRate,
           binCount: level,
-          sourceFingerprint: core.activityFileFingerprint(files, recording.sampleRate, recording.dataVersion)
+          silentUnitIds,
+          sourceFingerprint: core.activityFileFingerprint(files, recording.sampleRate, recording.dataVersion) + (silentUnitIds.length ? ":" + silentUnitIds.join(",") : "")
           }, options);
         })();
     state.activityOverviewCache.set(cacheKey, pending);
@@ -1451,6 +2043,10 @@
   }
 
   function updateRecordingScrollControls() {
+    const carousel=elements.recordingStrip.parentElement;
+    // Measure the space available *without* the two scroll buttons.
+    const overflow=elements.recordingStrip.scrollWidth>carousel.clientWidth+1;
+    carousel.classList.toggle('fits',!overflow);
     const maximum = Math.max(0, elements.recordingStrip.scrollWidth - elements.recordingStrip.clientWidth);
     elements.recordingPrevious.disabled = elements.recordingStrip.scrollLeft <= 1;
     elements.recordingNext.disabled = elements.recordingStrip.scrollLeft >= maximum - 1;
@@ -1465,16 +2061,21 @@
       ? items.map((item) => {
         const localized = localizeDataStatusItem(item);
         const supplementRows = item.state === "missing" && item.missingRecordings?.length
-          ? `<div class="missing-file-list">${item.missingRecordings.flatMap((recording) => recording.files.map((file) => `
-              <div class="missing-file-row">
-                <div><strong>${escapeHtml(recording.recordingName)}</strong><span>${escapeHtml(file.filename)}</span></div>
+          ? `<div class="missing-file-list">${item.missingRecordings.flatMap((recording) => recording.files.map((file) => {
+              const nwb = recordingForSupplement(recording.recordingKey)?.fromNwb;
+              if (nwb && ["quality","amplitude","position","template","probeGrouping"].includes(item.key)) return "";
+              return `<div class="missing-file-row file-drop-slot" data-import-drop="neural" data-import-recording-key="${escapeHtml(recording.recordingKey)}" data-import-files="${escapeHtml(file.filename.split(" / ").join(" "))}">
+                <div><strong>${escapeHtml(recording.recordingName)}</strong><span>${escapeHtml(t("drop.filesHere",{files:file.filename}))}</span></div>
                 <div class="missing-file-actions">
                   <button type="button" data-supplement-kind="files" data-recording-key="${escapeHtml(recording.recordingKey)}" data-ingest-roles="${escapeHtml(file.roles.join(","))}" ${state.supplementBusy ? "disabled" : ""}>${escapeHtml(t("status.addFiles"))}</button>
                   <button type="button" data-supplement-kind="folder" data-recording-key="${escapeHtml(recording.recordingKey)}" data-ingest-roles="${escapeHtml(file.roles.join(","))}" ${state.supplementBusy ? "disabled" : ""}>${escapeHtml(t("status.addFolder"))}</button>
                 </div>
-              </div>`)).join("")}</div>`
+              </div>`;})).join("")}</div>`
           : "";
-        return `<div class="data-status-item ${escapeHtml(item.state)}"><div><strong>${escapeHtml(localized.label)}</strong><span>${escapeHtml(localized.detail)}</span>${supplementRows}</div></div>`;
+        const table={probeTrack:"trackDirect",unitRegions:"direct"}[item.key];
+        const tableSlot=table && item.state==="not-provided" && projectUI?.browserLocal && state.recordings.length
+          ? `<span class="file-drop-slot" data-import-drop="neural" data-import-table="${table}">${escapeHtml(t("drop.filesHere",{files:t("drop."+table)}))}</span>` : "";
+        return `<div class="data-status-item ${escapeHtml(item.state)}"><div><strong>${escapeHtml(localized.label)}</strong><span>${escapeHtml(localized.detail)}</span>${supplementRows}${tableSlot}</div></div>`;
       }).join("")
       : `<p class="data-status-empty">${escapeHtml(emptyText)}</p>`;
     return `<section class="data-status-group"><header><span>${escapeHtml(title)}</span><b>${items.length}</b></header>${rows}</section>`;
@@ -1498,9 +2099,11 @@
 
   function renderDataStatus() {
     const status = dataStatusApi.buildDataStatus(state.recordings, state.regionResult, state.errors);
+    document.getElementById("probe-track-drop").hidden=!(projectUI?.browserLocal && state.recordings.length && !state.regionResult?.probeTrack?.valid);
     elements.dataStatusSummary.textContent = t("status.summaryCounts", status.counts) + (status.counts.invalid ? t("status.summaryInvalid", status.counts) : "");
     elements.dataStatusContext.textContent = t("status.recordingContext", { dataset: state.rootName || t("status.loadedDataset"), count: state.recordings.length });
-    elements.dataStatusButton.classList.toggle("has-missing", status.counts.missing > 0);
+    elements.dataStatusButton.classList.toggle("is-ready", state.recordings.length > 0 && !status.counts.missing && !status.counts.invalid);
+    elements.dataStatusButton.classList.toggle("has-missing", state.recordings.length > 0 && status.counts.missing > 0);
     elements.dataStatusButton.classList.toggle("has-invalid", status.counts.invalid > 0);
     elements.dataStatusGroups.innerHTML = [
       dataStatusGroup(t("status.available"), status.available, t("status.noneAvailable")),
@@ -1551,6 +2154,7 @@
     detailPlots.clear();
     probeViewer.clear();
     elements.detailsContext.style.setProperty("--trace-color", themeSnapshot.palette.probe.unopened);
+    for(const el of [elements.detailsFocusLabel,elements.reviewTitle])delete el.dataset.markRef;
     elements.detailsFocusLabel.textContent = t("review.noSelected");
     elements.reviewTitle.textContent = t("review.noOpen");
     elements.reviewSubtitle.textContent = t("review.selectSignal");
@@ -1569,9 +2173,11 @@
     const region = regionFor(recording, clusterId);
     const traceColor = entry.traceColor || themeSnapshot.palette.units.primary.trace;
     elements.detailsContext.style.setProperty("--trace-color", traceColor);
+    unitMarks.bind(elements.detailsFocusLabel,recording,clusterId);
     elements.detailsFocusLabel.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId} · ${recording.name}`;
+    unitMarks.bind(elements.reviewTitle,recording,clusterId);
     elements.reviewTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId}`;
-    elements.reviewSubtitle.textContent = [recording.name, label.quality, region?.region || t("review.regionUnmapped"), t("review.recordingDuration", { duration: recording.duration.toFixed(2) })].join(" · ");
+    elements.reviewSubtitle.textContent = [recording.name, label.quality, region?.region || t("review.regionUnmapped"), t("review.recordingDuration", { duration: (recording.duration?.toFixed(2) ?? "—") })].join(" · ");
     renderMetrics(result, recording, clusterId);
     const channelText = result.peakChannel == null ? t("review.peakChannelUnavailable") : t("review.peakChannel", { channel: result.peakChannel });
     const depthText = result.peakChannelPosition?.y == null ? "" : ` · ${result.peakChannelPosition.y.toFixed(0)} µm`;
@@ -1595,7 +2201,7 @@
     lane.style.setProperty("--trace-color", palette.trace);
     lane.innerHTML = `
       <header class="trace-lane-header">
-        <div class="trace-identity"><i></i><strong>${escapeHtml(unitTerm)} ${Number(clusterId)}</strong><span>${escapeHtml(recording.name)} · ${escapeHtml(label.quality)} · ${escapeHtml(region)} · ${number(result.spikeCount)} ${escapeHtml(spikeTerm)}</span></div>
+        <div class="trace-identity"><i></i><strong ${unitMarks.attrs(recording,clusterId)}>${escapeHtml(unitTerm)} ${Number(clusterId)}</strong><span>${escapeHtml(recording.name)} · ${escapeHtml(label.quality)} · ${escapeHtml(region)} · ${number(result.spikeCount)} ${escapeHtml(spikeTerm)}</span></div>
         <div class="trace-lane-actions"><span class="trace-window">—</span><button class="trace-remove" type="button" aria-label="${escapeHtml(t("review.closeUnitSignal", { id: Number(clusterId) }))}" title="${escapeHtml(t("review.closeSignalTitle"))}">×</button></div>
       </header>
       <div class="canvas-frame detail-frame" data-interaction-mode="${state.interactionMode}">
@@ -1697,6 +2303,7 @@
   }
 
   async function addUnitToView(recording, clusterId) {
+    if(recording?.missingInputs?.length)return showToast(projectUI.importText("missingFiles")+recording.missingInputs.join(", "), "warning");
     if (!recording) return;
     const key = viewKey(recording, clusterId);
     if (state.openUnits.has(key)) {
@@ -1723,7 +2330,7 @@
       createAdditionalView(recording, clusterId, result);
       showToast(t("toast.added", { id: clusterId }));
     } catch (error) {
-      showToast(t("toast.couldNotAdd", { id: clusterId, error: error.message }));
+      showToast(t("toast.couldNotAdd", { id: clusterId, error: error.message }), "error");
     } finally {
       state.loadingUnits.delete(key);
       renderUnitList();
@@ -1744,6 +2351,7 @@
     elements.primaryTraceLane.dataset.viewKey = key;
     elements.primaryOverviewLabel.hidden = false;
     elements.primaryOverviewFrame.hidden = false;
+    unitMarks.bind(elements.primaryTraceTitle,recording,clusterId);
     elements.primaryTraceTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId}`;
     elements.primaryTraceMeta.textContent = [recording.name, label.quality, region?.region || t("review.regionShortUnmapped"), `${number(result.spikeCount)} ${i18nApi.GLOSSARY.spike[languageSnapshot.language]}`].join(" · ");
     plots.setData({ ...result, sampleRate: recording.sampleRate });
@@ -1757,6 +2365,7 @@
   }
 
   async function openUnitOnly(recording, clusterId, options = {}) {
+    if(recording?.missingInputs?.length)return showToast(projectUI.importText("missingFiles")+recording.missingInputs.join(", "), "warning");
     if (!recording || !Number.isFinite(Number(clusterId))) return;
     const key = viewKey(recording, clusterId);
     if (state.openUnits.size === 1 && state.openUnits.has(key)) {
@@ -1769,6 +2378,7 @@
     state.loadingUnits.add(key);
     renderRecordings();
     renderUnitList();
+    unitMarks.bind(elements.reviewTitle,recording,clusterId);
     elements.reviewTitle.textContent = `${i18nApi.GLOSSARY.unit[languageSnapshot.language]} ${clusterId}`;
     elements.reviewSubtitle.textContent = `${recording.name} · ${t("review.loading")}`;
     setReviewState(t("review.reading"), "loading");
@@ -1798,12 +2408,14 @@
       elements.reviewSubtitle.textContent = error.message;
       state.loadingUnits.delete(key);
       clearOpenUnitViews();
-      showToast(t("toast.couldNotRead", { id: clusterId, error: error.message }));
+      showToast(t("toast.couldNotRead", { id: clusterId, error: error.message }), "error");
     }
   }
 
   function selectRecording(recording) {
     if (!recording) return;
+    hideUnitContextMenu();
+    if (state.activeActivityOverview) signalWorkspace.setData(null);
     state.selectionToken += 1;
     clearOpenUnitViews({ render: false });
     state.activeRecording = recording;
@@ -1812,9 +2424,79 @@
     elements.reviewLayout.hidden = true;
     renderRecordings();
     renderUnitList();
-    videoController?.setRecording(recording, projectUI?.active ? [] : state.databaseCatalog?.videos || []);
+    if(!projectUI?.browserLocal || !projectUI.active)videoController?.setRecording(recording, projectUI?.active ? [] : state.databaseCatalog?.videos || []);
     projectUI?.recordingChanged(recording);
-    refreshExperimentWorkspace(recording);
+    return refreshExperimentWorkspace(recording);
+  }
+
+  function jointInputs(anchor=state.activeRecording){
+    if(state.dataMode==='database')return [];
+    const available=state.recordings.filter(r=>r.spikeTimesFile && r.spikeClustersFile && r.sampleRate>0);
+    const current=anchor?.sourceSession;
+    return available.filter(r=>!current || !r.sourceSession || String(r.sourceSession)===String(current));
+  }
+  async function revealAnalysisUnit(recording,id){
+    if(!recording)return false;
+    const ref=id==null?null:window.NeuropixelsJointRecording.originalUnit(recording,id);
+    const byKey=key=>state.recordings.find(r=>r.key===key);
+    const target=ref?byKey(ref.recordingKey):recording.jointSources?
+      (recording.jointSources.every(byKey)?recording:null):byKey(recording.key);
+    if(!target){showToast(t('joint.restoreProbe'),'error');return false;}
+    if(target!==state.activeRecording)await selectRecording(target);
+    if(target!==state.activeRecording)return false;
+    if(id!=null)selectActivityUnit(ref?ref.unitId:id);
+    return true;
+  }
+  function releaseJointRecording(){
+    state.jointCache?.stop.abort();
+    state.jointCache=null;
+  }
+  async function activateJointRecording(){
+    const r=await getJointRecording(jointInputs());
+    if(r && state.activeRecording!==r)await selectRecording(r);
+    return r;
+  }
+  async function probeAnalysisUnits(r,signal){
+    const raw=await loadRecordingActivityOverview(r,512,{signal});
+    const catalog=new Map((r.units||[]).map(row=>[Number(row.cluster_id),row]));
+    const units=normalizeActivityOverview(raw,r).units, present=new Set(units.map(u=>u.id));
+    for(const u of recordingUnits(r))if(!present.has(u.id)){
+      const row=catalog.get(u.id);
+      units.push({...u,x:row?.x_um,depthUm:row?.probe_depth_um,region:row?.brain_region,
+        regionColor:row?.atlas_color_hex,shankId:row?.shank_id});
+    }
+    return units;
+  }
+  async function getJointRecording(inputs){
+    const joint=window.NeuropixelsJointRecording,token=state.datasetToken;
+    if(inputs.length<2)return null;
+    const versions=inputs.map(r=>Number(r.dataVersion||0)),cached=state.jointCache;
+    if(cached && cached.token===token && cached.inputs.length===inputs.length && inputs.every((r,i)=>r===cached.inputs[i] && versions[i]===cached.versions[i])){
+      return cached.ready;
+    }
+    const sessions=inputs.map(r=>r.sourceSession),known=new Set(sessions.filter(Boolean).map(String));
+    if(known.size>1)throw Error(t('joint.sessions'));
+    if(sessions.some(s=>!s) && !window.confirm(t('joint.confirm')+'\n'+inputs.map(r=>r.name).join(', ')))return null;
+    const stop=new AbortController(),dialog=document.createElement('dialog');dialog.className='project-dialog';
+    const heading=document.createElement('h2'),status=document.createElement('p'),cancel=document.createElement('button');
+    heading.textContent=t('joint.title');status.textContent=inputs.map(r=>r.name).join(' + ');status.setAttribute('role','status');
+    cancel.textContent=t('joint.cancel');cancel.type='button';cancel.onclick=()=>dialog.close();dialog.append(heading,status,cancel);
+    dialog.addEventListener('close',()=>stop.abort(),{once:true});document.body.append(dialog);dialog.showModal();
+    const ready=(async()=>{
+      const sources=[];
+      for(const r of inputs){
+        const units=await probeAnalysisUnits(r,stop.signal);
+        const name=projectUI?.active?.recordingSources?.[r.key]?.probe||r.name;
+        sources.push({recording:r,units,probeName:name});
+      }
+      const r=await joint.makeRecording(sources,t('joint.title'),stop.signal,(n,total)=>{status.textContent=t('joint.sort')+' '+Math.round(100*n/total)+'%';});
+      if(stop.signal.aborted || token!==state.datasetToken || !inputs.every(item=>state.recordings.includes(item)))throw new DOMException('Cancelled','AbortError');
+      r.sourceSession=known.size===1?[...known][0]:null;
+      return r;
+    })();
+    state.jointCache={token,inputs,versions,ready,stop};
+    try {return await ready;}catch(e){if(state.jointCache?.ready===ready)state.jointCache=null;if(e.name!=='AbortError')throw e;return null;}
+    finally{dialog.close();dialog.remove();}
   }
 
   function renderDialog() {
@@ -1828,6 +2510,7 @@
       <section class="details-section">
         <h2>${escapeHtml(t(state.dataMode === "database" ? "dialog.databaseCatalog" : "dialog.folderSummary"))}</h2>
         <div class="details-grid">
+          ${state.activeRecording && !state.activeRecording.jointSources ? `<div class="detail-item"><span>recordingId</span><strong class="recording-id-value">${escapeHtml(state.activeRecording.key)}</strong></div>` : ""}
           <div class="detail-item"><span>${escapeHtml(t("dialog.filesReceived"))}</span><strong>${number(state.files.length)}</strong></div>
           <div class="detail-item"><span>${escapeHtml(t("dialog.filesUsed"))}</span><strong>${number(usefulFiles)}</strong></div>
           <div class="detail-item"><span>${escapeHtml(t("dialog.kilosortSize"))}</span><strong>${core.formatBytes(totalBytes)}</strong></div>
@@ -1863,7 +2546,7 @@
       <section class="details-section">
         <h2>${escapeHtml(t("dialog.recordings"))}</h2>
         <table class="file-table"><thead><tr><th>${escapeHtml(t("dialog.recording"))}</th><th>${escapeHtml(t("dialog.units"))}</th><th>${escapeHtml(t("dialog.spikes"))}</th><th>${escapeHtml(t("dialog.duration"))}</th><th>${escapeHtml(t("dialog.size"))}</th></tr></thead><tbody>
-          ${state.recordings.map((recording) => `<tr><td>${escapeHtml(recording.name)}</td><td>${number(recording.clusterLabels.length)}</td><td>${number(recording.spikeCount)}</td><td>${recording.duration.toFixed(2)} s</td><td>${core.formatBytes(recording.totalBytes)}</td></tr>`).join("")}
+          ${state.recordings.map((recording) => `<tr><td>${escapeHtml(recording.name)}</td><td>${number(recording.clusterLabels.length)}</td><td>${number(recording.spikeCount)}</td><td>${(recording.duration?.toFixed(2) ?? "—")} s</td><td>${core.formatBytes(recording.totalBytes)}</td></tr>`).join("")}
         </tbody></table>
         ${state.errors.length ? `<p class="details-note">${escapeHtml(t("dialog.unreadable", { count: state.errors.length }))} ${escapeHtml(state.errors.join(" | "))}</p>` : ""}
       </section>
@@ -1873,12 +2556,59 @@
       </section>`;
   }
 
-  async function openFiles(files) {
+  async function updateRecordingTabs(records,files,focusKey) {
+    if(state.jointCache?.inputs.some(r=>!records.includes(r)))releaseJointRecording();
+    if(!records.length){
+      await clearNeuralWorkspace();
+      projectUI.recordingChanged(null);
+    }else{
+      const previous=state.files;
+      state.files=files;
+      state.recordings=records;
+      const regionFiles=list=>list.filter(f=>/\.csv$/i.test(f.name)).map(core.pathOf).sort();
+      if(JSON.stringify(regionFiles(previous))!==JSON.stringify(regionFiles(files)))
+        state.regionResult=await regionCore.scanFiles(files);
+      const next=records.find(r=>r.key===focusKey)||records[0];
+      if(next!==state.activeRecording)selectRecording(next);
+      else renderRecordings();
+      elements.dataDetails.disabled=false;
+      renderSummary();
+      renderDialog();
+      projectUI.render();
+    }
+    // Replacing the strip removes the activated × from the DOM.
+    if(document.activeElement===document.body)
+      (elements.recordingStrip.querySelector(".active") || document.getElementById("open-folder-button")).focus({preventScroll:true});
+  }
+
+  async function clearNeuralWorkspace() {
+    hideUnitContextMenu();
+    document.getElementById("partial-signal-preview")?.remove();
+    releaseJointRecording();
+    state.datasetToken += 1;
+    state.selectionToken += 1;
+    state.overviewToken += 1;
+    state.overviewAbortController?.abort();
+    Object.assign(state,{dataMode:"folder",databaseCatalog:null,files:[],recordings:[],errors:[],regionResult:null,
+      activeRecording:null,activeActivityOverview:null,pendingVideoCursorTime:null,playbackNeuralTime:null});
+    clearOpenUnitViews({render:false});
+    signalWorkspace.setData(null);
+    renderSummary();
+    renderRecordings();
+    renderUnitList();
+    elements.dataDetails.disabled=true;
+    showOnly("explorer");
+    renderExperimentHeader();
+    await clearWorker();
+  }
+
+  async function openFiles(files, {partial=false,recordingKeys,focusKey,indexedRecordings}={}) {
     const selectedFiles = [...files].filter((file) => file && !String(file.name || "").startsWith("."));
     if (!selectedFiles.length) {
-      showToast(t("toast.noReadableFiles"));
+      showToast(t("toast.noReadableFiles"), "error");
       return;
     }
+    releaseJointRecording();
     state.datasetToken += 1;
     state.selectionToken += 1;
     state.dataMode = "folder";
@@ -1893,10 +2623,10 @@
     showLoading(t("loading.inspectTitle"), t("loading.filesReceived", { count: number(selectedFiles.length) }), 16);
     await clearWorker();
 
-    const groups = core.groupExperimentFiles(selectedFiles);
+    const groups = core.groupExperimentFiles(selectedFiles,{partial}).filter(g=>!recordingKeys||recordingKeys.includes(g.key));
     if (!groups.length) {
       showOnly("explorer");
-      showToast(t("loading.noRequiredFiles"));
+      showToast(t("loading.noRequiredFiles"), "error");
       return;
     }
 
@@ -1905,9 +2635,22 @@
     let completed = 0;
     const indexedPromise = Promise.allSettled(groups.map(async (group) => {
       try {
-        const recording = await core.indexExperiment(group);
+        const recording = indexedRecordings?.get(group.key) || await core.indexExperiment(group,{partial});
+        if(partial && group.key==='.')recording.name="Kilosort";
+        const project=projectUI?.active;
+        const source=project?.recordingSources?.[group.key] ?? (project?.recordingIds?.length===1 ? project : null);
+        recording.fromNwb=!!source?.sourceNwb;
         const metadata = group.byName.get("explorer-units.json");
-        if (metadata) { const info = JSON.parse(await metadata.text()); recording.units = info.units; recording.sourceSession = info.session; }
+        if (metadata) {
+          const info = JSON.parse(await metadata.text());
+          recording.units = info.units; recording.sourceSession = info.session;
+          if(/^(?:Allen )?NWB\b/.test(info.source || "")){
+            recording.fromNwb=true;
+            recording.timesInSeconds=info.timestampUnit==="seconds";
+            if(info.source==="NWB")recording.name=[info.session,info.probe].filter(Boolean).join(" · ");
+            if(!recording.clusterLabels.length)recording.clusterLabels=(info.units||[]).map(u=>({id:u.cluster_id,quality:"unknown"}));
+          }
+        }
         return recording;
       }
       finally {
@@ -1927,7 +2670,7 @@
 
     if (!state.recordings.length) {
       showOnly("explorer");
-      showToast(t("loading.nonePassed"));
+      showToast(t("loading.nonePassed"), "error");
       return;
     }
 
@@ -1938,11 +2681,12 @@
     renderDialog();
     elements.dataDetails.disabled = false;
     showOnly("explorer");
-    selectRecording(state.recordings[0]);
+    selectRecording(state.recordings.find(r=>r.key===focusKey)||state.recordings[0]);
     showToast(t("toast.recordingsReady", { count: state.recordings.length }));
   }
 
   async function openDatabaseCatalog(recordingIds = null) {
+    releaseJointRecording();
     state.datasetToken += 1;
     state.selectionToken += 1;
     state.dataMode = "database";
@@ -1986,22 +2730,36 @@
     });
   }
 
-  async function walkEntry(entry, parent = "") {
-    const path = parent ? `${parent}/${entry.name}` : entry.name;
-    if (entry.isFile) {
-      const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+  async function walkDroppedItem(item, parent = "") {
+    const path = parent ? `${parent}/${item.name}` : item.name;
+    if (item.kind === "file" || item.isFile) {
+      const file = item.getFile ? await item.getFile() : await new Promise((resolve, reject) => item.file(resolve, reject));
+      if(item.getFile && window.NeuropixelsVideoSync.VIDEO_EXTENSIONS.test(file.name))Object.defineProperty(file,"sourceHandle",{value:item});
       return [attachRelativePath(file, path)];
     }
-    if (!entry.isDirectory) return [];
-    const children = await readDirectoryEntries(entry.createReader());
-    const nested = await Promise.all(children.map((child) => walkEntry(child, path)));
-    return nested.flat();
+    const children = item.createReader ? await readDirectoryEntries(item.createReader()) : [];
+    if (item.kind === "directory") for await (const child of item.values()) children.push(child);
+    return (await Promise.all(children.map(child => walkDroppedItem(child,path)))).flat();
   }
 
   async function filesFromDrop(dataTransfer) {
-    const entries = [...(dataTransfer.items || [])].map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
-    if (entries.length) return (await Promise.all(entries.map((entry) => walkEntry(entry)))).flat();
-    return [...(dataTransfer.files || [])];
+    // Chromium revokes drag-store access after this event returns. Capture every
+    // entry or File now, including plain files mixed with directory entries.
+    const items = [...(dataTransfer.items || [])].filter(item => item.kind === "file");
+    if (!items.length) return [...dataTransfer.files];
+    const lists = items.map(async item => {
+      const handlePromise = item.getAsFileSystemHandle?.();
+      const entry = item.webkitGetAsEntry?.();
+      const file = item.getAsFile();
+      // file:// Chromium cannot read some legacy directory-entry URLs. Native
+      // handles preserve the dropped directory's name on both file: and https:.
+      const handle = await handlePromise?.catch(() => null);
+      if (handle || entry?.isDirectory) return walkDroppedItem(handle || entry);
+      if (file) return [file];
+      if (entry) return walkDroppedItem(entry);
+      throw new Error(t("drop.unreadable"));
+    });
+    return (await Promise.all(lists)).flat();
   }
 
   function recordingForSupplement(key) {
@@ -2013,7 +2771,7 @@
     const recording = recordingForSupplement(button.dataset.recordingKey);
     const roles = String(button.dataset.ingestRoles || "").split(",").filter(Boolean);
     if (!recording || !roles.length) {
-      showToast(t("toast.supplementTargetMissing"));
+      showToast(t("toast.supplementTargetMissing"), "warning");
       return;
     }
     const kind = button.dataset.supplementKind === "folder" ? "folder" : "files";
@@ -2089,6 +2847,11 @@
     if (!selected.length) return;
     const recording = recordingForSupplement(pending.recordingKey);
     if (!recording) throw new Error(t("toast.supplementTargetMissing"));
+    if (projectUI.browserLocal) {
+      const matching = selected.filter(file => pending.roles.includes(core.roleForFile(file)));
+      if (!matching.length || (pending.kind !== "folder" && matching.length !== selected.length)) throw new Error(t("toast.noMatchingSupplement"));
+      return projectUI.importNeuralFiles(matching, recording.key);
+    }
     const focusedKey = state.focusedUnit;
     const viewSnapshots = captureOpenUnitViews();
     let committed;
@@ -2127,7 +2890,7 @@
     try {
       await applySupplement(input.files, pending);
     } catch (error) {
-      showToast(t("toast.supplementFailed", { error: error.message }));
+      showToast(t("toast.supplementFailed", { error: error.message }), "error");
     } finally {
       state.supplementBusy = false;
       state.pendingSupplement = null;
@@ -2142,6 +2905,45 @@
   }
 
   elements.themeSelect.value = themeSnapshot.preference;
+  const workspaceSettings=window.installExplorerSettings({t,
+    videoLabels:()=>({key:annotationController.key,names:Object.keys(annotationController.doc?.labelColors||{})}),
+    ready:scope=>scope==='signal'?Boolean(signalWorkspace.data):scope==='video'?Boolean(videoController.source):Boolean(projectUI.active),
+    actions:{signalLeft:()=>signalWorkspace.panByFraction(-.1),signalRight:()=>signalWorkspace.panByFraction(.1),
+      videoBack:()=>videoController.stepFrames(-5),videoForward:()=>videoController.stepFrames(5),
+      frameBack:()=>videoController.stepFrames(-1),frameForward:()=>videoController.stepFrames(1),
+      markLabel:name=>{
+        const active=annotationController.quickMark?.label;
+        if(active && active!==name){showToast(t('prefs.markActive',{label:active}));return;}
+        annotationController.setMarkLabel(name,'annotation');annotationController.toggleMark();
+      },
+      play:()=>videoController.togglePlayback(),mark:()=>annotationController.toggleMark(),save:()=>projectUI.action('save-project')}
+  });
+  const sizeField = elements.textSize;
+  annotationController.labelKey=name=>workspaceSettings.labelKey(name);
+  behaviorLabels.labelKey=annotationController.labelKey;
+  const browserFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  let preferredSize = browserFontSize;
+  try {
+    const stored = localStorage.getItem("neuropixels.text-size");
+    const legacyScale = {standard:1, large:1.125, largest:1.25};
+    if (stored) preferredSize = legacyScale[stored] * browserFontSize || Number(stored);
+  } catch { /* The control also works without local storage. */ }
+  sizeField.value = Math.min(Number(sizeField.max), Math.max(Number(sizeField.min), Math.round(preferredSize || browserFontSize)));
+  document.documentElement.style.fontSize = sizeField.value + "px";
+  sizeField.addEventListener("input", () => {
+    if (!sizeField.validity.valid) return;
+    document.documentElement.style.fontSize = sizeField.value + "px";
+    try { localStorage.setItem("neuropixels.text-size", sizeField.value); } catch { /* Session-only preference. */ }
+    signalWorkspace.applyTextSize();
+    detailPlots.render();
+    plotEntries().forEach(entry => entry.manager.render());
+    syncProbeView();
+    videoEvents.redraw = true;
+    videoEvents.update();
+  });
+  sizeField.addEventListener("change", () => {
+    if (!sizeField.validity.valid) sizeField.value = parseFloat(document.documentElement.style.fontSize);
+  });
   elements.themeSelect.addEventListener("change", () => themeController.setPreference(elements.themeSelect.value));
   themeController.onChange(applyThemeSnapshot, false);
   elements.languageSelect.value = languageSnapshot.language;
@@ -2159,20 +2961,15 @@
   elements.folderInput.addEventListener("change", () => openFiles(elements.folderInput.files));
   elements.supplementFileInput.addEventListener("change", () => handleSupplementSelection(elements.supplementFileInput));
   elements.supplementFolderInput.addEventListener("change", () => handleSupplementSelection(elements.supplementFolderInput));
-  elements.dataStatusGroups.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-supplement-kind]");
     if (button) openSupplementPicker(button);
   });
 
-  elements.recordingStrip.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-recording-key]");
-    const recording = state.recordings.find((item) => item.key === button?.dataset.recordingKey);
-    if (recording && recording !== state.activeRecording) selectRecording(recording);
-  });
   elements.recordingPrevious.addEventListener("click", () => scrollRecordings(-1));
   elements.recordingNext.addEventListener("click", () => scrollRecordings(1));
   elements.recordingStrip.addEventListener("scroll", updateRecordingScrollControls, { passive: true });
-  window.addEventListener("resize", updateRecordingScrollControls, { passive: true });
+  new ResizeObserver(updateRecordingScrollControls).observe(elements.recordingStrip.parentElement);
 
   elements.findUnitButton.addEventListener("click", () => setFindUnitOpen(elements.findUnitPopover.hidden));
   elements.findUnitInput.addEventListener("input", renderFindUnitResults);
@@ -2181,36 +2978,35 @@
     const first = elements.findUnitResults.querySelector("[data-find-unit-id]");
     if (first) {
       event.preventDefault();
-      selectActivityUnit(Number(first.dataset.findUnitId));
+      setFindUnitOpen(false);
+      signalWorkspace.checkpoint();
+      signalWorkspace.locateUnit(Number(first.dataset.findUnitId));
     }
   });
   elements.findUnitResults.addEventListener("click", (event) => {
     const result = event.target.closest("[data-find-unit-id]");
-    if (result) selectActivityUnit(Number(result.dataset.findUnitId));
+    if (result) { signalWorkspace.checkpoint();setFindUnitOpen(false); signalWorkspace.locateUnit(Number(result.dataset.findUnitId)); }
   });
-  document.getElementById("pin-unit-button").addEventListener("click", () => {
-    const recording = state.activeRecording;
-    const id = state.experimentView.selectedUnitId;
-    if (!recording || id == null) return;
-    const entry = state.openUnits.get(viewKey(recording, id));
-    const unit = state.activeActivityOverview?.units.find(item => Number(item.id) === Number(id));
-    if (pinnedComparison.add(recording, unit, entry?.result, themeSnapshot.palette.units.primary))
-      showToast(t("workspace.pinNext"));
-  });
-
-  elements.inspectUnitButton.addEventListener("click", () => {
-    if (state.experimentView.selectedUnitId == null) return;
+  let inspectorOrigin=null;
+  async function inspectUnit(id, origin=elements.inspectUnitButton) {
+    if (id == null || !state.activeRecording) return;
+    const ref=window.NeuropixelsJointRecording.originalUnit(state.activeRecording,id);
+    if(ref){if(!await revealAnalysisUnit(state.activeRecording,id))return;id=ref.unitId;}
+    inspectorOrigin=origin;
     elements.reviewLayout.hidden = false;
+    try { await openUnitOnly(state.activeRecording,id); }
+    catch (error) { showToast(error.message, "error"); }
     requestAnimationFrame(() => {
       plots.render();
       detailPlots.render();
       probeViewer.draw();
       elements.closeUnitInspector.focus({ preventScroll: true });
     });
-  });
+  }
+  elements.inspectUnitButton.addEventListener("click",()=>inspectUnit(state.experimentView.selectedUnitId));
   elements.closeUnitInspector.addEventListener("click", () => {
     elements.reviewLayout.hidden = true;
-    elements.inspectUnitButton.focus({ preventScroll: true });
+    (inspectorOrigin?.isConnected?inspectorOrigin:elements.inspectUnitButton).focus({ preventScroll: true });
   });
 
   elements.unitList.addEventListener("click", (event) => {
@@ -2299,28 +3095,84 @@
     const action = event.target.closest("[data-unit-action]")?.dataset.unitAction;
     if (action) runUnitContextAction(action);
   });
+  document.addEventListener("contextmenu", openWorkspaceMenu);
+  document.addEventListener("keydown",event=>{
+    if(event.key==="ContextMenu" || (event.shiftKey&&event.key==="F10"))openWorkspaceMenu(event,true);
+  });
+  elements.unitContextMenu.addEventListener("keydown",event=>{
+    const buttons=[...elements.unitContextMenu.querySelectorAll('button:not(:disabled)')].filter(button=>button.offsetWidth);
+    const i=buttons.indexOf(document.activeElement);
+    if(event.key==='Escape' || event.key==='Tab'){
+      hideUnitContextMenu(true);
+      if(event.key==='Escape')event.preventDefault();
+    }else if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
+      event.preventDefault();
+      const j=event.key==='Home'?0:event.key==='End'?buttons.length-1:i+(event.key==='ArrowDown'?1:-1);
+      buttons[(j+buttons.length)%buttons.length]?.focus();
+    }else return;
+    event.stopPropagation();
+  });
+  if(projectUI.browserLocal)document.body.classList.add('workspace-context-actions');
+  window.addEventListener("blur",hideUnitContextMenu);
   document.addEventListener("pointerdown", (event) => {
     if (!elements.unitContextMenu.hidden && !event.target.closest("#unit-context-menu")) hideUnitContextMenu();
     if (!elements.dataStatusPopover.hidden && !event.target.closest("#capability-row")) setDataStatusOpen(false);
     if (!elements.findUnitPopover.hidden && !event.target.closest(".find-unit-control")) setFindUnitOpen(false);
   });
   document.addEventListener("pointerover", (event) => {
-    const control = event.target.closest?.(".context-help[data-help-key]");
-    if (control) showContextHelp(control);
+    const control = event.target.closest?.(helpTargets);
+    if (!control && pendingHelpControl?.matches(":focus-visible")) return;
+    if (event.pointerType !== "touch") showContextHelp(control, control?.matches(".context-help") ? 600 : 550);
   });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("button.context-help");
+    if (button) {
+      event.preventDefault();
+      event.stopPropagation();
+      showContextHelp(button, 0);
+    }
+  }, true);
   document.addEventListener("pointerout", (event) => {
-    const control = event.target.closest?.(".context-help[data-help-key]");
-    if (control && !control.contains(event.relatedTarget) && document.activeElement !== control) hideContextHelp(control);
+    if (pendingHelpControl?.contains(event.target) && !pendingHelpControl.contains(event.relatedTarget) &&
+      !pendingHelpControl.matches(":focus-visible")) hideContextHelp();
   });
   document.addEventListener("focusin", (event) => {
-    const control = event.target.closest?.(".context-help[data-help-key]");
-    if (control) showContextHelp(control);
+    if (event.target.matches?.(":focus-visible")) showContextHelp(event.target.closest?.(helpTargets), 0);
   });
   document.addEventListener("focusout", (event) => {
-    const control = event.target.closest?.(".context-help[data-help-key]");
-    if (control && !control.matches(":hover")) hideContextHelp(control);
+    if (event.target === pendingHelpControl) hideContextHelp();
   });
+  document.addEventListener("pointerdown", hideContextHelp, true);
+  document.addEventListener("scroll", () => {
+    const control = pendingHelpControl;
+    if (!control) return;
+    const rect = control.getBoundingClientRect();
+    const visible = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    if (!control.matches(":hover, :focus-visible") || !control.contains(visible)) hideContextHelp();
+    else if (activeHelpControl) positionContextTooltip(control);
+  }, true);
+  document.addEventListener("close", hideContextHelp, true);
+  window.addEventListener("blur", hideContextHelp);
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && activeHelpControl) {
+      event.preventDefault();event.stopPropagation();hideContextHelp();
+    }
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented) return;
+    const undoKey=(event.ctrlKey||event.metaKey) && !event.altKey && ['z','y'].includes(event.key.toLowerCase());
+    if(undoKey && workspaceSettings.scope==='video' && annotationController.doc &&
+        !event.target.closest('input,textarea,[contenteditable="true"]') && !document.querySelector('dialog[open]') && elements.helpDrawer.hidden){
+      event.preventDefault();
+      annotationController.restoreEdit(event.shiftKey || event.key.toLowerCase()==='y');return;
+    }
+    if (undoKey &&
+        event.target.closest('.experiment-workspace') && !event.target.closest('#signal-workspace,#analysis-pages,#behavior-patterns,#annotation-panel,#annotation-timeline,input,textarea,select,[contenteditable="true"]') &&
+        !document.querySelector('dialog[open]') && elements.reviewLayout.hidden && elements.helpDrawer.hidden) {
+      const redo=event.shiftKey||event.key.toLowerCase()==='y';
+      if(redo?signalWorkspace.redo():signalWorkspace.undo())event.preventDefault();
+      return;
+    }
     if (!elements.helpDrawer.hidden && event.key === "Tab") {
       const controls = [...elements.helpDrawer.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')].filter((item) => !item.hidden);
       const first = controls[0];
@@ -2333,19 +3185,27 @@
       closeHelp();
       return;
     }
-    if (event.key === "Escape" && activeHelpControl) hideContextHelp(activeHelpControl);
-    if (event.key === "Escape" && !elements.unitContextMenu.hidden) hideUnitContextMenu();
+    if (event.key === "Escape" && !elements.unitContextMenu.hidden) {hideUnitContextMenu(true);return;}
     if (event.key === "Escape" && !elements.dataStatusPopover.hidden) {
       setDataStatusOpen(false);
       elements.dataStatusButton.focus({ preventScroll: true });
+      return;
     }
     if (event.key === "Escape" && !elements.findUnitPopover.hidden) {
       setFindUnitOpen(false);
       elements.findUnitButton.focus({ preventScroll: true });
+      return;
     }
     if (event.key === "Escape" && !elements.reviewLayout.hidden) {
-      elements.reviewLayout.hidden = true;
-      elements.inspectUnitButton.focus({ preventScroll: true });
+      elements.closeUnitInspector.click();
+      return;
+    }
+    if (event.key === "Escape" && event.target === document.body && !tourPanel.hidden && !document.querySelector("dialog[open]")) {
+      closeImportTour(); return;
+    }
+    if(event.key==="Escape" && !document.querySelector("dialog[open]") && !event.target.closest("input,textarea,select,[contenteditable=true]")){
+      if(signalWorkspace.drag || workspaceSettings.scope==="signal")signalWorkspace.key(event);
+      else if(workspaceSettings.scope==="video" && videoController.playing){event.preventDefault();videoController.pause();}
     }
   });
   document.addEventListener("scroll", hideUnitContextMenu, true);
@@ -2357,43 +3217,301 @@
     if (event.clientX < rectangle.left || event.clientX > rectangle.right || event.clientY < rectangle.top || event.clientY > rectangle.bottom) elements.dataDialog.close();
   });
 
-  document.addEventListener("dragenter", (event) => {
-    event.preventDefault();
-    state.dragDepth += 1;
-    elements.dropOverlay.hidden = false;
-    elements.dropZone.classList.add("is-dragging");
-  });
-  document.addEventListener("dragover", (event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; });
-  document.addEventListener("dragleave", (event) => {
-    event.preventDefault();
-    state.dragDepth = Math.max(0, state.dragDepth - 1);
-    if (!state.dragDepth) {
-      elements.dropOverlay.hidden = true;
-      elements.dropZone.classList.remove("is-dragging");
+  const dragsFiles = event => Array.from(event.dataTransfer?.types || []).includes("Files");
+  const dropSelectors = {
+    neural: ".activity-workspace",
+    video: "#experiment-video-region",
+    annotation: "#create-annotation, .workspace-annotation-empty, #annotation-panel",
+    events: "[data-label-source=experiment]",
+    clock: "#video-alignment, #video-event-overview",
+    project: "[data-project-action=open-project]"
+  };
+  const highlightedDrops = new Set();
+  const dropHint = document.getElementById("file-drop-hint");
+  let importQueue = Promise.resolve();
+
+  function namedDropKind(name) {
+    if (window.NeuropixelsVideoSync.VIDEO_EXTENSIONS.test(name)) return "video";
+    if (/\.neuroproject$/i.test(name)) return "project";
+    if (name === "explorer-events.json") return "events";
+    if (name === "annotations.project.json" || name.endsWith(".annotations.json")) return "annotation";
+    if (/\.clock\.json$/i.test(name)) return "clock";
+    if (core.USEFUL_NAMES.has(name) || core.roleForFile({name}) || name === "explorer-units.json" || name.endsWith(".nwb")) return "neural";
+    return null;
+  }
+  function visibleDropArea(kind, fileName) {
+    if(kind==="neural" && fileName){
+      const key=state.activeRecording?.key;
+      const matching=[...document.querySelectorAll('[data-import-drop=neural][data-import-files]')].find(el=>
+        el.getClientRects().length && (!el.dataset.importRecordingKey || el.dataset.importRecordingKey===key) && el.dataset.importFiles.split(/\s+/).includes(fileName));
+      if(matching)return matching;
     }
-  });
-  document.addEventListener("drop", async (event) => {
+    const slots = {video:"#video-empty", clock:"#video-clock-row", annotation:"#create-annotation", events:"[data-label-source=experiment]"};
+    const slot = slots[kind] && document.querySelector(slots[kind]);
+    if (slot?.dataset.importDrop === kind && slot.getClientRects().length) return slot;
+    return [...document.querySelectorAll(dropSelectors[kind])].find(el => el.getClientRects().length);
+  }
+  function showDropAreas(areas, message = "", modal = null, invalidArea = null) {
+    const next = new Set(areas.filter(Boolean));
+    for (const el of highlightedDrops) if (!next.has(el)) { el.classList.remove("file-drop-active","file-drop-invalid"); highlightedDrops.delete(el); }
+    for (const el of next) {
+      el.classList.add("file-drop-active");
+      el.classList.toggle("file-drop-invalid", el === invalidArea);
+      highlightedDrops.add(el);
+    }
+    if (message && dropHint.parentNode !== (modal || document.body)) (modal || document.body).append(dropHint);
+    if (dropHint.textContent !== message) dropHint.textContent = message;
+    dropHint.classList.toggle("file-drop-invalid", !!invalidArea);
+    dropHint.hidden = !message;
+  }
+  const dropTarget = event => event.target.closest?.("[data-import-drop], [data-project-action=open-project]");
+  const areaKind = target => target?.dataset.importDrop || (target ? "project" : null);
+  function wrongAreaMessage(expectedKind, kind, name = "") {
+    if (!kind) return t("drop.unsupported", {name});
+    const panelTitle = document.querySelector(`dialog[open] [data-project-import] [data-import-drop="${kind}"]:not([hidden]) h3`);
+    const titleKey = {neural:"workspace.activityTitle", video:"labels.videoPlayer", annotation:"labels.video", events:"labels.recorded", clock:"drop.clockTarget"};
+    const clockRow=document.querySelector("#video-clock-row[data-import-drop=clock]");
+    const target = panelTitle?.textContent || (kind === "project" ? projectUI.importText("openProject") : kind==="clock" && !clockRow ? projectUI.importText("align") : t(titleKey[kind]));
+    const received = (name ? name + " · " : "") + t("drop.type." + kind);
+    return t("drop.wrongArea", {expected:t("drop.type." + expectedKind), received, target});
+  }
+  function updateDrop(event) {
+    if (!dragsFiles(event)) return;
     event.preventDefault();
-    state.dragDepth = 0;
-    elements.dropOverlay.hidden = true;
-    elements.dropZone.classList.remove("is-dragging");
-    showLoading(t("loading.readingFolder"), t("loading.collectingFiles"), 8);
+    const modal = document.querySelector("dialog[open]");
+    const target = dropTarget(event);
+    const targetKind = areaKind(target);
+    if (modal && (!target || !modal.contains(target))) {
+      showDropAreas([], "", modal);
+      event.dataTransfer.dropEffect = "none";
+      return;
+    }
+    // Chrome can hide names and JSON content until release.
+    const kinds = new Set();
+    const names=Array.from(event.dataTransfer.files,core.fileNameOf);
+    for (const name of names) kinds.add(namedDropKind(name));
+    for (const item of event.dataTransfer.items) {
+      if (item.kind !== "file") continue;
+      if (item.type.startsWith("video/")) kinds.add("video");
+      if (item.type === "application/x-nwb") kinds.add("neural");
+    }
+    kinds.delete(null);
+    if (targetKind) {
+      const acceptedNames=target.dataset.importFiles?.split(/\s+/);
+      const expected = acceptedNames?.join(" / ") || t("drop.type." + targetKind);
+      const wrongName=acceptedNames && names.find(name=>!acceptedNames.includes(name));
+      const wrong = [...kinds].find(kind => kind !== targetKind && !(targetKind === "neural" && kind === "events" && kinds.has("neural")));
+      const message = wrong ? wrongAreaMessage(targetKind,wrong) : wrongName ? t("drop.fileExpected",{name:wrongName,files:expected}) :
+        t(kinds.size ? "drop.release" : "drop.destination", {types:expected});
+      const areas = [target];
+      if (wrong) {
+        const destination = modal ? modal.querySelector(`[data-import-drop="${wrong}"]:not([hidden])`) : visibleDropArea(wrong);
+        areas.push(destination);
+      }
+      showDropAreas(areas, message, modal, wrong || wrongName ? target : null);
+    } else if (kinds.size) {
+      showDropAreas([...kinds].map(kind=>visibleDropArea(kind,names.find(name=>namedDropKind(name)===kind))), t("drop.release", {types:[...kinds].map(kind=>t("drop.type."+kind)).join(" / ")}));
+    } else {
+      showDropAreas([], t("drop.detect"));
+    }
+    event.dataTransfer.dropEffect = "copy";
+  }
+  function resetDrop() { state.dragDepth = 0; showDropAreas([]); }
+  document.addEventListener("dragenter", event => {
+    if (!dragsFiles(event)) return;
+    if (!state.dragDepth) document.querySelectorAll(".file-drop-received").forEach(el=>el.classList.remove("file-drop-received"));
+    state.dragDepth++;
+    updateDrop(event);
+  });
+  document.addEventListener("dragover", updateDrop);
+  document.addEventListener("dragleave", event => {
+    if (dragsFiles(event) && --state.dragDepth <= 0) resetDrop();
+  });
+  window.addEventListener("blur", resetDrop);
+  document.addEventListener("dragend", resetDrop);
+
+  function noteDrop(kind) {
+    if (!dropHint.hidden) return;
+    const el = visibleDropArea(kind);
+    if (!el) return;
+    el.classList.add("file-drop-received");
+    clearTimeout(el.dropFeedbackTimer);
+    el.dropFeedbackTimer = setTimeout(() => el.classList.remove("file-drop-received"), 1500);
+  }
+  async function classifyDrop(file) {
+    const name = core.fileNameOf(file);
+    const kind = namedDropKind(name);
+    if (!kind && name.endsWith(".csv")) {
+      const table = await regionCore.inspect(file);
+      return {kind: table.direct || table.trackDirect ? "neural" : null, file, table};
+    }
+    if (!name.endsWith(".json")) return {kind, file};
+    let input;
+    try { input = JSON.parse(await file.text()); } catch { return {kind: null, file}; }
+    if (input?.schema === "allen-video-clock/1") return {kind: "clock", file};
+    if (input?.schema === window.NeuropixelsAnnotations.SCHEMA) return {kind: "annotation", file};
+    if (input?.schema === window.NeuropixelsAnnotations.CANDIDATE_SCHEMA) return {kind: "annotation", additive:true, file};
+    if (input?.schema === window.NeuropixelsEventAnalysis.SCHEMA) {
+      if (name === "explorer-events.json") return {kind: "events", file};
+      const canonical = new File([file], "explorer-events.json", {type:file.type, lastModified:file.lastModified});
+      return {kind: "events", originalName:file.name, file: attachRelativePath(canonical, core.pathOf(file).replace(/[^/]+$/, canonical.name))};
+    }
+    const metadata = name === "explorer-units.json" && Array.isArray(input?.units);
+    const coverage = name === "explorer-coverage.json" && input?.schema === "neuropixels-recording-coverage/1";
+    return {kind: metadata || coverage ? "neural" : null, file};
+  }
+
+  async function classifyImport(files, targetKind) {
+    const items = await Promise.all(files.map(classifyDrop));
+    if (!targetKind) return items;
+    // Directory companions may live above the actual sorting folder. Loose files
+    // have no directory root and must meet the target's own format requirements.
+    const dropRoot = file => core.pathOf(file).split("/").slice(0,-1)[0];
+    const roots = new Set(items.filter(item => item.kind === targetKind).map(item => dropRoot(item.file)).filter(Boolean));
+    const directory = file => core.pathOf(file).split("/").slice(0,-1).join("/");
+    const neuralDirs = new Set(items.filter(item => item.kind === "neural").map(({file}) => directory(file)));
+    const wrong = items.find(({kind,file}) => {
+      if (kind === targetKind) return false;
+      if (targetKind !== "neural") return true;
+      if (kind === "events" && neuralDirs.has(directory(file))) return false;
+      if (!kind && roots.has(dropRoot(file))) return false;
+      return true;
+    });
+    if (wrong) throw new Error(wrongAreaMessage(targetKind,wrong.kind,wrong.originalName || wrong.file.name));
+    return items;
+  }
+
+  async function importWorkspaceFiles(files, targetKind, slot) {
+    if (!files.length) throw new Error(t("drop.unreadable"));
+    const originalProject = projectUI.active?.id, originalRecord = state.activeRecording;
+    const items = await classifyImport(files, targetKind);
+    if (projectUI.active?.id !== originalProject || state.activeRecording !== originalRecord) throw new Error(t("drop.changed"));
+    if (slot) {
+      if (slot.project !== originalProject || slot.activeKey !== originalRecord?.key) throw new Error(t("drop.changed"));
+      if (slot.folder) {
+        const groups = core.groupExperimentFiles(files,{partial:true}).filter(group=>group.files.some(file=>core.USEFUL_NAMES.has(core.fileNameOf(file))));
+        if (!groups.length || groups.some(group=>group.key==="." || state.recordings.some(r=>r.key===group.key) || !["spike_times.npy","spike_clusters.npy"].every(name=>group.byName.has(name))) || items.some(item=>/\.nwb$/i.test(item.file.name))) throw new Error(t("drop.newSortingFolder"));
+      }
+      if (slot.files || slot.table) {
+        const names=slot.files?.split(/\s+/);
+        const invalid=items.find(item=>slot.table ? !item.table?.[slot.table] : !names.includes(core.fileNameOf(item.file)));
+        if (invalid) throw new Error(t("drop.fileExpected",{name:invalid.file.name,files:slot.table?t("drop."+slot.table):names.join(" / ")}));
+        const record=recordingForSupplement(slot.recordingKey);
+        if (!record) throw new Error(t("toast.supplementTargetMissing"));
+        if (projectUI.browserLocal) await projectUI.importNeuralFiles(files,record.key);
+        else await applySupplement(files,{recordingKey:slot.recordingKey,roles:files.map(core.roleForFile),kind:"files"});
+        noteDrop("neural");
+        return;
+      }
+    }
+    const unsupported = items.filter(item => !item.kind);
+    const accepted = items.filter(item => item.kind);
+    if (!accepted.length) throw new Error(t("drop.unsupported", {name: unsupported[0].file.name}));
+    const packages = accepted.filter(item => item.kind === "project");
+    if (packages.length) {
+      if (files.length !== 1) throw new Error(t("drop.packageAlone"));
+      if (!projectUI.browserLocal) throw new Error(t("drop.native"));
+      await projectUI.openPackage(packages[0].file); noteDrop("project");
+      return;
+    }
+    const neural = accepted.filter(item => ["neural","events"].includes(item.kind));
+    const media = accepted.filter(item => ["video","clock","annotation"].includes(item.kind));
+    const videos=media.filter(item=>item.kind==='video').map(item=>item.file);
+    const batch={matchCamera:!targetKind || videos.length>0};
+    if(videos.length && neural.length && projectUI.browserLocal)batch.videos=await projectUI.prepareVideoFiles(videos);
+    if(projectUI.active?.id!==originalProject || state.activeRecording!==originalRecord)throw Error(t("drop.changed"));
+    const errors = [];
+    if (neural.length) {
+      const sources = neural.map(item => item.file);
+      try {
+        if (projectUI.browserLocal) await projectUI.acceptWorkspaceDrop("neural",sources,batch);
+        else if (state.dataMode !== "database" && !sources.some(f => /\.nwb$/i.test(f.name))) await openFiles(sources);
+        else throw new Error(t("drop.native"));
+        for (const kind of new Set(neural.map(item => item.kind))) noteDrop(kind);
+      } catch (error) {
+        if (error.name === "AbortError" || originalProject || state.activeRecording || !media.length) throw error;
+        errors.push(error);
+      }
+    }
+    if (media.length) {
+      if(videos.length){
+        if(!projectUI.browserLocal)throw Error(t("drop.native"));
+        await projectUI.acceptWorkspaceDrop('video',videos,batch);
+        noteDrop('video');
+      }
+      for(const item of media.filter(i=>i.kind!=='video')){
+        try{
+          if(projectUI.browserLocal)await projectUI.acceptWorkspaceDrop(item.kind,[item.file],batch);
+          else if(item.kind==='clock')await projectUI.acceptClockFile(item.file);
+          else await annotationController.importFile(item.file);
+          noteDrop(item.kind);
+        }catch(error){
+          if(error.name==='AbortError')throw error;
+          errors.push(Object.assign(new Error(item.file.name+' · '+error.message),{severity:error.severity}));
+        }
+      }
+    }
+    if (errors.length) {
+      const error = new Error(errors.map(e => e.message).join("\n"));
+      if (errors.every(e => e.severity === "warning")) error.severity = "warning";
+      throw error;
+    }
+    const unsupportedLoose = unsupported.find(item => core.pathOf(item.file) === item.file.name);
+    if (unsupportedLoose) showToast(t("drop.unsupported", {name: unsupportedLoose.file.name}), "warning");
+  }
+
+  // Capture directory handles in the drop event, then serialize whole batches.
+  // The second drop can complete a first partial recording even while it is indexing.
+  function queueWorkspaceEdit(task) {
+    const result=importQueue.then(task);
+    importQueue=result.catch(()=>{});
+    return result;
+  }
+  function queueImport(files, targetKind, slot) {
+    const ready = Promise.resolve(files).then(value => ({value}), error => ({error}));
+    return queueWorkspaceEdit(async () => {
+      const result = await ready;
+      if (result.error) throw result.error;
+      await importWorkspaceFiles(result.value, targetKind,slot);
+      if (slot?.inspector?.isConnected && projectUI.dialog.open) projectUI.dialog.close();
+    }).catch(error => { if (error.name !== "AbortError") showToast(error.message, error.severity || "error"); });
+  }
+  projectUI.importWorkspaceFiles = queueImport;
+  projectUI.filesForImportArea = async (files, kind) => (await classifyImport(files,kind)).filter(item => item.kind).map(item => item.file);
+  document.addEventListener("drop", async event => {
+    if (!dragsFiles(event)) return;
+    event.preventDefault(); resetDrop();
+    const modal = document.querySelector("dialog[open]");
+    const target = dropTarget(event);
+    const inspector=target?.closest("[data-project-inputs]");
+    if (!modal || (inspector && modal.contains(inspector))) {
+      const data=target?.dataset;
+      const slot=target?.closest(".file-drop-slot") ? {
+        files:data.importFiles, folder:data.importFolder, table:data.importTable, recordingKey:data.importRecordingKey ?? state.activeRecording?.databaseId ?? state.activeRecording?.key,
+        project:projectUI.active?.id, activeKey:state.activeRecording?.key, inspector
+      } : null;
+      queueImport(filesFromDrop(event.dataTransfer), areaKind(target),slot);
+      return;
+    }
+    if (!target || !modal.contains(target) || !projectUI.browserLocal) return;
     try {
       const files = await filesFromDrop(event.dataTransfer);
-      if (projectUI?.browserLocal) await projectUI.importFolder(files);
-      else await openFiles(files);
-    }
-    catch (error) {
-      showOnly("explorer");
-      showToast(t("toast.droppedError", { error: error.message }));
-    }
+      if (!files.length || !modal.open || !target.isConnected) return;
+      if (target.closest("[data-project-import]")) await projectUI.stageWizardFiles(target.dataset.importDrop,files);
+      else if (target.dataset.importDrop === "clock") {
+        const clocks = await projectUI.filesForImportArea(files, "clock");
+        if (modal.open && target.isConnected) await projectUI.acceptWorkspaceDrop("clock",clocks);
+      }
+    } catch (error) { if (error.name !== "AbortError") showToast(error.message, error.severity || "error"); }
   });
 
-  window.addEventListener("beforeunload", () => {
+  window.addEventListener("pagehide", event => {
+    if(event.persisted)return;
     state.worker?.terminate();
     if (state.workerUrl) URL.revokeObjectURL(state.workerUrl);
+    videoEvents?.destroy();
     videoController?.destroy();
-    activityCanvas.destroy();
+    patterns?.close(false);signalWorkspace.destroy();analysisTabs?.prune(Symbol());
   });
 
   function clamp(value, minimum, maximum) {
@@ -2417,5 +3535,5 @@
   applyLanguageSnapshot(languageSnapshot);
   updateOpenUnitCount();
   setInteractionMode("cursor");
-  initialize();
+  initialize().then(() => startImportTour(true));
 })();

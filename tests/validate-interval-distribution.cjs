@@ -4,6 +4,17 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const { distributionGeometry, MiniProbe } = require("../scripts/mini-probe.js");
 const { ActivityAnatomyCanvas } = require("../scripts/activity-overview.js");
+const regionCore = require("../scripts/region-core.js");
+const emptyGuide = MiniProbe.regionInputs('zh-CN');
+assert.match(emptyGuide,/先导入记录/);
+assert.doesNotMatch(emptyGuide,/data-import-table=/);
+const unitGuide = MiniProbe.regionInputs('zh-CN',{key:'Exp1'},true,false,['direct']);
+assert.match(unitGuide,/data-import-table="direct" data-import-recording-key="Exp1" open/);
+assert.doesNotMatch(unitGuide,/trackDirect/);
+const trackGuide = MiniProbe.regionInputs('zh-CN',{key:'Exp1'},false,true);
+assert.match(trackGuide,/data-import-table="trackDirect"/);
+const snippets = [unitGuide,trackGuide].map((guide,i)=>new File([guide.replaceAll('<wbr>','').match(/<pre>([^<]*)<\/pre>/)[1]],i+'.csv'));
+assert.equal(MiniProbe.regionInputs('en',{jointSources:['A','B']}),'');
 const units = [
   { id: 1, depthUm: 0, rateHz: 0, spikeCount: 0 },
   { id: 2, depthUm: 100, rateHz: 8, spikeCount: 16 },
@@ -40,6 +51,13 @@ assert.equal(ui.opened,undefined);assert.equal(view.expandedUnitId,7);
 assert.equal(view.selectedInterval.start,3);assert.equal(view.selectedInterval.end,5);
 assert.equal(JSON.stringify(ui.doc),saved);
 ui.select("walk");assert.equal(ui.opened,true,"Video clip selection keeps its existing editor behavior");
+ui.getView=()=>view;
+view.visibleRange={start:2.5,end:3.5};
+ui.select("walk",{openEditor:false,preserveWindow:true});
+assert.deepEqual(view.visibleRange,{start:2.5,end:3.5});
+view.visibleRange={start:70,end:72};
+ui.select("walk",{openEditor:false,preserveWindow:true});
+assert.equal(view.visibleRange.start,2);assert.equal(view.visibleRange.end,4);
 // Neural strip selects the exact clip ID, clips only its display extent, and
 // does not rebuild focused controls on playback ticks.
 const previous=global.document;
@@ -56,9 +74,12 @@ try {
   const button=children[0];canvas.state.cursorTime=7;canvas._drawBehaviorStrip();assert.equal(children[0],button);
 } finally { if(previous===undefined)delete global.document;else global.document=previous; }
 async function checkRequests() {
+  const imported=await regionCore.scanFiles(snippets);
+  assert.equal(imported.mapping.get('1::7').region,'CA1');
+  assert.equal(imported.probeTrack.rowCount,2);
   const original={fetch:global.fetch,setTimeout:global.setTimeout,clearTimeout:global.clearTimeout};
   const timers=[], responses=[];let requests=0, renders=0;
-  const status={}, list={replaceChildren(){}}, distribution={}, toggle={setAttribute(){}};
+  const status={dataset:{},removeAttribute(){}}, list={replaceChildren(){}}, distribution={}, toggle={setAttribute(){}};
   const panel={querySelector:s=>s==='[data-interval-status]'?status:s==='[data-rates]'?list:distribution};
   const probe=Object.create(MiniProbe.prototype);
   probe.host={querySelector:s=>s==='.probe-interval'?panel:s==='[data-probe-expand]'?toggle:null,querySelectorAll:()=>[]};

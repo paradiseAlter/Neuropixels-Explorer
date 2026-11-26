@@ -79,14 +79,20 @@ assert.notEqual(fingerprintA, fingerprintB, "Changing source metadata must inval
 assert.equal(kilosortCore.nearestActivityLevel(900), 1024, "Viewport requests must resolve to a stored pyramid level");
 assert.doesNotThrow(() => new Function(kilosortCore.createWorkerSource()), "The generated background-worker cache implementation must remain valid JavaScript");
 
-const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const html = fs.readFileSync(path.join(root, "scripts", "explorer-shell.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "scripts", "app.js"), "utf8");
 const core = fs.readFileSync(path.join(root, "scripts", "kilosort-core.js"), "utf8");
-assert(html.includes('id="activity-anatomy-canvas"') && html.includes('id="experiment-video-region"'), "The real application must expose the unified workspace");
+assert(html.includes('id="signal-workspace"') && html.includes('id="experiment-video-region"'), "The real application must expose the unified workspace");
 assert(html.includes('id="video-region-splitter"'), "The behavior region must have one accessible resize separator");
 assert(/id="review-layout"[^>]+hidden/.test(html), "The legacy Unit/Probe dashboard must not be permanently visible");
 assert(app.includes("groupFocusPath") && app.includes("probeTrackSegmentFor"), "Shared app state must own progressive focus and Probe-track context");
-assert(app.includes("scheduleActivityLevelForRange") && app.includes("overviewAbortController"), "Navigation must select cached pyramid levels and expose cancellation state");
+assert(app.includes("loadWindow:loadSignalWindow") && app.includes("overviewAbortController"), "Navigation must request original spike times and cancel obsolete reads");
+const {npy}=require("../scripts/browser-nwb-worker.js");
+const samples=npy(Int32Array.of(100,200,200,300),"<i4");
+const ids=npy(Int32Array.of(17,31,17,17),"<i4");
+const indexed=kilosortCore.signalIndex({spikeTimes:samples,spikeClusters:ids});
+assert.deepEqual(kilosortCore.signalWindow(indexed,100,[17,31,99],1,3).map(([id,row])=>[id,[...row]]),[[17,[1,2]],[31,[2]],[99,[]]]);
+assert.throws(()=>kilosortCore.signalIndex({spikeTimes:ids,spikeClusters:samples}),/unordered/);
 assert(core.includes("unusualThresholdCounts") && core.includes("strictly above that Unit's recording-wide 90th-percentile"), "Folder preprocessing must expose the selected relative-activity semantics");
 assert(core.includes("persistentActivityGet") && core.includes("activity-overview-progress"), "Folder preprocessing must persist pyramids and report background progress");
 
